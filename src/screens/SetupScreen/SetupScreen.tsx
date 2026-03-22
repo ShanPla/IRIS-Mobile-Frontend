@@ -4,13 +4,15 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from "react-native";
 import { probeBackend } from "../../lib/api";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../../App";
 import { styles } from "./styles";
 
-type Props = { navigation: NativeStackNavigationProp<RootStackParamList, "Setup"> };
+type Props = NativeStackScreenProps<RootStackParamList, "Setup"> & {
+  onSetupComplete?: () => void;
+};
 
-export default function SetupScreen({ navigation }: Props) {
+export default function SetupScreen({ onSetupComplete }: Props) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,7 +24,7 @@ export default function SetupScreen({ navigation }: Props) {
     const result = await probeBackend(url);
     setLoading(false);
     if (!result.ok) { setError(result.message); return; }
-    navigation.replace("Login");
+    onSetupComplete?.();
   };
 
   return (

@@ -39,10 +39,26 @@ function MainTabs() {
         tabBarInactiveTintColor: "#6b7280",
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: "Home", tabBarIcon: () => <Text>🏠</Text> }} />
-      <Tab.Screen name="Logs" component={LogsScreen} options={{ tabBarLabel: "Logs", tabBarIcon: () => <Text>📋</Text> }} />
-      <Tab.Screen name="LiveFeed" component={LiveFeedScreen} options={{ tabBarLabel: "Live Feed", tabBarIcon: () => <Text>📹</Text> }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: "Profile", tabBarIcon: () => <Text>👤</Text> }} />
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ tabBarLabel: "Home", tabBarIcon: () => <Text>🏠</Text> }}
+      />
+      <Tab.Screen
+        name="Logs"
+        component={LogsScreen}
+        options={{ tabBarLabel: "Logs", tabBarIcon: () => <Text>📋</Text> }}
+      />
+      <Tab.Screen
+        name="LiveFeed"
+        component={LiveFeedScreen}
+        options={{ tabBarLabel: "Live Feed", tabBarIcon: () => <Text>📹</Text> }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ tabBarLabel: "Profile", tabBarIcon: () => <Text>👤</Text> }}
+      />
     </Tab.Navigator>
   );
 }
@@ -53,7 +69,11 @@ function RootNavigator() {
 
   useEffect(() => {
     void getStoredBackendUrl().then((url) => setHasBackend(!!url));
-  }, []);
+  }, [session]);
+
+  const onSetupComplete = () => {
+    void getStoredBackendUrl().then((url) => setHasBackend(!!url));
+  };
 
   if (bootstrapping || hasBackend === null) {
     return (
@@ -68,11 +88,15 @@ function RootNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!hasBackend ? (
-          <Stack.Screen name="Setup" component={SetupScreen} />
+          <Stack.Screen name="Setup">
+            {(props) => <SetupScreen {...props} onSetupComplete={onSetupComplete} />}
+          </Stack.Screen>
         ) : !session ? (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Setup" component={SetupScreen} />
+            <Stack.Screen name="Setup">
+              {(props) => <SetupScreen {...props} onSetupComplete={onSetupComplete} />}
+            </Stack.Screen>
           </>
         ) : (
           <Stack.Screen name="Main" component={MainTabs} />
