@@ -85,7 +85,7 @@ function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer key={`${String(hasBackend)}-${String(!!session)}`}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!hasBackend ? (
           <Stack.Screen name="Setup">

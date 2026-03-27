@@ -4,6 +4,9 @@ export const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#030712",
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     padding: 24,
   },
@@ -15,10 +18,10 @@ export const styles = StyleSheet.create({
     borderColor: "#1f2937",
   },
   logo: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "800",
     color: "#22d3ee",
-    letterSpacing: 6,
+    letterSpacing: 8,
     textAlign: "center",
     marginBottom: 6,
   },
@@ -26,18 +29,32 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6b7280",
     textAlign: "center",
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 13,
-    color: "#9ca3af",
-    textAlign: "center",
-    backgroundColor: "#1f2937",
-    borderRadius: 999,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    alignSelf: "center",
     marginBottom: 20,
+    lineHeight: 18,
+  },
+  tabs: {
+    flexDirection: "row",
+    backgroundColor: "#1f2937",
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 20,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 8,
+  },
+  tabActive: {
+    backgroundColor: "#22d3ee",
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6b7280",
+  },
+  tabTextActive: {
+    color: "#000",
   },
   input: {
     backgroundColor: "#1f2937",
@@ -53,6 +70,12 @@ export const styles = StyleSheet.create({
     color: "#f87171",
     fontSize: 13,
     marginBottom: 10,
+  },
+  success: {
+    color: "#4ade80",
+    fontSize: 13,
+    marginBottom: 10,
+    textAlign: "center",
   },
   btn: {
     backgroundColor: "#22d3ee",
@@ -70,6 +93,13 @@ export const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 13,
     textAlign: "center",
-    marginTop: 16,
+    marginTop: 20,
+  },
+  tempNote: {
+    color: "#4b5563",
+    fontSize: 11,
+    textAlign: "center",
+    marginTop: 12,
+    lineHeight: 16,
   },
 });

@@ -9,6 +9,10 @@ interface AuthContextType {
   logout: () => Promise<void>;
 }
 
+const TEMP_ACCOUNTS = [
+  { username: "testuser", password: "test1234" },
+];
+
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -26,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       apiClient.defaults.baseURL = backendUrl;
 
       const token = await getStoredToken();
-      if (!token) { setBootstrapping(false); return; }
+      if (!token || token === "temp_token") { setBootstrapping(false); return; }
       apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
 
       const response = await apiClient.get<{ id: number; username: string; role: string }>("/api/auth/me");
@@ -40,6 +44,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = async (username: string, password: string): Promise<boolean> => {
+    // Check temp accounts first
+    const tempMatch = TEMP_ACCOUNTS.find(
+      (a) => a.username === username.trim() && a.password === password
+    );
+    if (tempMatch) {
+      const fakeSession: AuthSession = {
+        token: "temp_token",
+        username: tempMatch.username,
+        role: "homeowner_primary",
+      };
+      setSession(fakeSession);
+      return true;
+    }
+
+    // Real backend login
     try {
       const form = new URLSearchParams();
       form.append("username", username);

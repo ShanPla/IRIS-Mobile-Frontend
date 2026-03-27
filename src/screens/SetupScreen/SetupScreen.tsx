@@ -37,7 +37,7 @@ export default function SetupScreen({ onSetupComplete }: Props) {
         </Text>
         <TextInput
           style={styles.input}
-          placeholder="e.g. 192.168.1.100:8000"
+          placeholder="e.g. iris-back-end.onrender.com"
           placeholderTextColor="#6b7280"
           value={url}
           onChangeText={setUrl}
@@ -52,7 +52,7 @@ export default function SetupScreen({ onSetupComplete }: Props) {
             : <Text style={styles.btnText}>Connect & Continue</Text>
           }
         </TouchableOpacity>
-        <Text style={styles.hint}>For local testing: 127.0.0.1:8000</Text>
+        <Text style={styles.hint}>For local testing: iris-back-end.onrender.com</Text>
       </View>
     </KeyboardAvoidingView>
   );
