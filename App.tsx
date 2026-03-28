@@ -10,19 +10,27 @@ import SetupScreen from "./src/screens/SetupScreen/SetupScreen";
 import LoginScreen from "./src/screens/LoginScreen/LoginScreen";
 import HomeScreen from "./src/screens/HomeScreen/HomeScreen";
 import LogsScreen from "./src/screens/LogsScreen/LogsScreen";
-import LiveFeedScreen from "./src/screens/LiveFeedScreen/LiveFeedScreen";
+import EventDetailsScreen from "./src/screens/EventDetailsScreen/EventDetailsScreen";
+import TrustedFacesScreen from "./src/screens/TrustedFacesScreen/TrustedFacesScreen";
+import FacialRegistrationScreen from "./src/screens/FacialRegistrationScreen/FacialRegistrationScreen";
+import SettingsScreen from "./src/screens/SettingsScreen/SettingsScreen";
 import ProfileScreen from "./src/screens/ProfileScreen/ProfileScreen";
+import AddCameraScreen from "./src/screens/AddCameraScreen/AddCameraScreen";
 
 export type RootStackParamList = {
   Setup: undefined;
   Login: undefined;
   Main: undefined;
+  Logs: undefined;
+  EventDetails: { event: import("./src/types/iris").SecurityEvent };
+  FacialRegistration: undefined;
+  AddCamera: undefined;
 };
 
 export type MainTabParamList = {
   Home: undefined;
-  Logs: undefined;
-  LiveFeed: undefined;
+  TrustedFaces: undefined;
+  Settings: undefined;
   Profile: undefined;
 };
 
@@ -34,30 +42,36 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: "#111827", borderTopColor: "#1f2937" },
+        tabBarStyle: {
+          backgroundColor: "#111827",
+          borderTopColor: "#1f2937",
+          paddingBottom: 8,
+          height: 60,
+        },
         tabBarActiveTintColor: "#22d3ee",
         tabBarInactiveTintColor: "#6b7280",
+        tabBarLabelStyle: { fontSize: 11, marginTop: 2 },
       }}
     >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarLabel: "Home", tabBarIcon: () => <Text>🏠</Text> }}
+        options={{ tabBarLabel: "Home", tabBarIcon: () => <Text style={{ fontSize: 18 }}>🏠</Text> }}
       />
       <Tab.Screen
-        name="Logs"
-        component={LogsScreen}
-        options={{ tabBarLabel: "Logs", tabBarIcon: () => <Text>📋</Text> }}
+        name="TrustedFaces"
+        component={TrustedFacesScreen}
+        options={{ tabBarLabel: "Trusted", tabBarIcon: () => <Text style={{ fontSize: 18 }}>👥</Text> }}
       />
       <Tab.Screen
-        name="LiveFeed"
-        component={LiveFeedScreen}
-        options={{ tabBarLabel: "Live Feed", tabBarIcon: () => <Text>📹</Text> }}
+        name="Settings"
+        component={SettingsScreen}
+        options={{ tabBarLabel: "Settings", tabBarIcon: () => <Text style={{ fontSize: 18 }}>⚙️</Text> }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ tabBarLabel: "Profile", tabBarIcon: () => <Text>👤</Text> }}
+        options={{ tabBarLabel: "Profile", tabBarIcon: () => <Text style={{ fontSize: 18 }}>👤</Text> }}
       />
     </Tab.Navigator>
   );
@@ -99,7 +113,13 @@ function RootNavigator() {
             </Stack.Screen>
           </>
         ) : (
-          <Stack.Screen name="Main" component={MainTabs} />
+          <>
+            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="Logs" component={LogsScreen} />
+            <Stack.Screen name="EventDetails" component={EventDetailsScreen} options={{ animation: "slide_from_right" }} />
+            <Stack.Screen name="FacialRegistration" component={FacialRegistrationScreen} options={{ animation: "slide_from_right" }} />
+            <Stack.Screen name="AddCamera" component={AddCameraScreen} options={{ animation: "slide_from_right" }} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

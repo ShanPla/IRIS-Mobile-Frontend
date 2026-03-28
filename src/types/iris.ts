@@ -1,5 +1,4 @@
 export type SecurityMode = "home" | "away";
-
 export type EventType = "authorized" | "unknown" | "unverifiable";
 
 export interface SecurityEvent {
@@ -35,4 +34,15 @@ export interface AuthSession {
   token: string;
   username: string;
   role: string;
+}
+
+export interface TrustedUser {
+  id: number;
+  name: string;
+  status: "active" | "inactive";
+  permissions: {
+    switching_modes: boolean;
+    enable_disable_camera: boolean;
+    alert_and_record: boolean;
+  };
 }
