@@ -1,254 +1,234 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView,
-  RefreshControl, ActivityIndicator, Image, Switch,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  Image,
+  Alert,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import { useFocusEffect } from "@react-navigation/native";
-import { StatusBar } from "expo-status-bar";
-import * as NavigationBar from "expo-navigation-bar";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { apiClient, buildApiUrl } from "../../lib/api";
-import { useAuth } from "../../context/AuthContext";
-import type { SystemStatus, SecurityEvent } from "../../types/iris";
 import type { RootStackParamList } from "../../../App";
-import { styles } from "./styles";
+import { useAuth } from "../../context/AuthContext";
+import { piGet, piPut, buildPiUrl } from "../../lib/pi";
+import type { SystemStatus, SecurityEvent, EventsResponse } from "../../types/iris";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-// Placeholder cameras for testing
-const PLACEHOLDER_CAMERAS = [
-  { id: "1", name: "Office", icon: "🖥️" },
-  { id: "2", name: "Living Room", icon: "📺" },
-  { id: "3", name: "Bedroom", icon: "🛏️" },
-  { id: "4", name: "Kitchen", icon: "🍳" },
-];
-
-// Placeholder events for testing when backend is empty
-const PLACEHOLDER_EVENTS: SecurityEvent[] = [
-  { id: 1, event_type: "authorized", snapshot_path: null, alarm_triggered: false, timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), matched_name: "Shan Platon" },
-  { id: 2, event_type: "unknown", snapshot_path: null, alarm_triggered: true, timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(), matched_name: null },
-  { id: 3, event_type: "unverifiable", snapshot_path: null, alarm_triggered: false, timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(), matched_name: null },
-];
-
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { session, logout } = useAuth();
+  const { session, activeDevice, logout } = useAuth();
+
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [recentEvents, setRecentEvents] = useState<SecurityEvent[]>([]);
-  const [latestSnap, setLatestSnap] = useState<string | undefined>();
-  const [latestEvent, setLatestEvent] = useState<SecurityEvent | null>(null);
+  const [frameUri, setFrameUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [activeRooms, setActiveRooms] = useState<Record<string, boolean>>({
-    "1": true, "2": true, "3": false, "4": true,
-  });
 
-  useEffect(() => { void load(); }, []);
-
-  useEffect(() => {
-  void NavigationBar.setVisibilityAsync("hidden");
-  void NavigationBar.setBehaviorAsync("overlay-swipe");
-}, []);
-
-  const load = async () => {
-    setError("");
+  const fetchData = useCallback(async () => {
     try {
-      const [statusRes, eventsRes] = await Promise.all([
-        apiClient.get<SystemStatus>("/api/system/status"),
-        apiClient.get<{ items: SecurityEvent[] }>("/api/events/", { params: { limit: 5 } }),
+      setError("");
+      const [statusData, eventsData] = await Promise.all([
+        piGet<SystemStatus>("/api/system/status"),
+        piGet<EventsResponse>("/api/events/?limit=5"),
       ]);
-      setStatus(statusRes.data);
-      const events = eventsRes.data.items.length > 0 ? eventsRes.data.items : PLACEHOLDER_EVENTS;
-      setRecentEvents(events);
-      if (events.length > 0) {
-        const latest = events[0];
-        setLatestEvent(latest);
-        setLatestSnap(await buildApiUrl(latest.snapshot_path));
-      }
-    } catch {
-      // Use placeholder data if backend unavailable
-      setStatus({ mode: "home", alarm_active: false, updated_at: new Date().toISOString() });
-      setRecentEvents(PLACEHOLDER_EVENTS);
-      setLatestEvent(PLACEHOLDER_EVENTS[0]);
+      setStatus(statusData);
+      setRecentEvents(eventsData.items);
+
+      const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`);
+      setFrameUri(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load data");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchData();
+    }, [fetchData])
+  );
 
   const toggleMode = async () => {
     if (!status) return;
     const newMode = status.mode === "home" ? "away" : "home";
     try {
-      await apiClient.put("/api/system/mode", { mode: newMode });
+      await piPut("/api/system/mode", { mode: newMode });
       setStatus({ ...status, mode: newMode });
     } catch {
-      setStatus({ ...status, mode: newMode }); // optimistic update for testing
+      Alert.alert("Error", "Failed to change mode");
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
+  const getEventBadgeColor = (type: string) => {
+    switch (type) {
+      case "authorized": return "#4ade80";
+      case "unknown": return "#f87171";
+      case "unverifiable": return "#f59e0b";
+      default: return "#6b7280";
+    }
   };
 
-  const warningCount = recentEvents.filter(
-    (e) => e.event_type === "unknown" || e.event_type === "unverifiable"
-  ).length;
-
-  const recentTimes = recentEvents.slice(0, 3).map(
-    (e) => new Date(e.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
-    <>
-      <StatusBar style="light" hidden={false} />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); }} tintColor="#22d3ee" />
-        }
-      >
-        <View style={styles.header}>
-          <Text style={styles.logo}>I.R.I.S</Text>
-          <TouchableOpacity onPress={() => void handleLogout()}>
-            <Text style={styles.logout}>Logout</Text>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void fetchData(); }} tintColor="#22d3ee" />}
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.headerTitle}>IRIS</Text>
+          <Text style={styles.headerDevice}>
+            {activeDevice ? `${activeDevice.name} (${activeDevice.deviceId})` : "No Pi connected"}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={logout}>
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {/* Status Cards */}
+      <View style={styles.statusRow}>
+        <TouchableOpacity style={styles.statusCard} onPress={toggleMode}>
+          <Text style={styles.statusLabel}>MODE</Text>
+          <Text style={[styles.statusValue, { color: "#22d3ee" }]}>
+            {status?.mode?.toUpperCase() ?? "—"}
+          </Text>
+          <Text style={styles.statusHint}>Tap to toggle</Text>
+        </TouchableOpacity>
+        <View style={styles.statusCard}>
+          <Text style={styles.statusLabel}>ALARM</Text>
+          <Text style={[styles.statusValue, { color: status?.alarm_active ? "#f87171" : "#4ade80" }]}>
+            {status?.alarm_active ? "ACTIVE" : "Inactive"}
+          </Text>
+        </View>
+      </View>
+
+      {/* Live Preview */}
+      <TouchableOpacity style={styles.previewCard} onPress={() => navigation.navigate("LiveFeed")}>
+        {frameUri ? (
+          <Image source={{ uri: frameUri }} style={styles.previewImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.previewPlaceholder}>
+            <Text style={styles.previewPlaceholderText}>Camera preview</Text>
+          </View>
+        )}
+        <Text style={styles.previewLabel}>Tap for live feed</Text>
+      </TouchableOpacity>
+
+      {/* Recent Events */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Recent Events</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("Logs")}>
+            <Text style={styles.seeAll}>See All</Text>
           </TouchableOpacity>
         </View>
-
-        {loading ? (
-          <ActivityIndicator color="#22d3ee" style={{ marginTop: 40 }} />
+        {recentEvents.length === 0 ? (
+          <Text style={styles.emptyText}>No events yet</Text>
         ) : (
-          <>
-            {/* System Status */}
-            <View style={styles.statusCard}>
-              <View style={styles.statusCardHeader}>
-                <Text style={styles.statusCardTitle}>System Status</Text>
-                <View style={styles.modePill}>
-                  <Text style={styles.modePillText}>
-                    {status?.mode === "away" ? "Away" : "Home"}
-                  </Text>
-                </View>
+          recentEvents.map((event) => (
+            <TouchableOpacity
+              key={event.id}
+              style={styles.eventRow}
+              onPress={() => navigation.navigate("EventDetails", { event })}
+            >
+              <View style={[styles.eventDot, { backgroundColor: getEventBadgeColor(event.event_type) }]} />
+              <View style={styles.eventInfo}>
+                <Text style={styles.eventText}>
+                  {event.matched_name ?? event.event_type}
+                </Text>
+                <Text style={styles.eventTime}>
+                  {new Date(event.timestamp).toLocaleString()}
+                </Text>
               </View>
-              <View style={styles.warningRow}>
-                <View style={styles.warningIcon}>
-                  <Text style={{ fontSize: 20 }}>{warningCount > 0 ? "⚠️" : "✅"}</Text>
-                </View>
-                <View style={styles.warningInfo}>
-                  <Text style={[styles.warningCount, warningCount === 0 && styles.warningCountSafe]}>
-                    {warningCount === 0 ? "0 Warnings" : `${warningCount} Warning${warningCount > 1 ? "s" : ""}`}
-                  </Text>
-                  {recentTimes.length > 0 && (
-                    <Text style={styles.warningTimes}>{recentTimes.join(" · ")}</Text>
-                  )}
-                </View>
-                <TouchableOpacity
-                  style={styles.viewBtn}
-                  onPress={() => navigation.navigate("Logs")}
-                >
-                  <Text style={styles.viewBtnText}>View</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Your Alarm / Cameras */}
-            <View style={styles.alarmSection}>
-              <View style={styles.alarmSectionHeader}>
-                <Text style={styles.sectionTitle}>Your Alarm</Text>
-                <TouchableOpacity onPress={() => navigation.navigate("AddCamera")}>
-                  <Text style={styles.addNew}>+ Add New</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.alarmGrid}>
-                {PLACEHOLDER_CAMERAS.map((camera) => (
-                  <View
-                    key={camera.id}
-                    style={[styles.alarmCard, activeRooms[camera.id] && styles.alarmCardActive]}
-                  >
-                    <View style={styles.alarmCardTop}>
-                      <Text style={{ fontSize: 14, color: "#6b7280" }}>📷</Text>
-                      <Switch
-                        value={activeRooms[camera.id] ?? false}
-                        onValueChange={(val) => setActiveRooms((prev) => ({ ...prev, [camera.id]: val }))}
-                        trackColor={{ false: "#374151", true: "#22d3ee" }}
-                        thumbColor={activeRooms[camera.id] ? "#fff" : "#9ca3af"}
-                        style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-                      />
-                    </View>
-                    <Text style={styles.alarmIcon}>{camera.icon}</Text>
-                    <Text style={styles.alarmLabel}>{camera.name}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Mode */}
-            <View style={styles.modeSection}>
-              <Text style={styles.sectionTitle}>Mode</Text>
-              <View style={styles.modeToggleRow}>
-                <TouchableOpacity
-                  style={[styles.modeToggleBtn, status?.mode === "home" && styles.modeToggleBtnActive]}
-                  onPress={() => status?.mode !== "home" && void toggleMode()}
-                >
-                  <Text style={[styles.modeToggleText, status?.mode === "home" && styles.modeToggleTextActive]}>
-                    Home
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modeToggleBtn, status?.mode === "away" && styles.modeToggleBtnActive]}
-                  onPress={() => status?.mode !== "away" && void toggleMode()}
-                >
-                  <Text style={[styles.modeToggleText, status?.mode === "away" && styles.modeToggleTextActive]}>
-                    Away
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.modeDesc}>
-                {status?.mode === "home"
-                  ? "Home: For when you're home. Known faces won't trigger alarms. Unknown visitors will activate the alarm and send you a snapshot alert."
-                  : "Away: Stricter monitoring. Any unverified presence triggers an immediate alert."}
+              <Text style={[styles.eventBadge, { color: getEventBadgeColor(event.event_type) }]}>
+                {event.event_type}
               </Text>
-            </View>
-
-            {/* Latest Snap */}
-            <View style={styles.latestSnapSection}>
-              <Text style={styles.sectionTitle}>Latest Snap</Text>
-              <View style={styles.snapCard}>
-                {latestSnap ? (
-                  <>
-                    <Image source={{ uri: latestSnap }} style={styles.snapImage} resizeMode="cover" />
-                    <View style={styles.snapOverlay}>
-                      <TouchableOpacity
-                        style={styles.snapViewBtn}
-                        onPress={() => latestEvent && navigation.navigate("EventDetails", { event: latestEvent })}
-                      >
-                        <Text style={styles.snapViewBtnText}>View</Text>
-                      </TouchableOpacity>
-                    </View>
-                    {latestEvent && (
-                      <Text style={styles.snapTime}>
-                        {new Date(latestEvent.timestamp).toLocaleString()}
-                      </Text>
-                    )}
-                  </>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.snapPlaceholder}
-                    onPress={() => latestEvent && navigation.navigate("EventDetails", { event: latestEvent })}
-                  >
-                    <Text style={{ color: "#4b5563", fontSize: 32 }}>📸</Text>
-                    <Text style={{ color: "#4b5563", fontSize: 13, marginTop: 8 }}>
-                      {latestEvent ? "Tap to view latest event" : "No snapshots yet"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </>
+            </TouchableOpacity>
+          ))
         )}
-      </ScrollView>
-    </>
+      </View>
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#030712" },
+  centered: { flex: 1, backgroundColor: "#030712", justifyContent: "center", alignItems: "center" },
+  loadingText: { color: "#6b7280" },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+  },
+  headerTitle: { color: "#22d3ee", fontSize: 24, fontWeight: "800", letterSpacing: 4 },
+  headerDevice: { color: "#6b7280", fontSize: 12, marginTop: 2 },
+  logoutText: { color: "#f87171", fontSize: 13 },
+  error: { color: "#f87171", fontSize: 13, textAlign: "center", marginBottom: 8, paddingHorizontal: 20 },
+  statusRow: { flexDirection: "row", paddingHorizontal: 20, gap: 12, marginBottom: 16 },
+  statusCard: {
+    flex: 1,
+    backgroundColor: "#1f2937",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+  },
+  statusLabel: { color: "#6b7280", fontSize: 11, fontWeight: "600" },
+  statusValue: { fontSize: 20, fontWeight: "800", marginTop: 4 },
+  statusHint: { color: "#6b7280", fontSize: 10, marginTop: 4 },
+  previewCard: {
+    marginHorizontal: 20,
+    backgroundColor: "#1f2937",
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 16,
+  },
+  previewImage: { width: "100%", height: 200 },
+  previewPlaceholder: {
+    width: "100%",
+    height: 200,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#111827",
+  },
+  previewPlaceholderText: { color: "#6b7280", fontSize: 13 },
+  previewLabel: { color: "#9ca3af", fontSize: 12, textAlign: "center", padding: 10 },
+  section: { paddingHorizontal: 20, marginBottom: 32 },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
+  sectionTitle: { color: "#e5e7eb", fontSize: 16, fontWeight: "700" },
+  seeAll: { color: "#22d3ee", fontSize: 13 },
+  emptyText: { color: "#6b7280", fontSize: 13, textAlign: "center", paddingVertical: 20 },
+  eventRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1f2937",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  eventDot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
+  eventInfo: { flex: 1 },
+  eventText: { color: "#e5e7eb", fontSize: 14 },
+  eventTime: { color: "#6b7280", fontSize: 11, marginTop: 2 },
+  eventBadge: { fontSize: 11, fontWeight: "600" },
+});

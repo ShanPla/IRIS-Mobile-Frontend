@@ -1,56 +1,123 @@
-import { useEffect, useState } from "react";
-import { View, Text, Image, TouchableOpacity, ActivityIndicator } from "react-native";
-import { getStoredBackendUrl, getStoredToken } from "../../lib/api";
-import { styles } from "./styles";
+import { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { buildPiUrl } from "../../lib/pi";
 
 export default function LiveFeedScreen() {
-  const [feedUrl, setFeedUrl] = useState<string | null>(null);
+  const navigation = useNavigation();
+  const [frameUri, setFrameUri] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [key, setKey] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => { void buildFeedUrl(); }, []);
-
-  const buildFeedUrl = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const base = await getStoredBackendUrl();
-      const token = await getStoredToken();
-      if (!base) { setError("Backend not configured."); return; }
-      setFeedUrl(`${base}/api/camera/stream${token ? `?token=${token}` : ""}`);
-    } catch {
-      setError("Failed to build feed URL.");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (paused) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
     }
-  };
+
+    const poll = async () => {
+      try {
+        const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`);
+        setFrameUri(url);
+        setLoading(false);
+        setError("");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Cannot load frame");
+        setLoading(false);
+      }
+    };
+
+    void poll();
+    intervalRef.current = setInterval(() => void poll(), 150);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [paused]);
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Live Feed</Text>
-      <Text style={styles.desc}>Streaming from Raspberry Pi camera</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Live Feed</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
-      {loading ? (
-        <ActivityIndicator color="#22d3ee" style={{ marginTop: 40 }} />
-      ) : error ? (
-        <Text style={styles.error}>{error}</Text>
-      ) : (
-        <View style={styles.feedWrapper}>
+      {/* Feed */}
+      <View style={styles.feedContainer}>
+        {loading ? (
+          <ActivityIndicator color="#22d3ee" size="large" />
+        ) : error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : (
           <Image
-            key={key}
-            source={{ uri: feedUrl! }}
-            style={styles.feed}
+            source={{ uri: frameUri }}
+            style={styles.feedImage}
             resizeMode="contain"
           />
-          <TouchableOpacity style={styles.refreshBtn} onPress={() => setKey((k) => k + 1)}>
-            <Text style={styles.refreshBtnText}>🔄 Refresh Frame</Text>
-          </TouchableOpacity>
-          <Text style={styles.note}>
-            Note: Live MJPEG streaming may not work in all environments. Use refresh if the feed is static.
-          </Text>
-        </View>
-      )}
+        )}
+      </View>
+
+      {/* Controls */}
+      <View style={styles.controls}>
+        <TouchableOpacity
+          style={[styles.controlButton, paused && styles.controlButtonActive]}
+          onPress={() => setPaused(!paused)}
+        >
+          <Text style={styles.controlText}>{paused ? "Resume" : "Pause"}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#030712" },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+  },
+  backText: { color: "#22d3ee", fontSize: 15 },
+  title: { color: "#e5e7eb", fontSize: 18, fontWeight: "700" },
+  feedContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#111827",
+    marginHorizontal: 16,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  feedImage: { width: "100%", height: "100%" },
+  errorText: { color: "#f87171", fontSize: 13 },
+  controls: {
+    flexDirection: "row",
+    justifyContent: "center",
+    padding: 20,
+    gap: 12,
+  },
+  controlButton: {
+    backgroundColor: "#1f2937",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  controlButtonActive: { backgroundColor: "#22d3ee" },
+  controlText: { color: "#e5e7eb", fontWeight: "600" },
+});

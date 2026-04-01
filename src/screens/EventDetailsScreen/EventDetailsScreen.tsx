@@ -1,107 +1,134 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
-  View, Text, ScrollView, Image,
-  TouchableOpacity, ActivityIndicator,
+  View,
+  Text,
+  Image,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
 } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
-import { buildApiUrl } from "../../lib/api";
+import { useRoute, useNavigation } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../../../App";
-import { styles } from "./styles";
+import { buildPiUrl } from "../../lib/pi";
+import type { SecurityEvent } from "../../types/iris";
 
-type Props = NativeStackScreenProps<RootStackParamList, "EventDetails">;
-
-const eventLabels: Record<string, string> = {
-  authorized: "Authorized",
-  unknown: "Unknown Person",
-  unverifiable: "Unverifiable",
-};
-
-const badgeStyle: Record<string, object> = {
-  authorized: styles.badgeAuthorized,
-  unknown: styles.badgeUnknown,
-  unverifiable: styles.badgeUnverifiable,
-};
+type Route = RouteProp<RootStackParamList, "EventDetails">;
 
 export default function EventDetailsScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute<Props["route"]>();
-  const { event } = route.params;
-  const [snapshotUrl, setSnapshotUrl] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
+  const route = useRoute<Route>();
+  const event: SecurityEvent = route.params.event;
+  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    void buildApiUrl(event.snapshot_path).then((url) => {
-      setSnapshotUrl(url);
-      setLoading(false);
-    });
-  }, []);
+    if (event.snapshot_path) {
+      void buildPiUrl(event.snapshot_path).then(setSnapshotUrl);
+    }
+  }, [event.snapshot_path]);
+
+  const getBadgeColor = (type: string) => {
+    switch (type) {
+      case "authorized": return "#4ade80";
+      case "unknown": return "#f87171";
+      case "unverifiable": return "#f59e0b";
+      default: return "#6b7280";
+    }
+  };
+
+  const badgeColor = getBadgeColor(event.event_type);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={{ color: "#e5e7eb", fontSize: 18 }}>←</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Event Details</Text>
+        <Text style={styles.title}>Event Details</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Snapshot */}
-        <View style={styles.snapshotCard}>
-          {loading ? (
-            <View style={styles.snapshotPlaceholder}>
-              <ActivityIndicator color="#22d3ee" />
-            </View>
-          ) : snapshotUrl ? (
-            <Image source={{ uri: snapshotUrl }} style={styles.snapshot} resizeMode="cover" />
-          ) : (
-            <View style={styles.snapshotPlaceholder}>
-              <Text style={{ color: "#4b5563", fontSize: 13 }}>No snapshot available</Text>
-            </View>
-          )}
+      {/* Snapshot */}
+      {snapshotUrl ? (
+        <Image source={{ uri: snapshotUrl }} style={styles.snapshot} resizeMode="contain" />
+      ) : (
+        <View style={styles.snapshotPlaceholder}>
+          <Text style={styles.placeholderText}>No snapshot</Text>
         </View>
+      )}
 
-        {/* Info */}
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Status</Text>
-            <Text style={[styles.badge, badgeStyle[event.event_type]]}>
-              {eventLabels[event.event_type] ?? event.event_type}
-            </Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Date & Time</Text>
-            <Text style={styles.infoValue}>
-              {new Date(event.timestamp).toLocaleString()}
-            </Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Matched Name</Text>
-            <Text style={styles.infoValue}>
-              {event.matched_name ?? "—"}
-            </Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Event ID</Text>
-            <Text style={styles.infoValue}>#{event.id}</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Alarm</Text>
-            {event.alarm_triggered ? (
-              <View style={styles.alarmBadge}>
-                <Text style={styles.alarmBadgeText}>Triggered</Text>
-              </View>
-            ) : (
-              <Text style={styles.infoValue}>No</Text>
-            )}
-          </View>
+      {/* Badge */}
+      <View style={styles.badgeRow}>
+        <View style={[styles.badge, { backgroundColor: `${badgeColor}20` }]}>
+          <Text style={[styles.badgeText, { color: badgeColor }]}>{event.event_type}</Text>
         </View>
-      </ScrollView>
+        {event.alarm_triggered && (
+          <View style={[styles.badge, { backgroundColor: "#f8717120" }]}>
+            <Text style={[styles.badgeText, { color: "#f87171" }]}>Alarm Triggered</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Details */}
+      <View style={styles.details}>
+        <DetailRow label="Event ID" value={String(event.id)} />
+        <DetailRow label="Type" value={event.event_type} />
+        <DetailRow label="Matched Name" value={event.matched_name ?? "—"} />
+        <DetailRow label="Timestamp" value={new Date(event.timestamp).toLocaleString()} />
+        <DetailRow label="Mode" value={event.mode ?? "—"} />
+        <DetailRow label="Alarm Triggered" value={event.alarm_triggered ? "Yes" : "No"} />
+        <DetailRow label="Notification Sent" value={event.notification_sent ? "Yes" : "No"} />
+        {event.notes ? <DetailRow label="Notes" value={event.notes} /> : null}
+      </View>
+    </ScrollView>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#030712" },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+  },
+  backText: { color: "#22d3ee", fontSize: 15 },
+  title: { color: "#e5e7eb", fontSize: 18, fontWeight: "700" },
+  snapshot: {
+    width: "100%",
+    height: 280,
+    backgroundColor: "#111827",
+  },
+  snapshotPlaceholder: {
+    width: "100%",
+    height: 200,
+    backgroundColor: "#111827",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: { color: "#6b7280", fontSize: 13 },
+  badgeRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginTop: 16 },
+  badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
+  badgeText: { fontSize: 13, fontWeight: "600" },
+  details: { paddingHorizontal: 20, marginTop: 20, marginBottom: 40 },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1f2937",
+  },
+  detailLabel: { color: "#6b7280", fontSize: 14 },
+  detailValue: { color: "#e5e7eb", fontSize: 14, fontWeight: "500" },
+});

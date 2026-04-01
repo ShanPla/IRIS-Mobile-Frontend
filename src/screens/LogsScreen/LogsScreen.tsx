@@ -1,160 +1,219 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback } from "react";
 import {
-  View, Text, TouchableOpacity, FlatList,
-  TextInput, ActivityIndicator, RefreshControl,
+  View,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  RefreshControl,
+  Image,
+  ActivityIndicator,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { apiClient } from "../../lib/api";
-import type { SecurityEvent, EventsResponse } from "../../types/iris";
 import type { RootStackParamList } from "../../../App";
-import { styles } from "./styles";
+import { piGet, buildPiUrl } from "../../lib/pi";
+import type { SecurityEvent, EventsResponse, EventType } from "../../types/iris";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const LIMIT = 50;
+const FILTERS: Array<{ label: string; value: EventType | null }> = [
+  { label: "All", value: null },
+  { label: "Authorized", value: "authorized" },
+  { label: "Unknown", value: "unknown" },
+  { label: "Unverifiable", value: "unverifiable" },
+];
 
-function groupByDate(events: SecurityEvent[]): Record<string, SecurityEvent[]> {
-  return events.reduce((groups, event) => {
-    const date = new Date(event.timestamp).toLocaleDateString("en-US", {
-      month: "numeric", day: "numeric", year: "numeric",
-    });
-    if (!groups[date]) groups[date] = [];
-    groups[date].push(event);
-    return groups;
-  }, {} as Record<string, SecurityEvent[]>);
-}
+const PAGE_SIZE = 20;
 
 export default function LogsScreen() {
   const navigation = useNavigation<Nav>();
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [filter, setFilter] = useState<EventType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<"recent" | "oldest">("recent");
+  const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
 
-  useEffect(() => { void loadEvents(); }, []);
-
-  const loadEvents = async () => {
-    setError("");
+  const fetchEvents = useCallback(async (reset: boolean) => {
     try {
-      const response = await apiClient.get<EventsResponse>("/api/events/", {
-        params: { limit: LIMIT, offset: 0 },
-      });
-      setEvents(response.data.items);
-      setTotal(response.data.total);
-    } catch {
-      setError("Failed to load events.");
+      setError("");
+      const newOffset = reset ? 0 : offset;
+      let path = `/api/events/?limit=${PAGE_SIZE}&offset=${newOffset}`;
+      if (filter) path += `&event_type=${filter}`;
+
+      const data = await piGet<EventsResponse>(path);
+      if (reset) {
+        setEvents(data.items);
+      } else {
+        setEvents((prev) => [...prev, ...data.items]);
+      }
+      setTotal(data.total);
+      setOffset(newOffset + data.items.length);
+
+      // Build thumbnail URLs
+      const newThumbs: Record<number, string> = {};
+      for (const evt of data.items) {
+        if (evt.snapshot_path) {
+          newThumbs[evt.id] = await buildPiUrl(evt.snapshot_path);
+        }
+      }
+      setThumbnails((prev) => ({ ...prev, ...newThumbs }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load events");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
       setRefreshing(false);
+    }
+  }, [filter, offset]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void fetchEvents(true);
+    }, [filter])
+  );
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    void fetchEvents(true);
+  };
+
+  const handleLoadMore = () => {
+    if (events.length >= total || loadingMore) return;
+    setLoadingMore(true);
+    void fetchEvents(false);
+  };
+
+  const getBadgeColor = (type: string) => {
+    switch (type) {
+      case "authorized": return "#4ade80";
+      case "unknown": return "#f87171";
+      case "unverifiable": return "#f59e0b";
+      default: return "#6b7280";
     }
   };
 
-  const filtered = events
-    .filter((e) => {
-      if (!search.trim()) return true;
-      const dateStr = new Date(e.timestamp).toLocaleDateString();
-      return dateStr.includes(search.trim()) ||
-        (e.matched_name?.toLowerCase().includes(search.toLowerCase()) ?? false);
-    })
-    .sort((a, b) => {
-      const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      return sort === "recent" ? diff : -diff;
-    });
-
-  const grouped = groupByDate(filtered);
-  const groupedEntries = Object.entries(grouped);
-
-  const activityCount = (evts: SecurityEvent[]) =>
-    `${evts.length} activit${evts.length === 1 ? "y" : "ies"}`;
+  const renderEvent = ({ item }: { item: SecurityEvent }) => (
+    <TouchableOpacity
+      style={styles.eventRow}
+      onPress={() => navigation.navigate("EventDetails", { event: item })}
+    >
+      {thumbnails[item.id] ? (
+        <Image source={{ uri: thumbnails[item.id] }} style={styles.thumbnail} />
+      ) : (
+        <View style={styles.thumbnailPlaceholder} />
+      )}
+      <View style={styles.eventInfo}>
+        <Text style={styles.eventText}>
+          {item.matched_name ? `${item.matched_name} recognized` : `${item.event_type} detected`}
+        </Text>
+        <Text style={styles.eventTime}>
+          {new Date(item.timestamp).toLocaleString()}
+          {item.alarm_triggered ? " • Alarm triggered" : ""}
+        </Text>
+      </View>
+      <View style={[styles.badge, { backgroundColor: `${getBadgeColor(item.event_type)}20` }]}>
+        <Text style={[styles.badgeText, { color: getBadgeColor(item.event_type) }]}>
+          {item.event_type}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={{ color: "#e5e7eb", fontSize: 18 }}>←</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Logs</Text>
+        <Text style={styles.title}>Event Logs</Text>
+        <View style={{ width: 40 }} />
       </View>
 
+      {/* Filter tabs */}
+      <View style={styles.filters}>
+        {FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.label}
+            style={[styles.filterTab, filter === f.value && styles.filterTabActive]}
+            onPress={() => setFilter(f.value)}
+          >
+            <Text style={[styles.filterText, filter === f.value && styles.filterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
       <FlatList
-        data={groupedEntries}
-        keyExtractor={([date]) => date}
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void loadEvents(); }} tintColor="#22d3ee" />
-        }
-        ListHeaderComponent={
-          <>
-            {/* Search */}
-            <View style={styles.searchRow}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search date..."
-                placeholderTextColor="#6b7280"
-                value={search}
-                onChangeText={setSearch}
-              />
-              <Text style={{ color: "#6b7280" }}>🔍</Text>
-            </View>
-
-            {/* Sort */}
-            <View style={styles.sortRow}>
-              <TouchableOpacity
-                style={[styles.sortBtn, sort === "recent" && styles.sortBtnActive]}
-                onPress={() => setSort("recent")}
-              >
-                <Text style={[styles.sortBtnText, sort === "recent" && styles.sortBtnTextActive]}>
-                  Recent
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.sortBtn, sort === "oldest" && styles.sortBtnActive]}
-                onPress={() => setSort("oldest")}
-              >
-                <Text style={[styles.sortBtnText, sort === "oldest" && styles.sortBtnTextActive]}>
-                  Oldest
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-            {loading && <ActivityIndicator color="#22d3ee" style={{ marginTop: 20 }} />}
-            <Text style={styles.meta}>{total} total events</Text>
-          </>
-        }
-        renderItem={({ item: [date, evts] }) => (
-          <View style={styles.dateGroup}>
-            {evts.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={styles.eventRow}
-                onPress={() => navigation.navigate("EventDetails", { event })}
-              >
-                <View>
-                  <Text style={styles.eventDate}>{date}</Text>
-                  <Text style={styles.eventMeta}>{activityCount([event])} · {new Date(event.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
-                </View>
-                <Text style={styles.eventViewBtn}>View</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        data={events}
+        keyExtractor={(item) => String(item.id)}
+        renderItem={renderEvent}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#22d3ee" />}
         ListEmptyComponent={
-          !loading ? (
-            <View style={{ alignItems: "center", marginTop: 40, gap: 8 }}>
-              <Text style={{ fontSize: 32 }}>📋</Text>
-              <Text style={styles.empty}>No events logged yet.</Text>
-              <Text style={{ color: "#4b5563", fontSize: 12, textAlign: "center" }}>
-                Events will appear here when the system detects activity.
-              </Text>
-            </View>
+          loading ? <ActivityIndicator color="#22d3ee" style={{ marginTop: 40 }} /> : <Text style={styles.emptyText}>No events found</Text>
+        }
+        ListFooterComponent={
+          events.length < total ? (
+            <TouchableOpacity style={styles.loadMore} onPress={handleLoadMore}>
+              {loadingMore ? <ActivityIndicator color="#22d3ee" /> : <Text style={styles.loadMoreText}>Load more</Text>}
+            </TouchableOpacity>
           ) : null
         }
       />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#030712" },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+  },
+  backText: { color: "#22d3ee", fontSize: 15 },
+  title: { color: "#e5e7eb", fontSize: 18, fontWeight: "700" },
+  filters: { flexDirection: "row", paddingHorizontal: 20, gap: 8, marginBottom: 12 },
+  filterTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#1f2937",
+  },
+  filterTabActive: { backgroundColor: "#22d3ee" },
+  filterText: { color: "#9ca3af", fontSize: 12, fontWeight: "600" },
+  filterTextActive: { color: "#030712" },
+  error: { color: "#f87171", fontSize: 13, textAlign: "center", marginBottom: 8 },
+  list: { paddingHorizontal: 20 },
+  eventRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1f2937",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    gap: 12,
+  },
+  thumbnail: { width: 44, height: 44, borderRadius: 6, backgroundColor: "#374151" },
+  thumbnailPlaceholder: { width: 44, height: 44, borderRadius: 6, backgroundColor: "#374151" },
+  eventInfo: { flex: 1 },
+  eventText: { color: "#e5e7eb", fontSize: 14 },
+  eventTime: { color: "#6b7280", fontSize: 11, marginTop: 2 },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  badgeText: { fontSize: 11, fontWeight: "600" },
+  emptyText: { color: "#6b7280", textAlign: "center", marginTop: 40, fontSize: 14 },
+  loadMore: { alignItems: "center", padding: 16 },
+  loadMoreText: { color: "#22d3ee", fontSize: 14 },
+});
