@@ -1,23 +1,29 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { apiClient, getStoredBackendUrl, getStoredToken, setStoredToken, clearStorage } from "../lib/api";
-import type { AuthSession } from "../types/iris";
+import {
+  getActiveDevice,
+  getDevices,
+  piGet,
+} from "../lib/pi";
+import type { AuthSession, UserResponse } from "../types/iris";
+import type { PiDevice } from "../lib/pi";
 
 interface AuthContextType {
   session: AuthSession | null;
   bootstrapping: boolean;
+  hasPi: boolean;
+  activeDevice: PiDevice | null;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
 }
-
-const TEMP_ACCOUNTS = [
-  { username: "testuser", password: "test1234" },
-];
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
+  const [hasPi, setHasPi] = useState(false);
+  const [activeDevice, setActiveDevice] = useState<PiDevice | null>(null);
 
   useEffect(() => {
     void restoreSession();
@@ -25,18 +31,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const restoreSession = async () => {
     try {
-      const backendUrl = await getStoredBackendUrl();
-      if (!backendUrl) { setBootstrapping(false); return; }
-      apiClient.defaults.baseURL = backendUrl;
+      const devices = await getDevices();
+      setHasPi(devices.length > 0);
 
-      const token = await getStoredToken();
-      if (!token || token === "temp_token") { setBootstrapping(false); return; }
-      apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
+      const device = await getActiveDevice();
+      setActiveDevice(device);
+      if (!device) {
+        setBootstrapping(false);
+        return;
+      }
 
-      const response = await apiClient.get<{ id: number; username: string; role: string }>("/api/auth/me");
-      setSession({ token, username: response.data.username, role: response.data.role });
+      // Validate token by calling /api/auth/me
+      const me = await piGet<UserResponse>("/api/auth/me");
+      setSession({
+        token: device.token,
+        username: me.username,
+        role: me.role,
+      });
     } catch {
-      await clearStorage();
+      // Token invalid or Pi unreachable — clear session but keep devices
       setSession(null);
     } finally {
       setBootstrapping(false);
@@ -44,37 +57,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = async (username: string, password: string): Promise<boolean> => {
-    // Check temp accounts first
-    const tempMatch = TEMP_ACCOUNTS.find(
-      (a) => a.username === username.trim() && a.password === password
-    );
-    if (tempMatch) {
-      const fakeSession: AuthSession = {
-        token: "temp_token",
-        username: tempMatch.username,
-        role: "homeowner_primary",
-      };
-      setSession(fakeSession);
-      return true;
-    }
+    const device = await getActiveDevice();
+    if (!device) return false;
 
-    // Real backend login
     try {
-      const form = new URLSearchParams();
-      form.append("username", username);
-      form.append("password", password);
+      // Use form-urlencoded login (FastAPI OAuth2)
+      const res = await fetch(`${device.url}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: new URLSearchParams({ username, password }).toString(),
+      });
 
-      const response = await apiClient.post<{ access_token: string }>(
-        "/api/auth/login",
-        form.toString(),
-        { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-      );
+      if (!res.ok) return false;
+      const data = (await res.json()) as { access_token: string };
 
-      const token = response.data.access_token;
-      await setStoredToken(token);
+      // Update device token in storage
+      const devices = await getDevices();
+      const idx = devices.findIndex((d) => d.deviceId === device.deviceId);
+      if (idx >= 0) {
+        devices[idx] = { ...devices[idx], token: data.access_token };
+        const AsyncStorage = (await import("@react-native-async-storage/async-storage")).default;
+        await AsyncStorage.setItem("iris_pi_devices", JSON.stringify(devices));
+      }
 
-      const me = await apiClient.get<{ id: number; username: string; role: string }>("/api/auth/me");
-      setSession({ token, username: me.data.username, role: me.data.role });
+      // Fetch user info
+      const meRes = await fetch(`${device.url}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${data.access_token}`,
+          "ngrok-skip-browser-warning": "true",
+        },
+      });
+      if (!meRes.ok) return false;
+      const me = (await meRes.json()) as UserResponse;
+
+      setSession({ token: data.access_token, username: me.username, role: me.role });
+      setActiveDevice({ ...device, token: data.access_token });
       return true;
     } catch {
       return false;
@@ -82,12 +102,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await clearStorage();
     setSession(null);
   };
 
+  const refreshSession = async () => {
+    await restoreSession();
+  };
+
   return (
-    <AuthContext.Provider value={{ session, bootstrapping, login, logout }}>
+    <AuthContext.Provider value={{ session, bootstrapping, hasPi, activeDevice, login, logout, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );

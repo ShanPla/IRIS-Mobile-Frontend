@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
 import { View, Text } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
-import { getStoredBackendUrl } from "./src/lib/api";
 
 import SetupScreen from "./src/screens/SetupScreen/SetupScreen";
 import LoginScreen from "./src/screens/LoginScreen/LoginScreen";
@@ -16,6 +14,7 @@ import FacialRegistrationScreen from "./src/screens/FacialRegistrationScreen/Fac
 import SettingsScreen from "./src/screens/SettingsScreen/SettingsScreen";
 import ProfileScreen from "./src/screens/ProfileScreen/ProfileScreen";
 import AddCameraScreen from "./src/screens/AddCameraScreen/AddCameraScreen";
+import LiveFeedScreen from "./src/screens/LiveFeedScreen/LiveFeedScreen";
 
 export type RootStackParamList = {
   Setup: undefined;
@@ -25,6 +24,7 @@ export type RootStackParamList = {
   EventDetails: { event: import("./src/types/iris").SecurityEvent };
   FacialRegistration: undefined;
   AddCamera: undefined;
+  LiveFeed: undefined;
 };
 
 export type MainTabParamList = {
@@ -78,18 +78,9 @@ function MainTabs() {
 }
 
 function RootNavigator() {
-  const { session, bootstrapping } = useAuth();
-  const [hasBackend, setHasBackend] = useState<boolean | null>(null);
+  const { session, bootstrapping, hasPi } = useAuth();
 
-  useEffect(() => {
-    void getStoredBackendUrl().then((url) => setHasBackend(!!url));
-  }, [session]);
-
-  const onSetupComplete = () => {
-    void getStoredBackendUrl().then((url) => setHasBackend(!!url));
-  };
-
-  if (bootstrapping || hasBackend === null) {
+  if (bootstrapping) {
     return (
       <View style={{ flex: 1, backgroundColor: "#030712", justifyContent: "center", alignItems: "center" }}>
         <Text style={{ color: "#22d3ee", fontSize: 22, fontWeight: "800", letterSpacing: 4 }}>IRIS</Text>
@@ -99,18 +90,14 @@ function RootNavigator() {
   }
 
   return (
-    <NavigationContainer key={`${String(hasBackend)}-${String(!!session)}`}>
+    <NavigationContainer key={`${String(hasPi)}-${String(!!session)}`}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!hasBackend ? (
-          <Stack.Screen name="Setup">
-            {(props) => <SetupScreen {...props} onSetupComplete={onSetupComplete} />}
-          </Stack.Screen>
+        {!hasPi ? (
+          <Stack.Screen name="Setup" component={SetupScreen} />
         ) : !session ? (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Setup">
-              {(props) => <SetupScreen {...props} onSetupComplete={onSetupComplete} />}
-            </Stack.Screen>
+            <Stack.Screen name="Setup" component={SetupScreen} />
           </>
         ) : (
           <>
@@ -119,6 +106,7 @@ function RootNavigator() {
             <Stack.Screen name="EventDetails" component={EventDetailsScreen} options={{ animation: "slide_from_right" }} />
             <Stack.Screen name="FacialRegistration" component={FacialRegistrationScreen} options={{ animation: "slide_from_right" }} />
             <Stack.Screen name="AddCamera" component={AddCameraScreen} options={{ animation: "slide_from_right" }} />
+            <Stack.Screen name="LiveFeed" component={LiveFeedScreen} options={{ animation: "slide_from_right" }} />
           </>
         )}
       </Stack.Navigator>
