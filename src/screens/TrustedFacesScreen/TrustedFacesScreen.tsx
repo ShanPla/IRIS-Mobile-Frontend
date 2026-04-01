@@ -1,198 +1,225 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity,
+  View,
+  Text,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  Switch,
   ActivityIndicator,
+  Alert,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { apiClient } from "../../lib/api";
-import type { FaceProfile } from "../../types/iris";
 import type { RootStackParamList } from "../../../App";
-import { styles } from "./styles";
+import { piGet, piPut } from "../../lib/pi";
+import type { InvitedUser, PermissionSet } from "../../types/iris";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-interface Permissions {
-  switching_modes: boolean;
-  enable_disable_camera: boolean;
-  alert_and_record: boolean;
-}
-
-interface UserWithPermissions extends FaceProfile {
-  status: "active" | "inactive";
-  permissions: Permissions;
-}
-
-const PERMISSION_LABELS: Record<keyof Permissions, string> = {
-  switching_modes: "Switching Modes",
-  enable_disable_camera: "Enable/Disable Camera",
-  alert_and_record: "Alert and Record",
-};
+const PERMISSION_LABELS: Array<{ key: keyof PermissionSet; label: string }> = [
+  { key: "can_view_events", label: "View Events" },
+  { key: "can_silence_alarm", label: "Silence Alarm" },
+  { key: "can_change_mode", label: "Change Mode" },
+  { key: "can_manage_profiles", label: "Manage Profiles" },
+];
 
 export default function TrustedFacesScreen() {
   const navigation = useNavigation<Nav>();
-  const [users, setUsers] = useState<UserWithPermissions[]>([]);
-  const [selected, setSelected] = useState<UserWithPermissions | null>(null);
+  const [users, setUsers] = useState<InvitedUser[]>([]);
+  const [selected, setSelected] = useState<InvitedUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => { void loadProfiles(); }, []);
-
-  const loadProfiles = async () => {
-    setError("");
+  const fetchUsers = useCallback(async () => {
     try {
-      const response = await apiClient.get<FaceProfile[]>("/api/faces/");
-      const mapped: UserWithPermissions[] = response.data.map((p, i) => ({
-        ...p,
-        status: i % 2 === 0 ? "active" : "inactive",
-        permissions: {
-          switching_modes: true,
-          enable_disable_camera: false,
-          alert_and_record: true,
-        },
-      }));
-      setUsers(mapped);
-      if (mapped.length > 0) setSelected(mapped[0]);
-    } catch {
-      setError("Failed to load profiles.");
+      setError("");
+      const data = await piGet<InvitedUser[]>("/api/auth/invited");
+      setUsers(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load users");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const togglePermission = (key: keyof Permissions) => {
-    if (!selected) return;
-    const updated = {
-      ...selected,
-      permissions: { ...selected.permissions, [key]: !selected.permissions[key] },
-    };
-    setSelected(updated);
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    // TODO: connect to backend permission endpoint
-    setTimeout(() => setSaving(false), 800);
-  };
-
-  const renderPermissionsSection = (user: UserWithPermissions | null) => (
-    <View style={styles.selectedSection}>
-      <Text style={styles.selectedLabel}>Selected User:</Text>
-      <View style={styles.selectedUser}>
-        <View style={styles.userAvatar}>
-          <Text style={styles.userAvatarText}>👤</Text>
-        </View>
-        <Text style={[styles.selectedUserName, !user && { color: "#4b5563" }]}>
-          {user ? user.name : "No user"}
-        </Text>
-        <View style={[
-          styles.statusDot,
-          { backgroundColor: user ? (user.status === "active" ? "#4ade80" : "#f87171") : "#374151" }
-        ]} />
-      </View>
-
-      {(Object.keys(PERMISSION_LABELS) as (keyof Permissions)[]).map((key) => (
-        <TouchableOpacity
-          key={key}
-          style={styles.permissionRow}
-          onPress={() => user && togglePermission(key)}
-          disabled={!user}
-        >
-          <View style={[
-            styles.checkbox,
-            user && user.permissions[key] && styles.checkboxChecked
-          ]}>
-            {user && user.permissions[key] && (
-              <Text style={{ color: "#000", fontSize: 12, fontWeight: "700" }}>✓</Text>
-            )}
-          </View>
-          <Text style={[styles.permissionLabel, !user && { color: "#4b5563" }]}>
-            {PERMISSION_LABELS[key]}
-          </Text>
-        </TouchableOpacity>
-      ))}
-
-      <TouchableOpacity
-        style={[styles.saveBtn, !user && { opacity: 0.4 }]}
-        onPress={() => user && void handleSave()}
-        disabled={!user || saving}
-      >
-        <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Save"}</Text>
-      </TouchableOpacity>
-    </View>
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void fetchUsers();
+    }, [fetchUsers])
   );
+
+  const togglePermission = (key: keyof PermissionSet) => {
+    if (!selected || !selected.permissions) return;
+    setSelected({
+      ...selected,
+      permissions: {
+        ...selected.permissions,
+        [key]: !selected.permissions[key],
+      },
+    });
+  };
+
+  const savePermissions = async () => {
+    if (!selected || !selected.permissions) return;
+    setSaving(true);
+    try {
+      await piPut(`/api/auth/invite/${selected.username}/permissions`, selected.permissions);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === selected.id ? { ...u, permissions: selected.permissions } : u))
+      );
+      Alert.alert("Saved", "Permissions updated");
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getInitials = (name: string) => {
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color="#22d3ee" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Trusted Users</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => navigation.navigate("FacialRegistration")}
-        >
-          <Text style={styles.addBtnText}>Add New Face</Text>
+        <Text style={styles.title}>Trusted Users</Text>
+        <TouchableOpacity onPress={() => navigation.navigate("FacialRegistration")}>
+          <Text style={styles.addText}>+ Add</Text>
         </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <ActivityIndicator color="#22d3ee" style={{ marginTop: 40 }} />
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      {users.length === 0 ? (
+        <Text style={styles.emptyText}>No invited users. Invite homeowners from the admin panel.</Text>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+        <View style={styles.splitView}>
+          <FlatList
+            data={users}
+            keyExtractor={(item) => String(item.id)}
+            style={styles.userList}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.userRow, selected?.id === item.id && styles.userRowSelected]}
+                onPress={() => setSelected(item)}
+              >
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{getInitials(item.username)}</Text>
+                </View>
+                <View style={styles.userInfo}>
+                  <Text style={styles.userName}>{item.username}</Text>
+                  <Text style={styles.userRole}>{item.role}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          />
 
-          {users.length === 0 ? (
-            <>
-              <View style={{ alignItems: "center", paddingVertical: 24, gap: 8 }}>
-                <Text style={{ fontSize: 40 }}>👥</Text>
-                <Text style={styles.empty}>No trusted faces registered yet.</Text>
-                <Text style={{ color: "#4b5563", fontSize: 12, textAlign: "center" }}>
-                  Tap "Add New Face" to register an authorized person.
-                </Text>
-              </View>
-              {renderPermissionsSection(null)}
-            </>
+          {selected && selected.permissions ? (
+            <View style={styles.permissionsPanel}>
+              <Text style={styles.permTitle}>Permissions for {selected.username}</Text>
+              {PERMISSION_LABELS.map(({ key, label }) => (
+                <View key={key} style={styles.permRow}>
+                  <Text style={styles.permLabel}>{label}</Text>
+                  <Switch
+                    value={selected.permissions![key]}
+                    onValueChange={() => togglePermission(key)}
+                    trackColor={{ true: "#22d3ee", false: "#374151" }}
+                    thumbColor="#e5e7eb"
+                  />
+                </View>
+              ))}
+              <TouchableOpacity
+                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                onPress={savePermissions}
+                disabled={saving}
+              >
+                {saving ? <ActivityIndicator color="#030712" /> : <Text style={styles.saveText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
           ) : (
-            <>
-              <View style={styles.userList}>
-                {users.map((user, index) => (
-                  <TouchableOpacity
-                    key={user.id}
-                    style={[
-                      styles.userRow,
-                      selected?.id === user.id && styles.userRowSelected,
-                      index === users.length - 1 && styles.userRowLast,
-                    ]}
-                    onPress={() => setSelected(user)}
-                  >
-                    <View style={styles.userAvatar}>
-                      <Text style={styles.userAvatarText}>👤</Text>
-                    </View>
-                    <Text style={styles.userName}>{user.name}</Text>
-                    <View style={[
-                      styles.statusDot,
-                      { backgroundColor: user.status === "active" ? "#4ade80" : "#f87171" }
-                    ]} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {renderPermissionsSection(selected)}
-            </>
+            <View style={styles.permissionsPanel}>
+              <Text style={styles.selectHint}>Select a user to manage permissions</Text>
+            </View>
           )}
-
-          <View style={styles.legend}>
-            <View style={styles.legendItem}>
-              <View style={[styles.statusDot, { backgroundColor: "#4ade80" }]} />
-              <Text style={styles.legendText}>active/viewing</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.statusDot, { backgroundColor: "#f87171" }]} />
-              <Text style={styles.legendText}>inactive/offline</Text>
-            </View>
-          </View>
-        </ScrollView>
+        </View>
       )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#030712" },
+  centered: { flex: 1, backgroundColor: "#030712", justifyContent: "center", alignItems: "center" },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
+  },
+  title: { color: "#e5e7eb", fontSize: 20, fontWeight: "700" },
+  addText: { color: "#22d3ee", fontSize: 15, fontWeight: "600" },
+  error: { color: "#f87171", fontSize: 13, textAlign: "center", marginBottom: 8 },
+  emptyText: { color: "#6b7280", textAlign: "center", paddingTop: 40, paddingHorizontal: 20, fontSize: 14 },
+  splitView: { flex: 1 },
+  userList: { maxHeight: 280 },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1f2937",
+  },
+  userRowSelected: { backgroundColor: "#1f2937" },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#374151",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  avatarText: { color: "#22d3ee", fontWeight: "700", fontSize: 14 },
+  userInfo: { flex: 1 },
+  userName: { color: "#e5e7eb", fontSize: 15, fontWeight: "600" },
+  userRole: { color: "#6b7280", fontSize: 12, marginTop: 2 },
+  permissionsPanel: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  permTitle: { color: "#e5e7eb", fontSize: 16, fontWeight: "700", marginBottom: 16 },
+  permRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1f2937",
+  },
+  permLabel: { color: "#e5e7eb", fontSize: 14 },
+  saveButton: {
+    backgroundColor: "#22d3ee",
+    borderRadius: 8,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  saveButtonDisabled: { opacity: 0.6 },
+  saveText: { color: "#030712", fontWeight: "700", fontSize: 15 },
+  selectHint: { color: "#6b7280", textAlign: "center", paddingTop: 40, fontSize: 14 },
+});
