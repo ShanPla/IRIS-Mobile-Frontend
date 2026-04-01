@@ -1,96 +1,39 @@
-import { useState } from "react";
-import {
-  View, Text, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator,
-} from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../../App";
-import { styles } from "./styles";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-// Placeholder cameras for testing
-export const PLACEHOLDER_CAMERAS = [
-  { id: "1", name: "Office", ip: "192.168.1.100", active: true },
-  { id: "2", name: "Living Room", ip: "192.168.1.101", active: true },
-  { id: "3", name: "Bedroom", ip: "192.168.1.102", active: false },
-  { id: "4", name: "Kitchen", ip: "192.168.1.103", active: true },
-];
-
 export default function AddCameraScreen() {
   const navigation = useNavigation<Nav>();
-  const [name, setName] = useState("");
-  const [ip, setIp] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-
-  const handleAdd = async () => {
-    if (!name.trim()) { setError("Camera name is required."); return; }
-    if (!ip.trim()) { setError("IP address is required."); return; }
-    setLoading(true);
-    setError("");
-    // TODO: connect to backend camera registration endpoint
-    setTimeout(() => {
-      setLoading(false);
-      setSuccess(`Camera "${name}" added successfully!`);
-      setTimeout(() => navigation.goBack(), 1500);
-    }, 1000);
-  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={{ color: "#e5e7eb", fontSize: 18 }}>←</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Pi Camera</Text>
+        <Text style={styles.title}>Add Camera</Text>
+        <View style={{ width: 40 }} />
       </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.iconCircle}>
-          <Text style={styles.iconText}>📷</Text>
-        </View>
-        <Text style={styles.desc}>
-          Register a new Raspberry Pi camera by entering its name and local IP address.
-        </Text>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Camera Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Living Room"
-            placeholderTextColor="#6b7280"
-            value={name}
-            onChangeText={setName}
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Pi IP Address</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 192.168.1.100"
-            placeholderTextColor="#6b7280"
-            value={ip}
-            onChangeText={setIp}
-            autoCapitalize="none"
-            keyboardType="numeric"
-          />
-        </View>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        {success ? <Text style={styles.success}>{success}</Text> : null}
-
-        <TouchableOpacity style={styles.addBtn} onPress={() => void handleAdd()} disabled={loading}>
-          {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.addBtnText}>Add Camera</Text>}
+      <View style={styles.content}>
+        <Text style={styles.desc}>To add a new Pi camera, go to the Setup screen and enter your Pi's URL and Device ID.</Text>
+        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate("Setup")}>
+          <Text style={styles.buttonText}>Go to Setup</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.cancelBtnText}>Cancel</Text>
-        </TouchableOpacity>
-      </ScrollView>
+      </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#030712" },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16 },
+  backText: { color: "#22d3ee", fontSize: 15 },
+  title: { color: "#e5e7eb", fontSize: 18, fontWeight: "700" },
+  content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
+  desc: { color: "#9ca3af", fontSize: 15, textAlign: "center", marginBottom: 24 },
+  button: { backgroundColor: "#22d3ee", borderRadius: 8, padding: 16, paddingHorizontal: 32, alignItems: "center" },
+  buttonText: { color: "#030712", fontWeight: "700", fontSize: 16 },
+});
