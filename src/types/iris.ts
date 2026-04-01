@@ -4,10 +4,13 @@ export type EventType = "authorized" | "unknown" | "unverifiable";
 export interface SecurityEvent {
   id: number;
   event_type: EventType;
+  matched_name: string | null;
   snapshot_path: string | null;
   alarm_triggered: boolean;
+  notification_sent: boolean;
+  mode: string;
+  notes: string | null;
   timestamp: string;
-  matched_name: string | null;
 }
 
 export interface EventsResponse {
@@ -23,11 +26,34 @@ export interface SystemStatus {
   updated_at: string;
 }
 
+export interface SystemConfig {
+  motion_area_threshold: number;
+  detection_cooldown_seconds: number;
+  face_recognition_tolerance: number;
+  alarm_escalation_delay: number;
+  notifications_enabled: boolean;
+  include_snapshot_in_alerts: boolean;
+  buzzer_enabled: boolean;
+  buzzer_gpio_pin: number;
+}
+
+export interface CameraHealth {
+  camera_ready: boolean;
+  engine_running: boolean;
+  cv2_available: boolean;
+  latest_frame_ts: string | null;
+  mode: string;
+  alarm_active: boolean;
+  known_faces: number;
+}
+
 export interface FaceProfile {
   id: number;
   name: string;
+  image_path: string;
   registered_by: number;
   created_at: string;
+  updated_at: string;
 }
 
 export interface AuthSession {
@@ -36,13 +62,28 @@ export interface AuthSession {
   role: string;
 }
 
-export interface TrustedUser {
+export interface UserResponse {
   id: number;
-  name: string;
-  status: "active" | "inactive";
-  permissions: {
-    switching_modes: boolean;
-    enable_disable_camera: boolean;
-    alert_and_record: boolean;
-  };
+  username: string;
+  role: string;
+  fcm_token: string | null;
+}
+
+export interface InvitedUser {
+  id: number;
+  username: string;
+  role: string;
+  permissions: PermissionSet | null;
+}
+
+export interface PermissionSet {
+  can_view_events: boolean;
+  can_silence_alarm: boolean;
+  can_change_mode: boolean;
+  can_manage_profiles: boolean;
+}
+
+export interface WebSocketEvent {
+  type: "security_event" | "mode_change" | "alarm_change" | "config_updated" | "pong";
+  data?: unknown;
 }
