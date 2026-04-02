@@ -45,13 +45,13 @@ export function useWebSocket(options: UseWebSocketOptions) {
           const msg = JSON.parse(event.data as string) as WebSocketMessage;
           switch (msg.type) {
             case "security_event":
-              options.onSecurityEvent?.(msg.data);
+              options.onSecurityEvent?.(msg);
               break;
             case "mode_change":
-              options.onModeChange?.(msg.data);
+              options.onModeChange?.(msg);
               break;
             case "alarm_change":
-              options.onAlarmChange?.(msg.data);
+              options.onAlarmChange?.(msg);
               break;
             case "config_updated":
               options.onConfigUpdated?.();

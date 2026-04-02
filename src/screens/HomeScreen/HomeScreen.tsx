@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../../App";
 import { useAuth } from "../../context/AuthContext";
 import { piGet, piPut, buildPiUrl } from "../../lib/pi";
-import type { SystemStatus, SecurityEvent, EventsResponse } from "../../types/iris";
+import { useWebSocket } from "../../hooks/useWebSocket";
+import type { SystemStatus, SecurityEvent, SecurityMode, EventsResponse } from "../../types/iris";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -28,6 +29,42 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+
+  const wsHandlers = useMemo(() => ({
+    onSecurityEvent: (msg: unknown) => {
+      const d = msg as { id?: number; event_type?: string; alarm_triggered?: boolean; snapshot_url?: string; timestamp?: string; mode?: string };
+      if (!d.event_type || !d.timestamp) return;
+      const evt: SecurityEvent = {
+        id: d.id ?? Date.now(),
+        event_type: d.event_type as SecurityEvent["event_type"],
+        matched_name: null,
+        snapshot_path: d.snapshot_url ?? null,
+        alarm_triggered: d.alarm_triggered ?? false,
+        notification_sent: false,
+        mode: d.mode ?? "",
+        notes: null,
+        timestamp: d.timestamp,
+      };
+      setRecentEvents((prev) => {
+        const deduped = prev.filter((e) => e.id !== evt.id);
+        return [evt, ...deduped].slice(0, 5);
+      });
+    },
+    onModeChange: (msg: unknown) => {
+      const d = msg as { mode?: string };
+      if (d.mode === "home" || d.mode === "away") {
+        setStatus((prev) => prev ? { ...prev, mode: d.mode as SecurityMode } : prev);
+      }
+    },
+    onAlarmChange: (msg: unknown) => {
+      const d = msg as { active?: boolean };
+      if (d.active !== undefined) {
+        setStatus((prev) => prev ? { ...prev, alarm_active: d.active as boolean } : prev);
+      }
+    },
+  }), []);
+
+  useWebSocket(wsHandlers);
 
   const fetchData = useCallback(async () => {
     try {
