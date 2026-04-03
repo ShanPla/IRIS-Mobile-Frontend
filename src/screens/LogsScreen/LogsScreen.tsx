@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -30,29 +30,31 @@ export default function LogsScreen() {
   const navigation = useNavigation<Nav>();
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState<EventType | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
+  const offsetRef = useRef(0);
 
   const fetchEvents = useCallback(async (reset: boolean) => {
     try {
       setError("");
-      const newOffset = reset ? 0 : offset;
-      let path = `/api/events/?limit=${PAGE_SIZE}&offset=${newOffset}`;
+      const currentOffset = reset ? 0 : offsetRef.current;
+      let path = `/api/events/?limit=${PAGE_SIZE}&offset=${currentOffset}`;
       if (filter) path += `&event_type=${filter}`;
 
       const data = await piGet<EventsResponse>(path);
+      const newOffset = currentOffset + data.items.length;
+      offsetRef.current = newOffset;
+
       if (reset) {
         setEvents(data.items);
       } else {
         setEvents((prev) => [...prev, ...data.items]);
       }
       setTotal(data.total);
-      setOffset(newOffset + data.items.length);
 
       // Build thumbnail URLs
       const newThumbs: Record<number, string> = {};
@@ -61,7 +63,7 @@ export default function LogsScreen() {
           newThumbs[evt.id] = await buildPiUrl(evt.snapshot_path);
         }
       }
-      setThumbnails((prev) => ({ ...prev, ...newThumbs }));
+      setThumbnails((prev) => (reset ? newThumbs : { ...prev, ...newThumbs }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load events");
     } finally {
@@ -69,17 +71,19 @@ export default function LogsScreen() {
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, [filter, offset]);
+  }, [filter]);
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
+      offsetRef.current = 0;
       void fetchEvents(true);
-    }, [filter])
+    }, [fetchEvents])
   );
 
   const handleRefresh = () => {
     setRefreshing(true);
+    offsetRef.current = 0;
     void fetchEvents(true);
   };
 
@@ -87,6 +91,11 @@ export default function LogsScreen() {
     if (events.length >= total || loadingMore) return;
     setLoadingMore(true);
     void fetchEvents(false);
+  };
+
+  const handleFilterChange = (value: EventType | null) => {
+    setFilter(value);
+    offsetRef.current = 0;
   };
 
   const getBadgeColor = (type: string) => {
@@ -141,7 +150,7 @@ export default function LogsScreen() {
           <TouchableOpacity
             key={f.label}
             style={[styles.filterTab, filter === f.value && styles.filterTabActive]}
-            onPress={() => setFilter(f.value)}
+            onPress={() => handleFilterChange(f.value)}
           >
             <Text style={[styles.filterText, filter === f.value && styles.filterTextActive]}>
               {f.label}
@@ -158,13 +167,17 @@ export default function LogsScreen() {
         renderItem={renderEvent}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#22d3ee" />}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.3}
         ListEmptyComponent={
           loading ? <ActivityIndicator color="#22d3ee" style={{ marginTop: 40 }} /> : <Text style={styles.emptyText}>No events found</Text>
         }
         ListFooterComponent={
-          events.length < total ? (
+          loadingMore ? (
+            <ActivityIndicator color="#22d3ee" style={{ padding: 16 }} />
+          ) : events.length < total ? (
             <TouchableOpacity style={styles.loadMore} onPress={handleLoadMore}>
-              {loadingMore ? <ActivityIndicator color="#22d3ee" /> : <Text style={styles.loadMoreText}>Load more</Text>}
+              <Text style={styles.loadMoreText}>Load more</Text>
             </TouchableOpacity>
           ) : null
         }
