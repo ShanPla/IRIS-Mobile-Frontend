@@ -3,6 +3,8 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { useEffect } from "react";
+import * as NavigationBar from "expo-navigation-bar";
 
 import SetupScreen from "./src/screens/SetupScreen/SetupScreen";
 import LoginScreen from "./src/screens/LoginScreen/LoginScreen";
@@ -80,6 +82,12 @@ function MainTabs() {
 function RootNavigator() {
   const { session, bootstrapping, hasPi } = useAuth();
 
+  useEffect(() => {
+    void NavigationBar.setVisibilityAsync("hidden");
+    void NavigationBar.setBehaviorAsync("overlay-swipe");
+    void NavigationBar.setBackgroundColorAsync("#111827");
+  }, []);
+  
   if (bootstrapping) {
     return (
       <View style={{ flex: 1, backgroundColor: "#030712", justifyContent: "center", alignItems: "center" }}>
