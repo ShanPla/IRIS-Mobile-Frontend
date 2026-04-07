@@ -65,13 +65,13 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleAlarmToggle = async () => {
-    if (!status) return;
+  const handleModeChange = async (newMode: "home" | "away") => {
+    if (!status || status.mode === newMode) return;
     try {
-      await piPut("/api/system/alarm", { active: !status.alarm_active });
-      setStatus({ ...status, alarm_active: !status.alarm_active });
+      await piPut("/api/system/mode", { mode: newMode });
+      setStatus({ ...status, mode: newMode });
     } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed to toggle alarm");
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to change mode");
     }
   };
 
@@ -88,16 +88,29 @@ export default function SettingsScreen() {
       <Text style={styles.pageTitle}>Settings</Text>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Alarm</Text>
-        <View style={styles.row}>
-          <Text style={styles.label}>Alarm Active</Text>
-          <Switch
-            value={status?.alarm_active ?? false}
-            onValueChange={handleAlarmToggle}
-            trackColor={{ true: "#f87171", false: "#374151" }}
-            thumbColor="#e5e7eb"
-          />
+        <Text style={styles.sectionTitle}>Security Mode</Text>
+        <Text style={styles.sectionDesc}>
+          Away mode triggers the alarm and sends notifications when an intruder is detected. Home mode logs events silently.
+        </Text>
+        <View style={styles.modeToggle}>
+          <TouchableOpacity
+            style={[styles.modeBtn, status?.mode === "home" && styles.modeBtnActive]}
+            onPress={() => void handleModeChange("home")}
+          >
+            <Text style={[styles.modeBtnText, status?.mode === "home" && styles.modeBtnTextActive]}>Home</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeBtn, status?.mode === "away" && styles.modeBtnActive]}
+            onPress={() => void handleModeChange("away")}
+          >
+            <Text style={[styles.modeBtnText, status?.mode === "away" && styles.modeBtnTextActive]}>Away</Text>
+          </TouchableOpacity>
         </View>
+        <Text style={styles.modeHint}>
+          {status?.mode === "home"
+            ? "Home mode: intruders are logged but the alarm will not sound."
+            : "Away mode: intruders trigger the alarm and push notifications."}
+        </Text>
       </View>
 
       <View style={styles.section}>
@@ -202,7 +215,22 @@ const styles = StyleSheet.create({
   centered: { flex: 1, backgroundColor: "#030712", justifyContent: "center", alignItems: "center" },
   pageTitle: { color: "#e5e7eb", fontSize: 20, fontWeight: "700", paddingHorizontal: 20, paddingTop: 60 },
   section: { paddingHorizontal: 20, marginTop: 24 },
-  sectionTitle: { color: "#22d3ee", fontSize: 14, fontWeight: "700", marginBottom: 12, textTransform: "uppercase" },
+  sectionTitle: { color: "#22d3ee", fontSize: 14, fontWeight: "700", marginBottom: 8, textTransform: "uppercase" },
+  sectionDesc: { color: "#6b7280", fontSize: 12, marginBottom: 12 },
+  modeToggle: { flexDirection: "row", gap: 12, marginBottom: 10 },
+  modeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#374151",
+    alignItems: "center",
+    backgroundColor: "#1f2937",
+  },
+  modeBtnActive: { borderColor: "#22d3ee", backgroundColor: "#0e3a42" },
+  modeBtnText: { color: "#9ca3af", fontSize: 14, fontWeight: "600" },
+  modeBtnTextActive: { color: "#22d3ee" },
+  modeHint: { color: "#6b7280", fontSize: 11, marginBottom: 4 },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
