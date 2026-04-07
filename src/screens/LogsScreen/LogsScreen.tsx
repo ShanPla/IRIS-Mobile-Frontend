@@ -20,8 +20,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 const FILTERS: Array<{ label: string; value: EventType | null }> = [
   { label: "All", value: null },
   { label: "Authorized", value: "authorized" },
-  { label: "Unknown", value: "unknown" },
-  { label: "Unverifiable", value: "unverifiable" },
+  { label: "Possible Threat", value: "possible_threat" },
+  { label: "Intruder", value: "unknown" },
 ];
 
 const PAGE_SIZE = 20;
@@ -102,8 +102,17 @@ export default function LogsScreen() {
     switch (type) {
       case "authorized": return "#4ade80";
       case "unknown": return "#f87171";
-      case "unverifiable": return "#f59e0b";
+      case "possible_threat": return "#fb923c";
       default: return "#6b7280";
+    }
+  };
+
+  const getBadgeLabel = (type: string) => {
+    switch (type) {
+      case "authorized": return "authorized";
+      case "unknown": return "intruder";
+      case "possible_threat": return "possible threat";
+      default: return type;
     }
   };
 
@@ -119,7 +128,7 @@ export default function LogsScreen() {
       )}
       <View style={styles.eventInfo}>
         <Text style={styles.eventText}>
-          {item.matched_name ? `${item.matched_name} recognized` : `${item.event_type} detected`}
+          {item.matched_name ?? getBadgeLabel(item.event_type)}
         </Text>
         <Text style={styles.eventTime}>
           {new Date(item.timestamp).toLocaleString()}
@@ -128,7 +137,7 @@ export default function LogsScreen() {
       </View>
       <View style={[styles.badge, { backgroundColor: `${getBadgeColor(item.event_type)}20` }]}>
         <Text style={[styles.badgeText, { color: getBadgeColor(item.event_type) }]}>
-          {item.event_type}
+          {getBadgeLabel(item.event_type)}
         </Text>
       </View>
     </TouchableOpacity>

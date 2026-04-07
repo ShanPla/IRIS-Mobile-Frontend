@@ -31,8 +31,17 @@ export default function EventDetailsScreen() {
     switch (type) {
       case "authorized": return "#4ade80";
       case "unknown": return "#f87171";
-      case "unverifiable": return "#f59e0b";
+      case "possible_threat": return "#fb923c";
       default: return "#6b7280";
+    }
+  };
+
+  const getBadgeLabel = (type: string) => {
+    switch (type) {
+      case "authorized": return "Authorized";
+      case "unknown": return "Intruder Detected";
+      case "possible_threat": return "Possible Threat";
+      default: return type;
     }
   };
 
@@ -60,7 +69,7 @@ export default function EventDetailsScreen() {
       {/* Badge */}
       <View style={styles.badgeRow}>
         <View style={[styles.badge, { backgroundColor: `${badgeColor}20` }]}>
-          <Text style={[styles.badgeText, { color: badgeColor }]}>{event.event_type}</Text>
+          <Text style={[styles.badgeText, { color: badgeColor }]}>{getBadgeLabel(event.event_type)}</Text>
         </View>
         {event.alarm_triggered && (
           <View style={[styles.badge, { backgroundColor: "#f8717120" }]}>
@@ -72,7 +81,7 @@ export default function EventDetailsScreen() {
       {/* Details */}
       <View style={styles.details}>
         <DetailRow label="Event ID" value={String(event.id)} />
-        <DetailRow label="Type" value={event.event_type} />
+        <DetailRow label="Type" value={getBadgeLabel(event.event_type)} />
         <DetailRow label="Matched Name" value={event.matched_name ?? "—"} />
         <DetailRow label="Timestamp" value={new Date(event.timestamp).toLocaleString()} />
         <DetailRow label="Mode" value={event.mode ?? "—"} />

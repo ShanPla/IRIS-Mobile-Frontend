@@ -131,7 +131,6 @@ export default function HomeScreen() {
     switch (type) {
       case "authorized": return "#4ade80";
       case "unknown": return "#f87171";
-      case "unverifiable": return "#f59e0b";
       case "possible_threat": return "#fb923c";
       default: return "#6b7280";
     }
@@ -142,7 +141,6 @@ export default function HomeScreen() {
       case "authorized": return "authorized";
       case "unknown": return "intruder";
       case "possible_threat": return "possible threat";
-      case "unverifiable": return "unverifiable";
       default: return type;
     }
   };
@@ -182,7 +180,9 @@ export default function HomeScreen() {
           <Text style={[styles.statusValue, { color: "#22d3ee" }]}>
             {status?.mode?.toUpperCase() ?? "—"}
           </Text>
-          <Text style={styles.statusHint}>Tap to toggle</Text>
+          <Text style={styles.statusHint}>
+            {status?.mode === "home" ? "No alarm · Tap for away" : "Alarm active · Tap for home"}
+          </Text>
         </TouchableOpacity>
         <View style={styles.statusCard}>
           <Text style={styles.statusLabel}>ALARM</Text>
