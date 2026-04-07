@@ -11,6 +11,7 @@ interface UseWebSocketOptions {
   onSecurityEvent?: (data: unknown) => void;
   onModeChange?: (data: unknown) => void;
   onAlarmChange?: (data: unknown) => void;
+  onThreatCleared?: (data: unknown) => void;
   onConfigUpdated?: () => void;
 }
 
@@ -52,6 +53,9 @@ export function useWebSocket(options: UseWebSocketOptions) {
               break;
             case "alarm_change":
               options.onAlarmChange?.(msg);
+              break;
+            case "threat_cleared":
+              options.onThreatCleared?.(msg);
               break;
             case "config_updated":
               options.onConfigUpdated?.();

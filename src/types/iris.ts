@@ -1,5 +1,5 @@
 export type SecurityMode = "home" | "away";
-export type EventType = "authorized" | "unknown" | "unverifiable";
+export type EventType = "authorized" | "unknown" | "unverifiable" | "possible_threat";
 
 export interface SecurityEvent {
   id: number;

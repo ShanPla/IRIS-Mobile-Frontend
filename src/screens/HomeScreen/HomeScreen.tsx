@@ -78,6 +78,14 @@ export default function HomeScreen() {
         setStatus((prev) => prev ? { ...prev, alarm_active: d.active as boolean } : prev);
       }
     },
+    onThreatCleared: (msg: unknown) => {
+      const d = msg as { id?: number };
+      if (d.id) {
+        setRecentEvents((prev) =>
+          prev.map((e) => e.id === d.id ? { ...e, event_type: "authorized" } : e)
+        );
+      }
+    },
   }), [navigation]);
 
   useWebSocket(wsHandlers);
@@ -124,7 +132,18 @@ export default function HomeScreen() {
       case "authorized": return "#4ade80";
       case "unknown": return "#f87171";
       case "unverifiable": return "#f59e0b";
+      case "possible_threat": return "#fb923c";
       default: return "#6b7280";
+    }
+  };
+
+  const getEventLabel = (type: string) => {
+    switch (type) {
+      case "authorized": return "authorized";
+      case "unknown": return "intruder";
+      case "possible_threat": return "possible threat";
+      case "unverifiable": return "unverifiable";
+      default: return type;
     }
   };
 
@@ -205,14 +224,14 @@ export default function HomeScreen() {
               <View style={[styles.eventDot, { backgroundColor: getEventBadgeColor(event.event_type) }]} />
               <View style={styles.eventInfo}>
                 <Text style={styles.eventText}>
-                  {event.matched_name ?? event.event_type}
+                  {event.matched_name ?? getEventLabel(event.event_type)}
                 </Text>
                 <Text style={styles.eventTime}>
                   {new Date(event.timestamp).toLocaleString()}
                 </Text>
               </View>
               <Text style={[styles.eventBadge, { color: getEventBadgeColor(event.event_type) }]}>
-                {event.event_type}
+                {getEventLabel(event.event_type)}
               </Text>
             </TouchableOpacity>
           ))
