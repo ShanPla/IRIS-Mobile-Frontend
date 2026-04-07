@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Image,
   Alert,
+  Vibration,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -32,12 +33,27 @@ export default function HomeScreen() {
 
   const wsHandlers = useMemo(() => ({
     onSecurityEvent: (msg: unknown) => {
-      const d = msg as { id?: number; event_type?: string; alarm_triggered?: boolean; snapshot_url?: string; timestamp?: string; mode?: string };
+      const d = msg as { id?: number; event_type?: string; alarm_triggered?: boolean; snapshot_url?: string; timestamp?: string; mode?: string; matched_name?: string };
       if (!d.event_type || !d.timestamp) return;
+
+      // ── In-app alert for confirmed intruder ──────────────────────
+      if (d.event_type === "unknown" && d.alarm_triggered) {
+        Vibration.vibrate([0, 500, 200, 500, 200, 500]); // urgent pattern
+        Alert.alert(
+          "INTRUDER ALERT",
+          "An unrecognized person was confirmed after monitoring. Check the live feed immediately.",
+          [
+            { text: "View Live Feed", onPress: () => navigation.navigate("LiveFeed") },
+            { text: "Dismiss", style: "cancel" },
+          ],
+        );
+      }
+
+      // ── Update recent events list ────────────────────────────────
       const evt: SecurityEvent = {
         id: d.id ?? Date.now(),
         event_type: d.event_type as SecurityEvent["event_type"],
-        matched_name: null,
+        matched_name: d.matched_name ?? null,
         snapshot_path: d.snapshot_url ?? null,
         alarm_triggered: d.alarm_triggered ?? false,
         notification_sent: false,
@@ -62,7 +78,7 @@ export default function HomeScreen() {
         setStatus((prev) => prev ? { ...prev, alarm_active: d.active as boolean } : prev);
       }
     },
-  }), []);
+  }), [navigation]);
 
   useWebSocket(wsHandlers);
 

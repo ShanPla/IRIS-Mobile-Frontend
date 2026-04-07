@@ -1,4 +1,6 @@
-import { View, Text } from "react-native";
+import { View, Text, LogBox } from "react-native";
+
+LogBox.ignoreLogs(["The action 'GO_BACK' was not handled"]);
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -17,6 +19,7 @@ import SettingsScreen from "./src/screens/SettingsScreen/SettingsScreen";
 import ProfileScreen from "./src/screens/ProfileScreen/ProfileScreen";
 import AddCameraScreen from "./src/screens/AddCameraScreen/AddCameraScreen";
 import LiveFeedScreen from "./src/screens/LiveFeedScreen/LiveFeedScreen";
+import AdminScreen from "./src/screens/AdminScreen/AdminScreen";
 
 export type RootStackParamList = {
   Setup: undefined;
@@ -34,12 +37,16 @@ export type MainTabParamList = {
   TrustedFaces: undefined;
   Settings: undefined;
   Profile: undefined;
+  Admin: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
+  const { session } = useAuth();
+  const isAdmin = session?.role === "admin";
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -75,6 +82,13 @@ function MainTabs() {
         component={ProfileScreen}
         options={{ tabBarLabel: "Profile", tabBarIcon: () => <Text style={{ fontSize: 18 }}>👤</Text> }}
       />
+      {isAdmin && (
+        <Tab.Screen
+          name="Admin"
+          component={AdminScreen}
+          options={{ tabBarLabel: "Admin", tabBarIcon: () => <Text style={{ fontSize: 18 }}>🛡️</Text> }}
+        />
+      )}
     </Tab.Navigator>
   );
 }
