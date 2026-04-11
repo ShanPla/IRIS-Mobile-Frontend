@@ -14,6 +14,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../../App";
 import { piGet, buildPiUrl } from "../../lib/pi";
+import { useAuth } from "../../context/AuthContext";
 import type { SecurityEvent, EventsResponse, EventType } from "../../types/iris";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -29,6 +30,7 @@ const PAGE_SIZE = 20;
 
 export default function LogsScreen() {
   const navigation = useNavigation<Nav>();
+  const { session } = useAuth();
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState<EventType | null>(null);
@@ -47,7 +49,7 @@ export default function LogsScreen() {
       let path = `/api/events/?limit=${PAGE_SIZE}&offset=${currentOffset}`;
       if (filter) path += `&event_type=${filter}`;
 
-      const data = await piGet<EventsResponse>(path);
+      const data = await piGet<EventsResponse>(path, session?.username);
       const newOffset = currentOffset + data.items.length;
       offsetRef.current = newOffset;
 
@@ -61,7 +63,7 @@ export default function LogsScreen() {
       const newThumbs: Record<number, string> = {};
       for (const evt of data.items) {
         if (evt.snapshot_path) {
-          newThumbs[evt.id] = await buildPiUrl(evt.snapshot_path);
+          newThumbs[evt.id] = await buildPiUrl(evt.snapshot_path, session?.username);
         }
       }
       setThumbnails((prev) => (reset ? newThumbs : { ...prev, ...newThumbs }));
@@ -72,7 +74,7 @@ export default function LogsScreen() {
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, [filter]);
+  }, [filter, session?.username]);
 
   useFocusEffect(
     useCallback(() => {

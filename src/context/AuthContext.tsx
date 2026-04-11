@@ -38,15 +38,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void restoreSession();
   }, []);
 
+  const refreshDeviceState = async (accountId?: string) => {
+    const devices = await getDevices(accountId);
+    setHasPi(devices.length > 0);
+    const device = await getActiveDevice(accountId);
+    setActiveDevice(device);
+  };
+
   const restoreSession = async () => {
     try {
-      const devices = await getDevices();
-      setHasPi(devices.length > 0);
-
-      const device = await getActiveDevice();
-      setActiveDevice(device);
       const storedSession = await getStoredSession();
       setSession(storedSession);
+      await refreshDeviceState(storedSession?.username);
     } catch {
       // Keep authentication independent from Pi availability.
       setSession(null);
@@ -60,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!nextSession) return false;
     setSession(nextSession);
     await persistSession(nextSession);
+    await refreshDeviceState(nextSession.username);
     return true;
   };
 
@@ -67,10 +71,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const nextSession = await registerAccount(username, email, password);
     setSession(nextSession);
     await persistSession(nextSession);
+    await refreshDeviceState(nextSession.username);
   };
 
   const logout = async () => {
     setSession(null);
+    setActiveDevice(null);
+    setHasPi(false);
     await clearStoredSession();
   };
 
@@ -79,8 +86,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const selectDevice = async (deviceId: string) => {
-    await persistActiveDevice(deviceId);
-    const devices = await getDevices();
+    const accountId = session?.username;
+    await persistActiveDevice(deviceId, accountId);
+    const devices = await getDevices(accountId);
     const nextDevice = devices.find((device) => device.deviceId === deviceId) ?? null;
     setActiveDevice(nextDevice);
     setHasPi(devices.length > 0);

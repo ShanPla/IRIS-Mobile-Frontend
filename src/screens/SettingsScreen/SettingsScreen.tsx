@@ -26,8 +26,8 @@ export default function SettingsScreen() {
   const fetchConfig = useCallback(async () => {
     try {
       const [configData, statusData] = await Promise.all([
-        piGet<SystemConfig>("/api/system/config"),
-        piGet<SystemStatus>("/api/system/status"),
+        piGet<SystemConfig>("/api/system/config", session?.username),
+        piGet<SystemStatus>("/api/system/status", session?.username),
       ]);
       setConfig(configData);
       setStatus(statusData);
@@ -36,7 +36,7 @@ export default function SettingsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session?.username]);
 
   useFocusEffect(
     useCallback(() => {
@@ -55,7 +55,7 @@ export default function SettingsScreen() {
     if (!config) return;
     setSaving(true);
     try {
-      await piPut("/api/system/config", config);
+      await piPut("/api/system/config", config, session?.username);
       setDirty(false);
       Alert.alert("Saved", "Settings updated");
     } catch (e) {
@@ -68,7 +68,7 @@ export default function SettingsScreen() {
   const handleModeChange = async (newMode: "home" | "away") => {
     if (!status || status.mode === newMode) return;
     try {
-      await piPut("/api/system/mode", { mode: newMode });
+      await piPut("/api/system/mode", { mode: newMode }, session?.username);
       setStatus({ ...status, mode: newMode });
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to change mode");

@@ -11,6 +11,7 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { RootStackParamList } from "../../../App";
 import { buildPiUrl } from "../../lib/pi";
+import { useAuth } from "../../context/AuthContext";
 import type { SecurityEvent } from "../../types/iris";
 
 type Route = RouteProp<RootStackParamList, "EventDetails">;
@@ -18,14 +19,15 @@ type Route = RouteProp<RootStackParamList, "EventDetails">;
 export default function EventDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute<Route>();
+  const { session } = useAuth();
   const event: SecurityEvent = route.params.event;
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (event.snapshot_path) {
-      void buildPiUrl(event.snapshot_path).then(setSnapshotUrl);
+      void buildPiUrl(event.snapshot_path, session?.username).then(setSnapshotUrl);
     }
-  }, [event.snapshot_path]);
+  }, [event.snapshot_path, session?.username]);
 
   const getBadgeColor = (type: string) => {
     switch (type) {

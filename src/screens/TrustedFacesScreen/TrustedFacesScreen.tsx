@@ -13,6 +13,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../../App";
 import { piGet, piPut } from "../../lib/pi";
+import { useAuth } from "../../context/AuthContext";
 import type { InvitedUser, PermissionSet } from "../../types/iris";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -26,6 +27,7 @@ const PERMISSION_LABELS: Array<{ key: keyof PermissionSet; label: string }> = [
 
 export default function TrustedFacesScreen() {
   const navigation = useNavigation<Nav>();
+  const { session } = useAuth();
   const [users, setUsers] = useState<InvitedUser[]>([]);
   const [selected, setSelected] = useState<InvitedUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,14 +37,14 @@ export default function TrustedFacesScreen() {
   const fetchUsers = useCallback(async () => {
     try {
       setError("");
-      const data = await piGet<InvitedUser[]>("/api/auth/invited");
+      const data = await piGet<InvitedUser[]>("/api/auth/invited", session?.username);
       setUsers(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load users");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [session?.username]);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,7 +68,7 @@ export default function TrustedFacesScreen() {
     if (!selected || !selected.permissions) return;
     setSaving(true);
     try {
-      await piPut(`/api/auth/invite/${selected.username}/permissions`, selected.permissions);
+      await piPut(`/api/auth/invite/${selected.username}/permissions`, selected.permissions, session?.username);
       setUsers((prev) =>
         prev.map((u) => (u.id === selected.id ? { ...u, permissions: selected.permissions } : u))
       );

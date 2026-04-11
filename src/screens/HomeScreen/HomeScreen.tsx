@@ -26,7 +26,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const { activeDevice, session } = useAuth();
-  const { health } = usePiHealth(10000);
+  const { health } = usePiHealth(10000, session?.username);
 
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [recentEvents, setRecentEvents] = useState<SecurityEvent[]>([]);
@@ -64,7 +64,7 @@ export default function HomeScreen() {
     if (!password) return;
 
     try {
-      await ensureDeviceAuth(session.username, password);
+      await ensureDeviceAuth(session.username, password, session.username);
       const { status } = await Notifications.getPermissionsAsync();
       if (status !== "granted") {
         await Notifications.requestPermissionsAsync();
@@ -75,7 +75,7 @@ export default function HomeScreen() {
       if (lastPushTokenRef.current?.deviceId === activeDevice.deviceId && lastPushTokenRef.current?.token === token) {
         return;
       }
-      await piPost("/api/auth/me/fcm-token", { fcm_token: token });
+      await piPost("/api/auth/me/fcm-token", { fcm_token: token }, session.username);
       lastPushTokenRef.current = { deviceId: activeDevice.deviceId, token };
     } catch {
       // Ignore push registration errors; local alerts still work.
@@ -169,19 +169,19 @@ export default function HomeScreen() {
     },
   }), [navigation]);
 
-  useWebSocket(wsHandlers);
+  useWebSocket(wsHandlers, session?.username);
 
   const fetchData = useCallback(async () => {
     try {
       setError("");
       const [statusData, eventsData] = await Promise.all([
-        piGet<SystemStatus>("/api/system/status"),
-        piGet<EventsResponse>("/api/events/?limit=5"),
+        piGet<SystemStatus>("/api/system/status", session?.username),
+        piGet<EventsResponse>("/api/events/?limit=5", session?.username),
       ]);
       setStatus(statusData);
       setRecentEvents(eventsData.items);
 
-      const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`);
+      const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`, session?.username);
       setFrameUri(url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data");
@@ -202,7 +202,7 @@ export default function HomeScreen() {
     if (!status) return;
     const newMode = status.mode === "home" ? "away" : "home";
     try {
-      await piPut("/api/system/mode", { mode: newMode });
+      await piPut("/api/system/mode", { mode: newMode }, session?.username);
       setStatus({ ...status, mode: newMode });
     } catch {
       Alert.alert("Error", "Failed to change mode");

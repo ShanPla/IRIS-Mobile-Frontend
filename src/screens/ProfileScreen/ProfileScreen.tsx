@@ -39,10 +39,10 @@ export default function ProfileScreen() {
   const [passwordSuccess, setPasswordSuccess] = useState("");
 
   const loadProfile = useCallback(async () => {
-    const storedDevices = await getDevices();
+    const storedDevices = await getDevices(session?.username);
     setDevices(storedDevices);
     setLoading(false);
-  }, []);
+  }, [session?.username]);
 
   useFocusEffect(
     useCallback(() => {

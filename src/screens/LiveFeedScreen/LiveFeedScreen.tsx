@@ -10,9 +10,11 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { buildPiUrl } from "../../lib/pi";
+import { useAuth } from "../../context/AuthContext";
 
 export default function LiveFeedScreen() {
   const navigation = useNavigation();
+  const { session } = useAuth();
   const [frameUri, setFrameUri] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -34,7 +36,7 @@ export default function LiveFeedScreen() {
     const poll = async () => {
       if (cancelled) return;
       try {
-        const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`);
+        const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`, session?.username);
         const res = await fetch(url, { headers: { "ngrok-skip-browser-warning": "true" } });
         if (!res.ok) throw new Error(`Frame error (${res.status})`);
         consecutiveFailsRef.current = 0;
@@ -62,12 +64,12 @@ export default function LiveFeedScreen() {
       cancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [paused]);
+  }, [paused, session?.username]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`);
+      const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`, session?.username);
       setFrameUri(url);
       setLoading(false);
       setError("");

@@ -39,11 +39,11 @@ export default function DeviceListScreen() {
   const [secureActionLoading, setSecureActionLoading] = useState(false);
 
   const loadDevices = useCallback(async () => {
-    const storedDevices = await getDevices();
+    const storedDevices = await getDevices(session?.username);
     setDevices(storedDevices);
     setLoading(false);
     setRefreshing(false);
-  }, []);
+  }, [session?.username]);
 
   useFocusEffect(
     useCallback(() => {
@@ -128,7 +128,7 @@ export default function DeviceListScreen() {
           action: "remove_device",
           code: gmailCode.trim(),
         });
-        await removeDevice(pendingAction.device.deviceId);
+        await removeDevice(pendingAction.device.deviceId, session?.username);
         await loadDevices();
         Alert.alert("Device Removed", `${pendingAction.device.name} was removed from this account.`);
         return;

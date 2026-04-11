@@ -15,14 +15,14 @@ interface UseWebSocketOptions {
   onConfigUpdated?: () => void;
 }
 
-export function useWebSocket(options: UseWebSocketOptions) {
+export function useWebSocket(options: UseWebSocketOptions, accountId?: string) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectDelayRef = useRef(1000);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const connect = useCallback(async () => {
-    const device = await getActiveDevice();
+    const device = await getActiveDevice(accountId);
     if (!device) return;
 
     const wsUrl = device.url.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
@@ -77,7 +77,7 @@ export function useWebSocket(options: UseWebSocketOptions) {
     } catch {
       scheduleReconnect();
     }
-  }, [options]);
+  }, [options, accountId]);
 
   const cleanup = () => {
     if (pingIntervalRef.current) {

@@ -1,7 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const DEVICES_KEY = "securewatch_devices_v1";
-const ACTIVE_KEY = "securewatch_active_device_id_v1";
+const LEGACY_DEVICES_KEY = "securewatch_devices_v1";
+const LEGACY_ACTIVE_KEY = "securewatch_active_device_id_v1";
+const DEVICES_KEY_PREFIX = "securewatch_devices_v2_";
+const ACTIVE_KEY_PREFIX = "securewatch_active_device_id_v2_";
 
 export interface PiDevice {
   deviceId: string;
@@ -40,16 +42,50 @@ function authHeaders(token: string, extra?: HeadersInit): HeadersInit {
   };
 }
 
-export async function getDevices(): Promise<PiDevice[]> {
-  const raw = await AsyncStorage.getItem(DEVICES_KEY);
+function normalizeAccountId(accountId?: string): string {
+  const normalized = (accountId ?? "").trim().toLowerCase();
+  return normalized.length > 0 ? normalized : "guest";
+}
+
+function devicesKey(accountId?: string): string {
+  return `${DEVICES_KEY_PREFIX}${normalizeAccountId(accountId)}`;
+}
+
+function activeKey(accountId?: string): string {
+  return `${ACTIVE_KEY_PREFIX}${normalizeAccountId(accountId)}`;
+}
+
+async function migrateLegacyDevices(accountId?: string): Promise<PiDevice[]> {
+  const legacyRaw = await AsyncStorage.getItem(LEGACY_DEVICES_KEY);
+  if (!legacyRaw) return [];
+  try {
+    const legacyDevices = JSON.parse(legacyRaw) as PiDevice[];
+    await AsyncStorage.setItem(devicesKey(accountId), legacyRaw);
+    await AsyncStorage.removeItem(LEGACY_DEVICES_KEY);
+    const legacyActive = await AsyncStorage.getItem(LEGACY_ACTIVE_KEY);
+    if (legacyActive) {
+      await AsyncStorage.setItem(activeKey(accountId), legacyActive);
+      await AsyncStorage.removeItem(LEGACY_ACTIVE_KEY);
+    }
+    return legacyDevices;
+  } catch {
+    return [];
+  }
+}
+
+export async function getDevices(accountId?: string): Promise<PiDevice[]> {
+  const raw = await AsyncStorage.getItem(devicesKey(accountId));
+  if (!raw) {
+    return migrateLegacyDevices(accountId);
+  }
   if (!raw) return [];
   return JSON.parse(raw) as PiDevice[];
 }
 
-export async function getActiveDevice(): Promise<PiDevice | null> {
-  const devices = await getDevices();
+export async function getActiveDevice(accountId?: string): Promise<PiDevice | null> {
+  const devices = await getDevices(accountId);
   if (devices.length === 0) return null;
-  const activeId = await AsyncStorage.getItem(ACTIVE_KEY);
+  const activeId = await AsyncStorage.getItem(activeKey(accountId));
   if (activeId) {
     const found = devices.find((d) => d.deviceId === activeId);
     if (found) return found;
@@ -57,14 +93,15 @@ export async function getActiveDevice(): Promise<PiDevice | null> {
   return devices[0];
 }
 
-export async function setActiveDevice(deviceId: string): Promise<void> {
-  await AsyncStorage.setItem(ACTIVE_KEY, deviceId);
+export async function setActiveDevice(deviceId: string, accountId?: string): Promise<void> {
+  await AsyncStorage.setItem(activeKey(accountId), deviceId);
 }
 
 export async function addDevice(
   url: string,
   deviceIp: string,
   primaryEmail: string,
+  accountId?: string,
 ): Promise<PiDevice> {
   const normalizedUrl = url.trim().replace(/\/$/, "");
   const trimmedIp = deviceIp.trim();
@@ -93,35 +130,35 @@ export async function addDevice(
     primaryEmail: primaryEmail.trim(),
   };
 
-  const devices = await getDevices();
+  const devices = await getDevices(accountId);
   const existing = devices.findIndex((d) => d.deviceId === device.deviceId);
   if (existing >= 0) {
     devices[existing] = device;
   } else {
     devices.push(device);
   }
-  await AsyncStorage.setItem(DEVICES_KEY, JSON.stringify(devices));
-  await setActiveDevice(device.deviceId);
+  await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(devices));
+  await setActiveDevice(device.deviceId, accountId);
   return device;
 }
 
-export async function removeDevice(deviceId: string): Promise<void> {
-  const devices = await getDevices();
+export async function removeDevice(deviceId: string, accountId?: string): Promise<void> {
+  const devices = await getDevices(accountId);
   const filtered = devices.filter((d) => d.deviceId !== deviceId);
-  await AsyncStorage.setItem(DEVICES_KEY, JSON.stringify(filtered));
+  await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(filtered));
 
-  const activeId = await AsyncStorage.getItem(ACTIVE_KEY);
+  const activeId = await AsyncStorage.getItem(activeKey(accountId));
   if (activeId === deviceId) {
     if (filtered.length > 0) {
-      await setActiveDevice(filtered[0].deviceId);
+      await setActiveDevice(filtered[0].deviceId, accountId);
     } else {
-      await AsyncStorage.removeItem(ACTIVE_KEY);
+      await AsyncStorage.removeItem(activeKey(accountId));
     }
   }
 }
 
-export async function piGet<T>(path: string): Promise<T> {
-  const device = await getActiveDevice();
+export async function piGet<T>(path: string, accountId?: string): Promise<T> {
+  const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
   const res = await fetch(`${device.url}${path}`, {
     headers: authHeaders(device.token),
@@ -133,23 +170,23 @@ export async function piGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function piPost<T>(path: string, body?: unknown): Promise<T> {
-  const device = await getActiveDevice();
+export async function piPost<T>(path: string, body?: unknown, accountId?: string): Promise<T> {
+  const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
   return piPostToDevice(device, path, body);
 }
 
-async function updateDeviceToken(deviceId: string, token: string): Promise<void> {
-  const devices = await getDevices();
+async function updateDeviceToken(deviceId: string, token: string, accountId?: string): Promise<void> {
+  const devices = await getDevices(accountId);
   const idx = devices.findIndex((d) => d.deviceId === deviceId);
   if (idx >= 0) {
     devices[idx] = { ...devices[idx], token };
-    await AsyncStorage.setItem(DEVICES_KEY, JSON.stringify(devices));
+    await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(devices));
   }
 }
 
-export async function ensureDeviceAuth(username: string, password: string): Promise<void> {
-  const device = await getActiveDevice();
+export async function ensureDeviceAuth(username: string, password: string, accountId?: string): Promise<void> {
+  const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
   if (device.token) return;
 
@@ -167,7 +204,7 @@ export async function ensureDeviceAuth(username: string, password: string): Prom
     throw new Error(`Device login failed (${res.status}): ${err}`);
   }
   const data = (await res.json()) as { access_token: string };
-  await updateDeviceToken(device.deviceId, data.access_token);
+  await updateDeviceToken(device.deviceId, data.access_token, accountId);
 }
 
 export async function piPostToDevice<T>(device: PiDevice, path: string, body?: unknown): Promise<T> {
@@ -183,8 +220,8 @@ export async function piPostToDevice<T>(device: PiDevice, path: string, body?: u
   return (await res.json()) as T;
 }
 
-export async function piPostForm<T>(path: string, formData: FormData): Promise<T> {
-  const device = await getActiveDevice();
+export async function piPostForm<T>(path: string, formData: FormData, accountId?: string): Promise<T> {
+  const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
   const res = await fetch(`${device.url}${path}`, {
     method: "POST",
@@ -198,8 +235,8 @@ export async function piPostForm<T>(path: string, formData: FormData): Promise<T
   return (await res.json()) as T;
 }
 
-export async function piPut<T>(path: string, body?: unknown): Promise<T> {
-  const device = await getActiveDevice();
+export async function piPut<T>(path: string, body?: unknown, accountId?: string): Promise<T> {
+  const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
   const res = await fetch(`${device.url}${path}`, {
     method: "PUT",
@@ -213,8 +250,8 @@ export async function piPut<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function piDelete<T>(path: string): Promise<T | null> {
-  const device = await getActiveDevice();
+export async function piDelete<T>(path: string, accountId?: string): Promise<T | null> {
+  const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
   const res = await fetch(`${device.url}${path}`, {
     method: "DELETE",
@@ -228,14 +265,14 @@ export async function piDelete<T>(path: string): Promise<T | null> {
   return (await res.json()) as T;
 }
 
-export async function buildPiUrl(path: string): Promise<string> {
-  const device = await getActiveDevice();
+export async function buildPiUrl(path: string, accountId?: string): Promise<string> {
+  const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
   const sep = path.includes("?") ? "&" : "?";
   return device.token ? `${device.url}${path}${sep}token=${device.token}` : `${device.url}${path}`;
 }
 
-export async function hasDevices(): Promise<boolean> {
-  const devices = await getDevices();
+export async function hasDevices(accountId?: string): Promise<boolean> {
+  const devices = await getDevices(accountId);
   return devices.length > 0;
 }

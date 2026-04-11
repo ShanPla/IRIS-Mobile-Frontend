@@ -40,7 +40,7 @@ export default function SetupScreen() {
       const withProtocol = /^https?:\/\//i.test(normalized)
         ? normalized
         : `https://${normalized}`;
-      await addDevice(withProtocol, deviceIp.trim(), session.email);
+      await addDevice(withProtocol, deviceIp.trim(), session.email, session.username);
       await refreshSession();
       navigation.navigate("DeviceList");
     } catch (e) {

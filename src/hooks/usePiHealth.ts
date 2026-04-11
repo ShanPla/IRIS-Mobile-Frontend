@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { piGet } from "../lib/pi";
 import type { CameraHealth } from "../types/iris";
 
-export function usePiHealth(pollInterval = 5000) {
+export function usePiHealth(pollInterval = 5000, accountId?: string) {
   const [health, setHealth] = useState<CameraHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -11,7 +11,7 @@ export function usePiHealth(pollInterval = 5000) {
   useEffect(() => {
     const fetchHealth = async () => {
       try {
-        const data = await piGet<CameraHealth>("/health/camera");
+        const data = await piGet<CameraHealth>("/health/camera", accountId);
         setHealth(data);
         setError(null);
       } catch (e) {
@@ -27,7 +27,7 @@ export function usePiHealth(pollInterval = 5000) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [pollInterval]);
+  }, [pollInterval, accountId]);
 
   return { health, loading, error };
 }
