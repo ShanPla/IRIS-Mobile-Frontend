@@ -3,15 +3,15 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#f8fafc",
   },
   header: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     paddingTop: 56,
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e2e8f0",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -20,25 +20,25 @@ export const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
   content: {
     padding: 20,
     gap: 16,
   },
   snapshotCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
   },
   snapshot: {
     width: "100%",
@@ -47,16 +47,16 @@ export const styles = StyleSheet.create({
   snapshotPlaceholder: {
     width: "100%",
     height: 220,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
   infoCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     gap: 14,
   },
   infoRow: {
@@ -66,16 +66,16 @@ export const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: 13,
-    color: "#6b7280",
+    color: "#64748b",
   },
   infoValue: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
   divider: {
     height: 1,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
   },
   badge: {
     paddingHorizontal: 12,
@@ -87,15 +87,15 @@ export const styles = StyleSheet.create({
   },
   badgeAuthorized: {
     backgroundColor: "rgba(74,222,128,0.15)",
-    color: "#4ade80",
+    color: "#16a34a",
   },
   badgeUnknown: {
     backgroundColor: "rgba(248,113,113,0.15)",
-    color: "#f87171",
+    color: "#dc2626",
   },
   badgeUnverifiable: {
     backgroundColor: "rgba(251,191,36,0.15)",
-    color: "#fbbf24",
+    color: "#ca8a04",
   },
   alarmBadge: {
     backgroundColor: "rgba(248,113,113,0.15)",
@@ -104,7 +104,7 @@ export const styles = StyleSheet.create({
     borderRadius: 999,
   },
   alarmBadgeText: {
-    color: "#f87171",
+    color: "#dc2626",
     fontSize: 13,
     fontWeight: "600",
   },

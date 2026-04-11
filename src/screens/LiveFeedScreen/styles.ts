@@ -3,23 +3,23 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#f8fafc",
     padding: 20,
     paddingTop: 56,
   },
   title: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#e5e7eb",
+    color: "#0f172a",
     marginBottom: 4,
   },
   desc: {
-    color: "#6b7280",
+    color: "#64748b",
     fontSize: 13,
     marginBottom: 20,
   },
   error: {
-    color: "#f87171",
+    color: "#dc2626",
     fontSize: 13,
   },
   feedWrapper: {
@@ -29,24 +29,24 @@ export const styles = StyleSheet.create({
   feed: {
     width: "100%",
     aspectRatio: 16 / 9,
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
   },
   refreshBtn: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     borderRadius: 10,
     padding: 14,
     alignItems: "center",
   },
   refreshBtnText: {
-    color: "#22d3ee",
+    color: "#2563eb",
     fontWeight: "600",
     fontSize: 14,
   },
   note: {
-    color: "#4b5563",
+    color: "#64748b",
     fontSize: 12,
     textAlign: "center",
     lineHeight: 18,

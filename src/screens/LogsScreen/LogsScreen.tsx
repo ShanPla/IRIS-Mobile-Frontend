@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Image,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -20,7 +21,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 const FILTERS: Array<{ label: string; value: EventType | null }> = [
   { label: "All", value: null },
   { label: "Authorized", value: "authorized" },
-  { label: "Possible Threat", value: "possible_threat" },
+  { label: "Uncertain", value: "possible_threat" },
   { label: "Intruder", value: "unknown" },
 ];
 
@@ -31,6 +32,7 @@ export default function LogsScreen() {
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState<EventType | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,7 +58,6 @@ export default function LogsScreen() {
       }
       setTotal(data.total);
 
-      // Build thumbnail URLs
       const newThumbs: Record<number, string> = {};
       for (const evt of data.items) {
         if (evt.snapshot_path) {
@@ -100,10 +101,10 @@ export default function LogsScreen() {
 
   const getBadgeColor = (type: string) => {
     switch (type) {
-      case "authorized": return "#4ade80";
-      case "unknown": return "#f87171";
-      case "possible_threat": return "#fb923c";
-      default: return "#6b7280";
+      case "authorized": return "#16a34a";
+      case "unknown": return "#dc2626";
+      case "possible_threat": return "#ea580c";
+      default: return "#64748b";
     }
   };
 
@@ -116,44 +117,37 @@ export default function LogsScreen() {
     }
   };
 
-  const renderEvent = ({ item }: { item: SecurityEvent }) => (
-    <TouchableOpacity
-      style={styles.eventRow}
-      onPress={() => navigation.navigate("EventDetails", { event: item })}
-    >
-      {thumbnails[item.id] ? (
-        <Image source={{ uri: thumbnails[item.id] }} style={styles.thumbnail} />
-      ) : (
-        <View style={styles.thumbnailPlaceholder} />
-      )}
-      <View style={styles.eventInfo}>
-        <Text style={styles.eventText}>
-          {item.matched_name ?? getBadgeLabel(item.event_type)}
-        </Text>
-        <Text style={styles.eventTime}>
-          {new Date(item.timestamp).toLocaleString()}
-          {item.alarm_triggered ? " • Alarm triggered" : ""}
-        </Text>
-      </View>
-      <View style={[styles.badge, { backgroundColor: `${getBadgeColor(item.event_type)}20` }]}>
-        <Text style={[styles.badgeText, { color: getBadgeColor(item.event_type) }]}>
-          {getBadgeLabel(item.event_type)}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const authorizedCount = events.filter((event) => event.event_type === "authorized").length;
+  const possibleCount = events.filter((event) => event.event_type === "possible_threat").length;
+  const intruderCount = events.filter((event) => event.event_type === "unknown").length;
+  const visibleEvents = events.filter((event) => {
+    const label = `${event.matched_name ?? ""} ${getBadgeLabel(event.event_type)}`.toLowerCase();
+    return label.includes(searchQuery.trim().toLowerCase());
+  });
 
-  return (
-    <View style={styles.container}>
+  const renderHeader = () => (
+    <>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Event Logs</Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.headerCopy}>
+          <Text style={styles.title}>Event History</Text>
+          <Text style={styles.subtitle}>Review all security events</Text>
+        </View>
       </View>
 
-      {/* Filter tabs */}
+      <View style={styles.searchBar}>
+        <Text style={styles.searchIcon}>SR</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search events..."
+          placeholderTextColor="#94a3b8"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
+
       <View style={styles.filters}>
         {FILTERS.map((f) => (
           <TouchableOpacity
@@ -168,22 +162,84 @@ export default function LogsScreen() {
         ))}
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, styles.statGood]}>
+          <Text style={styles.statValue}>{authorizedCount}</Text>
+          <Text style={styles.statLabel}>Authorized</Text>
+        </View>
+        <View style={[styles.statCard, styles.statWarn]}>
+          <Text style={[styles.statValue, { color: "#ea580c" }]}>{possibleCount}</Text>
+          <Text style={styles.statLabel}>Uncertain</Text>
+        </View>
+        <View style={[styles.statCard, styles.statDanger]}>
+          <Text style={[styles.statValue, { color: "#dc2626" }]}>{intruderCount}</Text>
+          <Text style={styles.statLabel}>Intruders</Text>
+        </View>
+      </View>
 
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+    </>
+  );
+
+  const renderEvent = ({ item }: { item: SecurityEvent }) => {
+    const badgeColor = getBadgeColor(item.event_type);
+
+    return (
+      <TouchableOpacity
+        style={[styles.eventRow, item.alarm_triggered && styles.eventRowAlert]}
+        onPress={() => navigation.navigate("EventDetails", { event: item })}
+      >
+        {thumbnails[item.id] ? (
+          <Image source={{ uri: thumbnails[item.id] }} style={styles.thumbnail} />
+        ) : (
+          <View style={[styles.thumbnailPlaceholder, { borderColor: `${badgeColor}55` }]}>
+            <Text style={[styles.thumbnailText, { color: badgeColor }]}>
+              {item.event_type === "authorized" ? "OK" : "!"}
+            </Text>
+          </View>
+        )}
+        <View style={styles.eventInfo}>
+          <Text style={styles.eventText}>
+            {item.matched_name ?? getBadgeLabel(item.event_type)}
+          </Text>
+          <Text style={styles.eventTime}>
+            {new Date(item.timestamp).toLocaleString()}
+            {item.alarm_triggered ? " | Alarm triggered" : ""}
+          </Text>
+          <View style={styles.badgeRow}>
+            <View style={[styles.badge, { backgroundColor: `${badgeColor}18`, borderColor: `${badgeColor}44` }]}>
+              <Text style={[styles.badgeText, { color: badgeColor }]}>
+                {getBadgeLabel(item.event_type)}
+              </Text>
+            </View>
+            {item.alarm_triggered ? (
+              <View style={styles.alarmBadge}>
+                <Text style={styles.alarmBadgeText}>Alarm</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
       <FlatList
-        data={events}
+        data={visibleEvents}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderEvent}
+        ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#22d3ee" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#2563eb" />}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
-          loading ? <ActivityIndicator color="#22d3ee" style={{ marginTop: 40 }} /> : <Text style={styles.emptyText}>No events found</Text>
+          loading ? <ActivityIndicator color="#2563eb" style={{ marginTop: 40 }} /> : <Text style={styles.emptyText}>No events found</Text>
         }
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator color="#22d3ee" style={{ padding: 16 }} />
+            <ActivityIndicator color="#2563eb" style={{ padding: 16 }} />
           ) : events.length < total ? (
             <TouchableOpacity style={styles.loadMore} onPress={handleLoadMore}>
               <Text style={styles.loadMoreText}>Load more</Text>
@@ -196,46 +252,122 @@ export default function LogsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
-  header: {
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  list: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 40 },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 20 },
+  headerCopy: { flex: 1 },
+  backButton: {
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  backText: { color: "#2563eb", fontSize: 14, fontWeight: "800" },
+  title: { color: "#0f172a", fontSize: 28, fontWeight: "800" },
+  subtitle: { color: "#64748b", fontSize: 13, marginTop: 2 },
+  searchBar: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
-  backText: { color: "#22d3ee", fontSize: 15 },
-  title: { color: "#e5e7eb", fontSize: 18, fontWeight: "700" },
-  filters: { flexDirection: "row", paddingHorizontal: 20, gap: 8, marginBottom: 12 },
-  filterTab: {
+    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 18,
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: "#1f2937",
+    paddingVertical: 12,
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
   },
-  filterTabActive: { backgroundColor: "#22d3ee" },
-  filterText: { color: "#9ca3af", fontSize: 12, fontWeight: "600" },
-  filterTextActive: { color: "#030712" },
-  error: { color: "#f87171", fontSize: 13, textAlign: "center", marginBottom: 8 },
-  list: { paddingHorizontal: 20 },
+  searchIcon: { color: "#94a3b8", fontSize: 11, fontWeight: "900" },
+  searchInput: { flex: 1, color: "#0f172a", fontSize: 15, paddingVertical: 0 },
+  filters: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 16,
+    padding: 6,
+  },
+  filterTab: {
+    flex: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 9,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  filterTabActive: { backgroundColor: "#2563eb" },
+  filterText: { color: "#475569", fontSize: 11, fontWeight: "800" },
+  filterTextActive: { color: "#f8fafc" },
+  statsRow: { flexDirection: "row", gap: 10, marginBottom: 18 },
+  statCard: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    elevation: 2,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+  },
+  statGood: { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
+  statWarn: { backgroundColor: "#fff7ed", borderColor: "#fed7aa" },
+  statDanger: { backgroundColor: "#fff1f2", borderColor: "#fecaca" },
+  statValue: { color: "#16a34a", fontSize: 22, fontWeight: "900" },
+  statLabel: { color: "#475569", fontSize: 11, marginTop: 3, fontWeight: "700" },
+  error: { color: "#dc2626", fontSize: 13, textAlign: "center", marginBottom: 12 },
   eventRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1f2937",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    gap: 12,
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 14,
+    marginBottom: 12,
+    gap: 14,
+    elevation: 3,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
   },
-  thumbnail: { width: 44, height: 44, borderRadius: 6, backgroundColor: "#374151" },
-  thumbnailPlaceholder: { width: 44, height: 44, borderRadius: 6, backgroundColor: "#374151" },
+  eventRowAlert: { backgroundColor: "#fff1f2", borderColor: "#fecaca" },
+  thumbnail: { width: 66, height: 66, borderRadius: 16, backgroundColor: "#cbd5e1" },
+  thumbnailPlaceholder: {
+    width: 66,
+    height: 66,
+    borderRadius: 16,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbnailText: { fontSize: 18, fontWeight: "900" },
   eventInfo: { flex: 1 },
-  eventText: { color: "#e5e7eb", fontSize: 14 },
-  eventTime: { color: "#6b7280", fontSize: 11, marginTop: 2 },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  badgeText: { fontSize: 11, fontWeight: "600" },
-  emptyText: { color: "#6b7280", textAlign: "center", marginTop: 40, fontSize: 14 },
+  eventText: { color: "#0f172a", fontSize: 15, fontWeight: "800", textTransform: "capitalize" },
+  eventTime: { color: "#64748b", fontSize: 11, marginTop: 3 },
+  badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 9 },
+  badge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, borderWidth: 1 },
+  badgeText: { fontSize: 11, fontWeight: "800", textTransform: "capitalize" },
+  alarmBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fee2e2",
+  },
+  alarmBadgeText: { color: "#dc2626", fontSize: 11, fontWeight: "800" },
+  emptyText: { color: "#64748b", textAlign: "center", marginTop: 40, fontSize: 14 },
   loadMore: { alignItems: "center", padding: 16 },
-  loadMoreText: { color: "#22d3ee", fontSize: 14 },
+  loadMoreText: { color: "#2563eb", fontSize: 14, fontWeight: "800" },
 });

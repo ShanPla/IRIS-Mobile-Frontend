@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const DEVICES_KEY = "iris_pi_devices";
-const ACTIVE_KEY = "iris_active_device_id";
+const DEVICES_KEY = "securewatch_devices_v1";
+const ACTIVE_KEY = "securewatch_active_device_id_v1";
 
 export interface PiDevice {
   deviceId: string;
@@ -9,6 +9,10 @@ export interface PiDevice {
   url: string;
   token: string;
   addedAt: string;
+  accessRole?: "primary" | "secondary";
+  location?: string;
+  deviceIp?: string;
+  primaryEmail?: string;
 }
 
 export interface DeviceInfo {
@@ -27,6 +31,14 @@ export interface PairResponse {
 const NGROK_HEADERS: HeadersInit = {
   "ngrok-skip-browser-warning": "true",
 };
+
+function authHeaders(token: string, extra?: HeadersInit): HeadersInit {
+  return {
+    ...NGROK_HEADERS,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(extra ?? {}),
+  };
+}
 
 export async function getDevices(): Promise<PiDevice[]> {
   const raw = await AsyncStorage.getItem(DEVICES_KEY);
@@ -51,41 +63,34 @@ export async function setActiveDevice(deviceId: string): Promise<void> {
 
 export async function addDevice(
   url: string,
-  deviceId: string,
-  username: string,
-  password: string,
+  deviceIp: string,
+  primaryEmail: string,
 ): Promise<PiDevice> {
   const normalizedUrl = url.trim().replace(/\/$/, "");
+  const trimmedIp = deviceIp.trim();
+  const fallbackId = `SW-${trimmedIp.replace(/[^a-zA-Z0-9]/g, "-")}`;
 
-  // Step 1: Verify device ID
-  const infoRes = await fetch(`${normalizedUrl}/api/device/info`, {
-    headers: NGROK_HEADERS,
-  });
-  if (!infoRes.ok) throw new Error("Cannot reach Pi at that URL");
-  const info = (await infoRes.json()) as DeviceInfo;
-  if (info.device_id !== deviceId) {
-    throw new Error(`Device ID mismatch: expected ${deviceId}, got ${info.device_id}`);
+  let info: DeviceInfo | null = null;
+  try {
+    const infoRes = await fetch(`${normalizedUrl}/api/device/info`, {
+      headers: NGROK_HEADERS,
+    });
+    if (infoRes.ok) {
+      info = (await infoRes.json()) as DeviceInfo;
+    }
+  } catch {
+    info = null;
   }
 
-  // Step 2: Pair (login or auto-register)
-  const pairRes = await fetch(`${normalizedUrl}/api/device/pair`, {
-    method: "POST",
-    headers: { ...NGROK_HEADERS, "Content-Type": "application/json" },
-    body: JSON.stringify({ device_id: deviceId, username, password }),
-  });
-  if (!pairRes.ok) {
-    const err = (await pairRes.json().catch(() => ({ detail: "Pairing failed" }))) as { detail: string };
-    throw new Error(err.detail);
-  }
-  const pair = (await pairRes.json()) as PairResponse;
-
-  // Step 3: Store device
   const device: PiDevice = {
-    deviceId: pair.device_id,
-    name: pair.device_name,
+    deviceId: info?.device_id ?? fallbackId,
+    name: info?.name ?? `Device ${trimmedIp}`,
     url: normalizedUrl,
-    token: pair.access_token,
+    token: "",
     addedAt: new Date().toISOString(),
+    accessRole: "primary",
+    deviceIp: trimmedIp,
+    primaryEmail: primaryEmail.trim(),
   };
 
   const devices = await getDevices();
@@ -119,10 +124,7 @@ export async function piGet<T>(path: string): Promise<T> {
   const device = await getActiveDevice();
   if (!device) throw new Error("No active Pi device");
   const res = await fetch(`${device.url}${path}`, {
-    headers: {
-      ...NGROK_HEADERS,
-      Authorization: `Bearer ${device.token}`,
-    },
+    headers: authHeaders(device.token),
   });
   if (!res.ok) {
     const err = await res.text();
@@ -134,13 +136,44 @@ export async function piGet<T>(path: string): Promise<T> {
 export async function piPost<T>(path: string, body?: unknown): Promise<T> {
   const device = await getActiveDevice();
   if (!device) throw new Error("No active Pi device");
-  const res = await fetch(`${device.url}${path}`, {
+  return piPostToDevice(device, path, body);
+}
+
+async function updateDeviceToken(deviceId: string, token: string): Promise<void> {
+  const devices = await getDevices();
+  const idx = devices.findIndex((d) => d.deviceId === deviceId);
+  if (idx >= 0) {
+    devices[idx] = { ...devices[idx], token };
+    await AsyncStorage.setItem(DEVICES_KEY, JSON.stringify(devices));
+  }
+}
+
+export async function ensureDeviceAuth(username: string, password: string): Promise<void> {
+  const device = await getActiveDevice();
+  if (!device) throw new Error("No active Pi device");
+  if (device.token) return;
+
+  const res = await fetch(`${device.url}/api/auth/login`, {
     method: "POST",
     headers: {
       ...NGROK_HEADERS,
-      Authorization: `Bearer ${device.token}`,
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      "Content-Type": "application/x-www-form-urlencoded",
     },
+    body: new URLSearchParams({ username, password }).toString(),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Device login failed (${res.status}): ${err}`);
+  }
+  const data = (await res.json()) as { access_token: string };
+  await updateDeviceToken(device.deviceId, data.access_token);
+}
+
+export async function piPostToDevice<T>(device: PiDevice, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${device.url}${path}`, {
+    method: "POST",
+    headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -155,10 +188,7 @@ export async function piPostForm<T>(path: string, formData: FormData): Promise<T
   if (!device) throw new Error("No active Pi device");
   const res = await fetch(`${device.url}${path}`, {
     method: "POST",
-    headers: {
-      ...NGROK_HEADERS,
-      Authorization: `Bearer ${device.token}`,
-    },
+    headers: authHeaders(device.token),
     body: formData,
   });
   if (!res.ok) {
@@ -173,11 +203,7 @@ export async function piPut<T>(path: string, body?: unknown): Promise<T> {
   if (!device) throw new Error("No active Pi device");
   const res = await fetch(`${device.url}${path}`, {
     method: "PUT",
-    headers: {
-      ...NGROK_HEADERS,
-      Authorization: `Bearer ${device.token}`,
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-    },
+    headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -192,10 +218,7 @@ export async function piDelete<T>(path: string): Promise<T | null> {
   if (!device) throw new Error("No active Pi device");
   const res = await fetch(`${device.url}${path}`, {
     method: "DELETE",
-    headers: {
-      ...NGROK_HEADERS,
-      Authorization: `Bearer ${device.token}`,
-    },
+    headers: authHeaders(device.token),
   });
   if (!res.ok) {
     const err = await res.text();
@@ -209,7 +232,7 @@ export async function buildPiUrl(path: string): Promise<string> {
   const device = await getActiveDevice();
   if (!device) throw new Error("No active Pi device");
   const sep = path.includes("?") ? "&" : "?";
-  return `${device.url}${path}${sep}token=${device.token}`;
+  return device.token ? `${device.url}${path}${sep}token=${device.token}` : `${device.url}${path}`;
 }
 
 export async function hasDevices(): Promise<boolean> {

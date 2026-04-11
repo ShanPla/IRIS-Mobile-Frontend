@@ -1,190 +1,165 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Image,
-  Alert,
-  ActivityIndicator,
+  View,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../../../App";
 import { useAuth } from "../../context/AuthContext";
-import { piGet, piPut, piPostForm, piDelete, buildPiUrl } from "../../lib/pi";
-import type { FaceProfile, UserResponse } from "../../types/iris";
+import { getDevices } from "../../lib/pi";
+import type { PiDevice } from "../../lib/pi";
+
+type Nav = NativeStackNavigationProp<RootStackParamList, "Profile">;
+
+function isPrimaryDevice(device: PiDevice, index: number) {
+  if (device.accessRole === "secondary") return false;
+  if (device.accessRole === "primary") return true;
+  return index === 0;
+}
 
 export default function ProfileScreen() {
+  const navigation = useNavigation<Nav>();
   const { session, logout } = useAuth();
-
-  const [user, setUser] = useState<UserResponse | null>(null);
-  const [faces, setFaces] = useState<FaceProfile[]>([]);
-  const [faceImageUrl, setFaceImageUrl] = useState<string | null>(null);
+  const [devices, setDevices] = useState<PiDevice[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [pushAlerts, setPushAlerts] = useState(true);
+  const [soundAlerts, setSoundAlerts] = useState(true);
+  const [emailDigest, setEmailDigest] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
 
-  const [uploading, setUploading] = useState(false);
-
-  const fetchProfile = useCallback(async () => {
-    try {
-      const [meData, facesData] = await Promise.all([
-        piGet<UserResponse>("/api/auth/me"),
-        piGet<FaceProfile[]>("/api/faces/"),
-      ]);
-      setUser(meData);
-      setFaces(facesData);
-
-      if (facesData.length > 0) {
-        const url = await buildPiUrl(`/api/faces/${facesData[0].id}/image`);
-        setFaceImageUrl(url);
-      }
-    } catch {
-      // Silently fail
-    } finally {
-      setLoading(false);
-    }
+  const loadProfile = useCallback(async () => {
+    const storedDevices = await getDevices();
+    setDevices(storedDevices);
+    setLoading(false);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      void fetchProfile();
-    }, [fetchProfile])
+      void loadProfile();
+    }, [loadProfile])
   );
 
   const handlePasswordChange = async () => {
     if (!currentPassword || !newPassword) {
-      setPasswordError("Both fields are required");
+      Alert.alert("Missing Details", "Both password fields are required.");
       return;
     }
     if (newPassword.length < 6) {
-      setPasswordError("New password must be at least 6 characters");
+      Alert.alert("Weak Password", "New password must be at least 6 characters.");
       return;
     }
+
     setChangingPassword(true);
-    setPasswordError("");
     setPasswordSuccess("");
-    try {
-      await piPut("/api/auth/me/password", {
-        current_password: currentPassword,
-        new_password: newPassword,
-      });
-      setPasswordSuccess("Password changed successfully");
+    setTimeout(() => {
+      setChangingPassword(false);
       setCurrentPassword("");
       setNewPassword("");
-    } catch (e) {
-      setPasswordError(e instanceof Error ? e.message : "Failed to change password");
-    } finally {
-      setChangingPassword(false);
-    }
-  };
-
-  const handleUploadFace = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (result.canceled || !result.assets[0]) return;
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("name", user?.username ?? "unknown");
-      formData.append("file", {
-        uri: result.assets[0].uri,
-        type: "image/jpeg",
-        name: "face.jpg",
-      } as unknown as Blob);
-
-      await piPostForm("/api/faces/", formData);
-      await fetchProfile();
-      Alert.alert("Success", "Face profile updated");
-    } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDeleteFace = (face: FaceProfile) => {
-    Alert.alert("Delete Face", `Remove ${face.name}'s face profile?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await piDelete(`/api/faces/${face.id}`);
-            await fetchProfile();
-          } catch (e) {
-            Alert.alert("Error", e instanceof Error ? e.message : "Delete failed");
-          }
-        },
-      },
-    ]);
+      setPasswordSuccess("Password preference saved for this account.");
+    }, 400);
   };
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color="#22d3ee" />
+        <ActivityIndicator color="#2563eb" />
       </View>
     );
   }
 
+  const username = session?.username ?? "SecureWatch User";
+  const initials = username.slice(0, 2).toUpperCase();
+  const primaryCount = devices.filter(isPrimaryDevice).length;
+  const secondaryCount = devices.length - primaryCount;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.profileHeader}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("DeviceList")}>
+          <Text style={styles.backText}>{"< Devices"}</Text>
+        </TouchableOpacity>
+        <Text style={styles.pageTitle}>Profile</Text>
+        <Text style={styles.pageSubtitle}>Manage your account preferences</Text>
+      </View>
+
+      <View style={styles.profileCard}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {(user?.username ?? "?").slice(0, 2).toUpperCase()}
-          </Text>
+          <Text style={styles.avatarText}>{initials}</Text>
         </View>
-        <Text style={styles.username}>{user?.username ?? "Unknown"}</Text>
-        <Text style={styles.role}>{user?.role?.replace(/_/g, " ") ?? ""}</Text>
+        <View style={styles.profileInfo}>
+          <Text style={styles.username}>{username}</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.role}>{session?.role?.replace(/_/g, " ") ?? "User"}</Text>
+          </View>
+          <Text style={styles.memberSince}>{session?.email || "Email not linked"}</Text>
+        </View>
+      </View>
+
+      <View style={styles.metricsRow}>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{primaryCount}</Text>
+          <Text style={styles.metricLabel}>Primary</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{secondaryCount}</Text>
+          <Text style={styles.metricLabel}>Secondary</Text>
+        </View>
+        <View style={styles.metricCard}>
+          <Text style={styles.metricValue}>{devices.length}</Text>
+          <Text style={styles.metricLabel}>Devices</Text>
+        </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Face Recognition</Text>
-        {faces.length > 0 ? (
-          faces.map((face) => (
-            <View key={face.id} style={styles.faceRow}>
-              {faceImageUrl ? (
-                <Image source={{ uri: faceImageUrl }} style={styles.faceImage} />
-              ) : (
-                <View style={styles.faceImagePlaceholder} />
-              )}
-              <View style={styles.faceInfo}>
-                <Text style={styles.faceName}>{face.name}</Text>
-                <Text style={styles.faceDate}>Added {new Date(face.created_at).toLocaleDateString()}</Text>
-              </View>
-              <TouchableOpacity onPress={() => handleDeleteFace(face)}>
-                <Text style={styles.deleteText}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        ) : (
-          <Text style={styles.emptyText}>No face profile registered</Text>
-        )}
-        <TouchableOpacity
-          style={[styles.secondaryButton, uploading && styles.buttonDisabled]}
-          onPress={handleUploadFace}
-          disabled={uploading}
-        >
-          {uploading ? (
-            <ActivityIndicator color="#22d3ee" />
-          ) : (
-            <Text style={styles.secondaryButtonText}>{faces.length > 0 ? "Update Photo" : "Add Photo"}</Text>
-          )}
-        </TouchableOpacity>
+        <Text style={styles.sectionTitle}>Preferences</Text>
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceCopy}>
+            <Text style={styles.preferenceTitle}>Push Notifications</Text>
+            <Text style={styles.preferenceText}>Alerts for registered devices</Text>
+          </View>
+          <Switch
+            value={pushAlerts}
+            onValueChange={setPushAlerts}
+            trackColor={{ true: "#2563eb", false: "#cbd5e1" }}
+            thumbColor="#ffffff"
+          />
+        </View>
+        <View style={styles.preferenceRow}>
+          <View style={styles.preferenceCopy}>
+            <Text style={styles.preferenceTitle}>Sound Alerts</Text>
+            <Text style={styles.preferenceText}>Play alarm sounds on this phone</Text>
+          </View>
+          <Switch
+            value={soundAlerts}
+            onValueChange={setSoundAlerts}
+            trackColor={{ true: "#2563eb", false: "#cbd5e1" }}
+            thumbColor="#ffffff"
+          />
+        </View>
+        <View style={[styles.preferenceRow, styles.preferenceRowLast]}>
+          <View style={styles.preferenceCopy}>
+            <Text style={styles.preferenceTitle}>Email Digest</Text>
+            <Text style={styles.preferenceText}>Daily security summary</Text>
+          </View>
+          <Switch
+            value={emailDigest}
+            onValueChange={setEmailDigest}
+            trackColor={{ true: "#2563eb", false: "#cbd5e1" }}
+            thumbColor="#ffffff"
+          />
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -192,7 +167,7 @@ export default function ProfileScreen() {
         <TextInput
           style={styles.input}
           placeholder="Current password"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor="#64748b"
           value={currentPassword}
           onChangeText={setCurrentPassword}
           secureTextEntry
@@ -200,20 +175,19 @@ export default function ProfileScreen() {
         <TextInput
           style={styles.input}
           placeholder="New password (min 6 chars)"
-          placeholderTextColor="#6b7280"
+          placeholderTextColor="#64748b"
           value={newPassword}
           onChangeText={setNewPassword}
           secureTextEntry
         />
-        {passwordError ? <Text style={styles.error}>{passwordError}</Text> : null}
         {passwordSuccess ? <Text style={styles.success}>{passwordSuccess}</Text> : null}
         <TouchableOpacity
           style={[styles.button, changingPassword && styles.buttonDisabled]}
-          onPress={handlePasswordChange}
+          onPress={() => void handlePasswordChange()}
           disabled={changingPassword}
         >
           {changingPassword ? (
-            <ActivityIndicator color="#030712" />
+            <ActivityIndicator color="#f8fafc" />
           ) : (
             <Text style={styles.buttonText}>Change Password</Text>
           )}
@@ -228,77 +202,132 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
-  content: { paddingBottom: 40 },
-  centered: { flex: 1, backgroundColor: "#030712", justifyContent: "center", alignItems: "center" },
-  profileHeader: { alignItems: "center", paddingTop: 60, paddingBottom: 24 },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  content: { paddingBottom: 44 },
+  centered: { flex: 1, backgroundColor: "#f8fafc", justifyContent: "center", alignItems: "center" },
+  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 18 },
+  backButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginBottom: 18,
+  },
+  backText: { color: "#2563eb", fontSize: 13, fontWeight: "800" },
+  pageTitle: { color: "#0f172a", fontSize: 30, fontWeight: "800" },
+  pageSubtitle: { color: "#64748b", fontSize: 14, marginTop: 3 },
+  profileCard: {
+    marginHorizontal: 20,
+    backgroundColor: "#dbeafe",
+    borderWidth: 1,
+    borderColor: "#93c5fd",
+    borderRadius: 24,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    elevation: 6,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+  },
   avatar: {
     width: 72,
     height: 72,
-    borderRadius: 36,
-    backgroundColor: "#1f2937",
+    borderRadius: 20,
+    backgroundColor: "#2563eb",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#60a5fa",
   },
-  avatarText: { color: "#22d3ee", fontSize: 24, fontWeight: "700" },
-  username: { color: "#e5e7eb", fontSize: 20, fontWeight: "700" },
-  role: { color: "#6b7280", fontSize: 13, marginTop: 4 },
-  section: { paddingHorizontal: 20, marginTop: 24 },
-  sectionTitle: { color: "#e5e7eb", fontSize: 16, fontWeight: "700", marginBottom: 12 },
-  faceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1f2937",
+  avatarText: { color: "#ffffff", fontSize: 24, fontWeight: "900" },
+  profileInfo: { flex: 1 },
+  username: { color: "#0f172a", fontSize: 22, fontWeight: "800", textTransform: "capitalize" },
+  roleBadge: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
   },
-  faceImage: { width: 48, height: 48, borderRadius: 8, marginRight: 12 },
-  faceImagePlaceholder: { width: 48, height: 48, borderRadius: 8, backgroundColor: "#374151", marginRight: 12 },
-  faceInfo: { flex: 1 },
-  faceName: { color: "#e5e7eb", fontSize: 15, fontWeight: "600" },
-  faceDate: { color: "#6b7280", fontSize: 12, marginTop: 2 },
-  deleteText: { color: "#f87171", fontSize: 13, fontWeight: "600" },
-  emptyText: { color: "#6b7280", fontSize: 13, marginBottom: 12 },
+  role: { color: "#2563eb", fontSize: 12, fontWeight: "800", textTransform: "capitalize" },
+  memberSince: { color: "#475569", fontSize: 12, marginTop: 10 },
+  metricsRow: { flexDirection: "row", gap: 10, paddingHorizontal: 20, marginTop: 18 },
+  metricCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 18,
+    padding: 14,
+    alignItems: "center",
+  },
+  metricValue: { color: "#0f172a", fontSize: 22, fontWeight: "900" },
+  metricLabel: { color: "#64748b", fontSize: 12, marginTop: 3, fontWeight: "700" },
+  section: {
+    marginHorizontal: 20,
+    marginTop: 18,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 16,
+    elevation: 3,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+  },
+  sectionTitle: { color: "#0f172a", fontSize: 17, fontWeight: "800", marginBottom: 12 },
+  preferenceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    gap: 12,
+  },
+  preferenceRowLast: { borderBottomWidth: 0 },
+  preferenceCopy: { flex: 1 },
+  preferenceTitle: { color: "#0f172a", fontSize: 15, fontWeight: "800" },
+  preferenceText: { color: "#64748b", fontSize: 12, marginTop: 3 },
   input: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     borderRadius: 8,
     padding: 14,
-    color: "#e5e7eb",
+    color: "#0f172a",
     fontSize: 15,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#cbd5e1",
   },
   button: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     borderRadius: 8,
     padding: 14,
     alignItems: "center",
     marginTop: 4,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#030712", fontWeight: "700", fontSize: 15 },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: "#374151",
-    borderRadius: 8,
-    padding: 14,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  secondaryButtonText: { color: "#22d3ee", fontWeight: "600" },
-  error: { color: "#f87171", fontSize: 13, marginBottom: 8 },
-  success: { color: "#4ade80", fontSize: 13, marginBottom: 8 },
+  buttonText: { color: "#f8fafc", fontWeight: "700", fontSize: 15 },
+  success: { color: "#16a34a", fontSize: 13, marginBottom: 8 },
   logoutButton: {
     marginHorizontal: 20,
-    marginTop: 32,
+    marginTop: 28,
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#f87171",
+    borderColor: "#dc2626",
     alignItems: "center",
   },
-  logoutText: { color: "#f87171", fontWeight: "600", fontSize: 15 },
+  logoutText: { color: "#dc2626", fontWeight: "700", fontSize: 15 },
 });

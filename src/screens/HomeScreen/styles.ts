@@ -3,7 +3,7 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#f8fafc",
   },
   scrollContent: {
     padding: 20,
@@ -19,21 +19,21 @@ export const styles = StyleSheet.create({
   logo: {
     fontSize: 22,
     fontWeight: "800",
-    color: "#22d3ee",
+    color: "#2563eb",
     letterSpacing: 4,
   },
   logout: {
-    color: "#6b7280",
+    color: "#64748b",
     fontSize: 14,
   },
 
   // System Status Card
   statusCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     marginBottom: 16,
   },
   statusCardHeader: {
@@ -45,24 +45,24 @@ export const styles = StyleSheet.create({
   statusCardTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
   modePill: {
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#cbd5e1",
   },
   modePillText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#22d3ee",
+    color: "#2563eb",
   },
   warningRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 14,
     gap: 12,
@@ -71,7 +71,7 @@ export const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#374151",
+    backgroundColor: "#cbd5e1",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -81,18 +81,18 @@ export const styles = StyleSheet.create({
   warningCount: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#fbbf24",
+    color: "#ca8a04",
   },
   warningCountSafe: {
-    color: "#4ade80",
+    color: "#16a34a",
   },
   warningTimes: {
     fontSize: 12,
-    color: "#6b7280",
+    color: "#64748b",
     marginTop: 2,
   },
   viewBtn: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -116,11 +116,11 @@ export const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
   addNew: {
     fontSize: 13,
-    color: "#22d3ee",
+    color: "#2563eb",
   },
   alarmGrid: {
     flexDirection: "row",
@@ -129,16 +129,16 @@ export const styles = StyleSheet.create({
   },
   alarmCard: {
     width: "47%",
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     alignItems: "flex-start",
   },
   alarmCardActive: {
-    backgroundColor: "#1e3a5f",
-    borderColor: "#22d3ee",
+    backgroundColor: "#dbeafe",
+    borderColor: "#2563eb",
   },
   alarmCardTop: {
     flexDirection: "row",
@@ -153,7 +153,7 @@ export const styles = StyleSheet.create({
   alarmLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
 
   // Mode Toggle
@@ -162,11 +162,11 @@ export const styles = StyleSheet.create({
   },
   modeToggleRow: {
     flexDirection: "row",
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 4,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     marginTop: 8,
   },
   modeToggleBtn: {
@@ -176,19 +176,19 @@ export const styles = StyleSheet.create({
     borderRadius: 10,
   },
   modeToggleBtnActive: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
   },
   modeToggleText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6b7280",
+    color: "#64748b",
   },
   modeToggleTextActive: {
     color: "#000",
   },
   modeDesc: {
     fontSize: 12,
-    color: "#6b7280",
+    color: "#64748b",
     marginTop: 8,
     lineHeight: 18,
   },
@@ -202,8 +202,8 @@ export const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#1f2937",
-    backgroundColor: "#111827",
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
   },
   snapImage: {
     width: "100%",
@@ -212,7 +212,7 @@ export const styles = StyleSheet.create({
   snapPlaceholder: {
     width: "100%",
     height: 180,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -222,7 +222,7 @@ export const styles = StyleSheet.create({
     right: 12,
   },
   snapViewBtn: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -234,12 +234,12 @@ export const styles = StyleSheet.create({
   },
   snapTime: {
     fontSize: 12,
-    color: "#6b7280",
+    color: "#64748b",
     padding: 10,
   },
 
   error: {
-    color: "#f87171",
+    color: "#dc2626",
     fontSize: 13,
     marginBottom: 12,
   },

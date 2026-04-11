@@ -3,15 +3,15 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#f8fafc",
   },
   header: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     paddingTop: 56,
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e2e8f0",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -19,10 +19,10 @@ export const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
   addBtn: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
@@ -36,10 +36,10 @@ export const styles = StyleSheet.create({
     padding: 20,
   },
   userList: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     marginBottom: 20,
     overflow: "hidden",
   },
@@ -48,11 +48,11 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e2e8f0",
     gap: 12,
   },
   userRowSelected: {
-    backgroundColor: "#1e3a5f",
+    backgroundColor: "#dbeafe",
   },
   userRowLast: {
     borderBottomWidth: 0,
@@ -61,19 +61,19 @@ export const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "#374151",
+    backgroundColor: "#cbd5e1",
     alignItems: "center",
     justifyContent: "center",
   },
   userAvatarText: {
-    color: "#9ca3af",
+    color: "#475569",
     fontSize: 18,
   },
   userName: {
     flex: 1,
     fontSize: 15,
     fontWeight: "500",
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
   statusDot: {
     width: 10,
@@ -81,16 +81,16 @@ export const styles = StyleSheet.create({
     borderRadius: 5,
   },
   selectedSection: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     gap: 16,
   },
   selectedLabel: {
     fontSize: 13,
-    color: "#6b7280",
+    color: "#64748b",
     marginBottom: 4,
   },
   selectedUser: {
@@ -101,7 +101,7 @@ export const styles = StyleSheet.create({
   selectedUserName: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#e5e7eb",
+    color: "#0f172a",
     flex: 1,
   },
   permissionRow: {
@@ -114,20 +114,20 @@ export const styles = StyleSheet.create({
     height: 20,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: "#374151",
+    borderColor: "#cbd5e1",
     alignItems: "center",
     justifyContent: "center",
   },
   checkboxChecked: {
-    backgroundColor: "#22d3ee",
-    borderColor: "#22d3ee",
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
   },
   permissionLabel: {
     fontSize: 14,
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
   saveBtn: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     borderRadius: 10,
     padding: 14,
     alignItems: "center",
@@ -150,17 +150,17 @@ export const styles = StyleSheet.create({
     gap: 6,
   },
   legendText: {
-    color: "#6b7280",
+    color: "#64748b",
     fontSize: 12,
   },
   empty: {
-    color: "#6b7280",
+    color: "#64748b",
     textAlign: "center",
     marginTop: 40,
     fontSize: 14,
   },
   error: {
-    color: "#f87171",
+    color: "#dc2626",
     fontSize: 13,
     marginBottom: 12,
   },

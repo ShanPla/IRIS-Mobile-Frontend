@@ -132,7 +132,7 @@ export default function FacialRegistrationScreen() {
           setPhoneStep(next);
           // The effect re-runs due to phoneStep changing
         } else {
-          // All done — upload
+          // All done; upload.
           setPhoneCameraActive(false);
           void uploadPhonePhotos(updated);
         }
@@ -317,7 +317,7 @@ export default function FacialRegistrationScreen() {
         {/* "Get ready" before countdown starts */}
         {!cameraReady && (
           <View style={styles.countdownOverlay}>
-            <ActivityIndicator size="large" color="#22d3ee" />
+            <ActivityIndicator size="large" color="#2563eb" />
             <Text style={styles.getReadyText}>Starting camera...</Text>
           </View>
         )}
@@ -339,7 +339,7 @@ export default function FacialRegistrationScreen() {
   if (phoneUploading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#22d3ee" />
+        <ActivityIndicator size="large" color="#2563eb" />
         <Text style={styles.uploadingText}>Uploading {capturedRef.current.length} photos to Pi...</Text>
         <Text style={styles.uploadingSubText}>Registering face profile for {name}</Text>
       </View>
@@ -393,7 +393,7 @@ export default function FacialRegistrationScreen() {
           <TextInput
             style={styles.input}
             placeholder="e.g. Steephen"
-            placeholderTextColor="#6b7280"
+            placeholderTextColor="#64748b"
             value={name}
             onChangeText={setName}
           />
@@ -421,7 +421,7 @@ export default function FacialRegistrationScreen() {
               <View style={styles.captureArea}>
                 <Text style={styles.captureTitle}>Automatic Face Enrollment</Text>
                 <Text style={styles.captureInstruction}>
-                  {"The camera will automatically capture 5 angles of your face.\nJust follow the on-screen prompts — no button presses needed."}
+                  {"The camera will automatically capture 5 angles of your face.\nJust follow the on-screen prompts; no button presses needed."}
                 </Text>
               </View>
               <TouchableOpacity style={styles.button} onPress={startPhoneEnroll}>
@@ -441,7 +441,7 @@ export default function FacialRegistrationScreen() {
                 onPress={handleUpload}
                 disabled={uploading}
               >
-                {uploading ? <ActivityIndicator color="#030712" /> : <Text style={styles.buttonText}>Upload & Register</Text>}
+                {uploading ? <ActivityIndicator color="#f8fafc" /> : <Text style={styles.buttonText}>Upload & Register</Text>}
               </TouchableOpacity>
             </>
           )}
@@ -456,9 +456,9 @@ function sleep(ms: number) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
   content: { paddingBottom: 40 },
-  centered: { flex: 1, backgroundColor: "#030712", justifyContent: "center", alignItems: "center", padding: 20 },
+  centered: { flex: 1, backgroundColor: "#f8fafc", justifyContent: "center", alignItems: "center", padding: 20 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -467,33 +467,35 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
   },
-  backText: { color: "#22d3ee", fontSize: 15 },
-  title: { color: "#e5e7eb", fontSize: 18, fontWeight: "700" },
-  label: { color: "#9ca3af", fontSize: 13, marginBottom: 6, paddingHorizontal: 20, marginTop: 16 },
+  backText: { color: "#2563eb", fontSize: 15 },
+  title: { color: "#0f172a", fontSize: 18, fontWeight: "700" },
+  label: { color: "#475569", fontSize: 13, marginBottom: 6, paddingHorizontal: 20, marginTop: 16 },
   input: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     borderRadius: 8,
     padding: 14,
-    color: "#e5e7eb",
+    color: "#0f172a",
     fontSize: 15,
     marginHorizontal: 20,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#cbd5e1",
   },
   modeRow: { flexDirection: "row", paddingHorizontal: 20, gap: 6, marginTop: 20, marginBottom: 16 },
   modeTab: {
     flex: 1,
     padding: 10,
     borderRadius: 8,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     alignItems: "center",
   },
-  modeTabActive: { backgroundColor: "#22d3ee" },
-  modeText: { color: "#9ca3af", fontSize: 11, fontWeight: "600" },
-  modeTextActive: { color: "#030712" },
-  error: { color: "#f87171", fontSize: 13, textAlign: "center", marginVertical: 8, paddingHorizontal: 20 },
-  success: { color: "#4ade80", fontSize: 13, textAlign: "center", marginVertical: 8, paddingHorizontal: 20 },
-  permissionText: { color: "#e5e7eb", fontSize: 15, textAlign: "center", marginBottom: 20, lineHeight: 22 },
+  modeTabActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  modeText: { color: "#475569", fontSize: 11, fontWeight: "600" },
+  modeTextActive: { color: "#f8fafc" },
+  error: { color: "#dc2626", fontSize: 13, textAlign: "center", marginVertical: 8, paddingHorizontal: 20 },
+  success: { color: "#16a34a", fontSize: 13, textAlign: "center", marginVertical: 8, paddingHorizontal: 20 },
+  permissionText: { color: "#0f172a", fontSize: 15, textAlign: "center", marginBottom: 20, lineHeight: 22 },
   previewImage: {
     width: "100%",
     height: 250,
@@ -505,13 +507,14 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     marginBottom: 8,
   },
-  secondaryButtonText: { color: "#22d3ee", fontWeight: "600" },
+  secondaryButtonText: { color: "#2563eb", fontWeight: "600" },
   button: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     borderRadius: 8,
     padding: 16,
     alignItems: "center",
@@ -519,24 +522,39 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#030712", fontWeight: "700", fontSize: 16 },
+  buttonText: { color: "#f8fafc", fontWeight: "700", fontSize: 16 },
   captureArea: {
     minHeight: 140,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     marginHorizontal: 20,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
     marginVertical: 12,
     padding: 20,
+    elevation: 2,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
   },
-  captureTitle: { color: "#22d3ee", fontSize: 16, fontWeight: "700", marginBottom: 8 },
-  captureInstruction: { color: "#9ca3af", fontSize: 14, textAlign: "center", lineHeight: 22 },
+  captureTitle: { color: "#2563eb", fontSize: 16, fontWeight: "700", marginBottom: 8 },
+  captureInstruction: { color: "#475569", fontSize: 14, textAlign: "center", lineHeight: 22 },
 
   // ── Completion screen ──────────────────────────────────────────────
-  completionContainer: { paddingHorizontal: 20, paddingTop: 8 },
-  completionTitle: { color: "#4ade80", fontSize: 22, fontWeight: "800", textAlign: "center", marginBottom: 4 },
-  completionSubtitle: { color: "#e5e7eb", fontSize: 15, fontWeight: "600", marginTop: 16, marginBottom: 12 },
+  completionContainer: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    padding: 18,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  completionTitle: { color: "#16a34a", fontSize: 22, fontWeight: "800", textAlign: "center", marginBottom: 4 },
+  completionSubtitle: { color: "#0f172a", fontSize: 15, fontWeight: "600", marginTop: 16, marginBottom: 12 },
   completionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -550,11 +568,11 @@ const styles = StyleSheet.create({
     height: (SCREEN_WIDTH - 80) / 3,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: "#4ade80",
+    borderColor: "#16a34a",
   },
-  completionAngle: { color: "#9ca3af", fontSize: 11, marginTop: 4, textTransform: "capitalize" },
+  completionAngle: { color: "#475569", fontSize: 11, marginTop: 4, textTransform: "capitalize" },
   completionHint: {
-    color: "#6b7280",
+    color: "#64748b",
     fontSize: 12,
     textAlign: "center",
     lineHeight: 18,
@@ -590,11 +608,11 @@ const styles = StyleSheet.create({
     height: OVAL_H,
     borderRadius: OVAL_W / 2,
     borderWidth: 3,
-    borderColor: "#22d3ee",
+    borderColor: "#2563eb",
     borderStyle: "dashed",
   },
   ovalBorderReady: {
-    borderColor: "#4ade80",
+    borderColor: "#16a34a",
     borderStyle: "solid",
   },
   overlayBottom: { flex: 1, width: "100%", backgroundColor: "rgba(0,0,0,0.55)" },
@@ -609,8 +627,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
   },
-  cancelText: { color: "#f87171", fontSize: 16, fontWeight: "600" },
-  cameraStepText: { color: "#e5e7eb", fontSize: 14, fontWeight: "600" },
+  cancelText: { color: "#dc2626", fontSize: 16, fontWeight: "600" },
+  cameraStepText: { color: "#f8fafc", fontSize: 14, fontWeight: "600" },
 
   cameraProgressRow: {
     position: "absolute",
@@ -625,10 +643,10 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#374151",
+    backgroundColor: "#cbd5e1",
   },
-  cameraDotDone: { backgroundColor: "#4ade80" },
-  cameraDotActive: { backgroundColor: "#22d3ee" },
+  cameraDotDone: { backgroundColor: "#16a34a" },
+  cameraDotActive: { backgroundColor: "#2563eb" },
 
   countdownOverlay: {
     position: "absolute",
@@ -645,7 +663,7 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
   },
   getReadyText: {
-    color: "#9ca3af",
+    color: "#f8fafc",
     fontSize: 14,
     marginTop: 12,
   },
@@ -658,10 +676,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
   },
-  cameraAngleLabel: { color: "#22d3ee", fontSize: 22, fontWeight: "800", marginBottom: 4 },
-  cameraInstruction: { color: "#d1d5db", fontSize: 15, textAlign: "center", marginBottom: 8 },
-  autoHint: { color: "#6b7280", fontSize: 12, textAlign: "center" },
+  cameraAngleLabel: { color: "#60a5fa", fontSize: 22, fontWeight: "800", marginBottom: 4 },
+  cameraInstruction: { color: "#f8fafc", fontSize: 15, textAlign: "center", marginBottom: 8 },
+  autoHint: { color: "#cbd5e1", fontSize: 12, textAlign: "center" },
 
-  uploadingText: { color: "#e5e7eb", fontSize: 16, marginTop: 20, fontWeight: "600" },
-  uploadingSubText: { color: "#6b7280", fontSize: 13, marginTop: 4 },
+  uploadingText: { color: "#0f172a", fontSize: 16, marginTop: 20, fontWeight: "600" },
+  uploadingSubText: { color: "#64748b", fontSize: 13, marginTop: 4 },
 });

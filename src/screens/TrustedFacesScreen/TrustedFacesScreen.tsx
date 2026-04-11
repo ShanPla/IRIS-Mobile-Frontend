@@ -85,7 +85,7 @@ export default function TrustedFacesScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color="#22d3ee" />
+        <ActivityIndicator color="#2563eb" />
       </View>
     );
   }
@@ -93,13 +93,26 @@ export default function TrustedFacesScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Trusted Users</Text>
+        <View>
+          <Text style={styles.title}>Trusted Users</Text>
+          <Text style={styles.subtitle}>Users paired with your devices</Text>
+        </View>
         <TouchableOpacity onPress={() => navigation.navigate("FacialRegistration")}>
-          <Text style={styles.addText}>+ Add</Text>
+          <Text style={styles.addText}>+</Text>
         </TouchableOpacity>
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryIcon}>
+          <Text style={styles.summaryIconText}>US</Text>
+        </View>
+        <View>
+          <Text style={styles.summaryValue}>{users.length}</Text>
+          <Text style={styles.summaryLabel}>Total Users</Text>
+        </View>
+      </View>
 
       {users.length === 0 ? (
         <Text style={styles.emptyText}>No invited users. Invite homeowners from the admin panel.</Text>
@@ -134,8 +147,8 @@ export default function TrustedFacesScreen() {
                   <Switch
                     value={selected.permissions![key]}
                     onValueChange={() => togglePermission(key)}
-                    trackColor={{ true: "#22d3ee", false: "#374151" }}
-                    thumbColor="#e5e7eb"
+                    trackColor={{ true: "#2563eb", false: "#cbd5e1" }}
+                    thumbColor="#0f172a"
                   />
                 </View>
               ))}
@@ -144,7 +157,7 @@ export default function TrustedFacesScreen() {
                 onPress={savePermissions}
                 disabled={saving}
               >
-                {saving ? <ActivityIndicator color="#030712" /> : <Text style={styles.saveText}>Save</Text>}
+                {saving ? <ActivityIndicator color="#f8fafc" /> : <Text style={styles.saveText}>Save</Text>}
               </TouchableOpacity>
             </View>
           ) : (
@@ -159,8 +172,8 @@ export default function TrustedFacesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
-  centered: { flex: 1, backgroundColor: "#030712", justifyContent: "center", alignItems: "center" },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  centered: { flex: 1, backgroundColor: "#f8fafc", justifyContent: "center", alignItems: "center" },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -169,57 +182,113 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
   },
-  title: { color: "#e5e7eb", fontSize: 20, fontWeight: "700" },
-  addText: { color: "#22d3ee", fontSize: 15, fontWeight: "600" },
-  error: { color: "#f87171", fontSize: 13, textAlign: "center", marginBottom: 8 },
-  emptyText: { color: "#6b7280", textAlign: "center", paddingTop: 40, paddingHorizontal: 20, fontSize: 14 },
-  splitView: { flex: 1 },
+  title: { color: "#0f172a", fontSize: 30, fontWeight: "800" },
+  subtitle: { color: "#64748b", fontSize: 14, marginTop: 3 },
+  addText: {
+    color: "#ffffff",
+    fontSize: 28,
+    fontWeight: "600",
+    backgroundColor: "#2563eb",
+    width: 52,
+    height: 52,
+    lineHeight: 48,
+    textAlign: "center",
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  error: { color: "#dc2626", fontSize: 13, textAlign: "center", marginBottom: 8 },
+  summaryCard: {
+    marginHorizontal: 20,
+    marginBottom: 18,
+    backgroundColor: "#eef6ff",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    elevation: 4,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+  },
+  summaryIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  summaryIconText: { color: "#2563eb", fontWeight: "900" },
+  summaryValue: { color: "#0f172a", fontSize: 24, fontWeight: "900" },
+  summaryLabel: { color: "#64748b", fontSize: 13 },
+  emptyText: { color: "#64748b", textAlign: "center", paddingTop: 40, paddingHorizontal: 20, fontSize: 14 },
+  splitView: { flex: 1, paddingBottom: 116 },
   userList: { maxHeight: 280 },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    paddingHorizontal: 14,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    elevation: 2,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
   },
-  userRowSelected: { backgroundColor: "#1f2937" },
+  userRowSelected: { backgroundColor: "#dbeafe", borderColor: "#bfdbfe" },
   avatar: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "#374151",
+    borderRadius: 12,
+    backgroundColor: "#2563eb",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  avatarText: { color: "#22d3ee", fontWeight: "700", fontSize: 14 },
+  avatarText: { color: "#ffffff", fontWeight: "800", fontSize: 14 },
   userInfo: { flex: 1 },
-  userName: { color: "#e5e7eb", fontSize: 15, fontWeight: "600" },
-  userRole: { color: "#6b7280", fontSize: 12, marginTop: 2 },
+  userName: { color: "#0f172a", fontSize: 15, fontWeight: "600" },
+  userRole: { color: "#64748b", fontSize: 12, marginTop: 2 },
   permissionsPanel: {
     flex: 1,
-    paddingHorizontal: 20,
+    marginHorizontal: 20,
     paddingTop: 20,
+    paddingHorizontal: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 16,
   },
-  permTitle: { color: "#e5e7eb", fontSize: 16, fontWeight: "700", marginBottom: 16 },
+  permTitle: { color: "#0f172a", fontSize: 16, fontWeight: "700", marginBottom: 16 },
   permRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e2e8f0",
   },
-  permLabel: { color: "#e5e7eb", fontSize: 14 },
+  permLabel: { color: "#0f172a", fontSize: 14 },
   saveButton: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     borderRadius: 8,
     padding: 14,
     alignItems: "center",
     marginTop: 20,
   },
   saveButtonDisabled: { opacity: 0.6 },
-  saveText: { color: "#030712", fontWeight: "700", fontSize: 15 },
-  selectHint: { color: "#6b7280", textAlign: "center", paddingTop: 40, fontSize: 14 },
+  saveText: { color: "#f8fafc", fontWeight: "700", fontSize: 15 },
+  selectHint: { color: "#64748b", textAlign: "center", paddingTop: 40, fontSize: 14 },
 });

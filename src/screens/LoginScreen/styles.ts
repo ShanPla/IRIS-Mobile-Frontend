@@ -3,7 +3,7 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#f8fafc",
   },
   scrollContent: {
     flexGrow: 1,
@@ -11,30 +11,30 @@ export const styles = StyleSheet.create({
     padding: 24,
   },
   card: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     padding: 28,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
   },
   logo: {
     fontSize: 32,
     fontWeight: "800",
-    color: "#22d3ee",
+    color: "#2563eb",
     letterSpacing: 8,
     textAlign: "center",
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 12,
-    color: "#6b7280",
+    color: "#64748b",
     textAlign: "center",
     marginBottom: 20,
     lineHeight: 18,
   },
   tabs: {
     flexDirection: "row",
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     borderRadius: 10,
     padding: 4,
     marginBottom: 20,
@@ -46,20 +46,20 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabActive: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
   },
   tabText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#6b7280",
+    color: "#64748b",
   },
   tabTextActive: {
     color: "#000",
   },
   input: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#cbd5e1",
     borderRadius: 10,
     padding: 14,
     color: "#fff",
@@ -67,18 +67,18 @@ export const styles = StyleSheet.create({
     marginBottom: 12,
   },
   error: {
-    color: "#f87171",
+    color: "#dc2626",
     fontSize: 13,
     marginBottom: 10,
   },
   success: {
-    color: "#4ade80",
+    color: "#16a34a",
     fontSize: 13,
     marginBottom: 10,
     textAlign: "center",
   },
   btn: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     borderRadius: 10,
     padding: 15,
     alignItems: "center",
@@ -90,13 +90,13 @@ export const styles = StyleSheet.create({
     fontSize: 15,
   },
   setupLink: {
-    color: "#6b7280",
+    color: "#64748b",
     fontSize: 13,
     textAlign: "center",
     marginTop: 20,
   },
   tempNote: {
-    color: "#4b5563",
+    color: "#64748b",
     fontSize: 11,
     textAlign: "center",
     marginTop: 12,

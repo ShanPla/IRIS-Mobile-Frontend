@@ -29,10 +29,10 @@ export default function EventDetailsScreen() {
 
   const getBadgeColor = (type: string) => {
     switch (type) {
-      case "authorized": return "#4ade80";
-      case "unknown": return "#f87171";
-      case "possible_threat": return "#fb923c";
-      default: return "#6b7280";
+      case "authorized": return "#16a34a";
+      case "unknown": return "#dc2626";
+      case "possible_threat": return "#ea580c";
+      default: return "#64748b";
     }
   };
 
@@ -48,7 +48,7 @@ export default function EventDetailsScreen() {
   const badgeColor = getBadgeColor(event.event_type);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>Back</Text>
@@ -72,8 +72,8 @@ export default function EventDetailsScreen() {
           <Text style={[styles.badgeText, { color: badgeColor }]}>{getBadgeLabel(event.event_type)}</Text>
         </View>
         {event.alarm_triggered && (
-          <View style={[styles.badge, { backgroundColor: "#f8717120" }]}>
-            <Text style={[styles.badgeText, { color: "#f87171" }]}>Alarm Triggered</Text>
+          <View style={[styles.badge, { backgroundColor: "#dc262620" }]}>
+            <Text style={[styles.badgeText, { color: "#dc2626" }]}>Alarm Triggered</Text>
           </View>
         )}
       </View>
@@ -82,9 +82,9 @@ export default function EventDetailsScreen() {
       <View style={styles.details}>
         <DetailRow label="Event ID" value={String(event.id)} />
         <DetailRow label="Type" value={getBadgeLabel(event.event_type)} />
-        <DetailRow label="Matched Name" value={event.matched_name ?? "—"} />
+        <DetailRow label="Matched Name" value={event.matched_name ?? "-"} />
         <DetailRow label="Timestamp" value={new Date(event.timestamp).toLocaleString()} />
-        <DetailRow label="Mode" value={event.mode ?? "—"} />
+        <DetailRow label="Mode" value={event.mode ?? "-"} />
         <DetailRow label="Alarm Triggered" value={event.alarm_triggered ? "Yes" : "No"} />
         <DetailRow label="Notification Sent" value={event.notification_sent ? "Yes" : "No"} />
         {event.notes ? <DetailRow label="Notes" value={event.notes} /> : null}
@@ -103,7 +103,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  content: { paddingBottom: 40 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -112,32 +113,45 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
   },
-  backText: { color: "#22d3ee", fontSize: 15 },
-  title: { color: "#e5e7eb", fontSize: 18, fontWeight: "700" },
+  backText: { color: "#2563eb", fontSize: 15 },
+  title: { color: "#0f172a", fontSize: 18, fontWeight: "700" },
   snapshot: {
-    width: "100%",
+    width: "90%",
     height: 280,
-    backgroundColor: "#111827",
+    alignSelf: "center",
+    backgroundColor: "#0f172a",
+    borderRadius: 16,
   },
   snapshotPlaceholder: {
-    width: "100%",
+    width: "90%",
     height: 200,
-    backgroundColor: "#111827",
+    alignSelf: "center",
+    backgroundColor: "#e2e8f0",
+    borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },
-  placeholderText: { color: "#6b7280", fontSize: 13 },
+  placeholderText: { color: "#64748b", fontSize: 13 },
   badgeRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginTop: 16 },
   badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
   badgeText: { fontSize: 13, fontWeight: "600" },
-  details: { paddingHorizontal: 20, marginTop: 20, marginBottom: 40 },
+  details: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 40,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    paddingHorizontal: 16,
+  },
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e2e8f0",
   },
-  detailLabel: { color: "#6b7280", fontSize: 14 },
-  detailValue: { color: "#e5e7eb", fontSize: 14, fontWeight: "500" },
+  detailLabel: { color: "#64748b", fontSize: 14 },
+  detailValue: { color: "#0f172a", fontSize: 14, fontWeight: "500" },
 });

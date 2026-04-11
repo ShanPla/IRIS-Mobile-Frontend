@@ -59,6 +59,7 @@ export interface FaceProfile {
 export interface AuthSession {
   token: string;
   username: string;
+  email: string;
   role: string;
 }
 

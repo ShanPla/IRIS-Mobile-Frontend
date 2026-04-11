@@ -6,38 +6,31 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../../../App";
 import { addDevice } from "../../lib/pi";
 import { useAuth } from "../../context/AuthContext";
 
-interface Props {
-  navigation?: { goBack: () => void };
-}
+type Nav = NativeStackNavigationProp<RootStackParamList, "Setup">;
 
-export default function SetupScreen({ navigation }: Props) {
-  const { refreshSession } = useAuth();
+export default function SetupScreen() {
+  const navigation = useNavigation<Nav>();
+  const { refreshSession, session } = useAuth();
   const [url, setUrl] = useState("");
-  const [deviceId, setDeviceId] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [deviceIp, setDeviceIp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [step, setStep] = useState<"url" | "credentials">("url");
 
-  const handleVerify = async () => {
-    if (!url.trim() || !deviceId.trim()) {
-      setError("Pi URL and Device ID are required");
+  const handleAddDevice = async () => {
+    if (!url.trim() || !deviceIp.trim()) {
+      setError("Ngrok URL and Device IP are required");
       return;
     }
-    setStep("credentials");
-    setError("");
-  };
-
-  const handlePair = async () => {
-    if (!username.trim() || !password.trim()) {
-      setError("Username and password are required");
+    if (!session?.email?.trim()) {
+      setError("Sign in before adding a device");
       return;
     }
     setLoading(true);
@@ -47,13 +40,11 @@ export default function SetupScreen({ navigation }: Props) {
       const withProtocol = /^https?:\/\//i.test(normalized)
         ? normalized
         : `https://${normalized}`;
-      await addDevice(withProtocol, deviceId.trim(), username.trim(), password);
+      await addDevice(withProtocol, deviceIp.trim(), session.email);
       await refreshSession();
-      if (navigation) {
-        navigation.goBack();
-      }
+      navigation.navigate("DeviceList");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Pairing failed");
+      setError(e instanceof Error ? e.message : "Failed to add device");
     } finally {
       setLoading(false);
     }
@@ -62,138 +53,130 @@ export default function SetupScreen({ navigation }: Props) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.logo}>IRIS</Text>
-        <Text style={styles.subtitle}>Add Raspberry Pi</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("DeviceList")}>
+          <Text style={styles.backText}>{"< Devices"}</Text>
+        </TouchableOpacity>
+        <View style={styles.logoMark}>
+          <Text style={styles.logoMarkText}>+</Text>
+        </View>
+        <Text style={styles.logo}>Add Device</Text>
+        <Text style={styles.subtitle}>Register a camera to this account</Text>
       </View>
 
-      {step === "url" ? (
-        <>
-          <Text style={styles.label}>Pi URL (ngrok or local)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. https://xyz.ngrok-free.dev"
-            placeholderTextColor="#6b7280"
-            value={url}
-            onChangeText={setUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+      <View style={styles.card}>
+        <Text style={styles.label}>Ngrok URL</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="https://xyz.ngrok-free.dev"
+          placeholderTextColor="#64748b"
+          value={url}
+          onChangeText={setUrl}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
-          <Text style={styles.label}>Device ID</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. IRIS-A3F2"
-            placeholderTextColor="#6b7280"
-            value={deviceId}
-            onChangeText={setDeviceId}
-            autoCapitalize="characters"
-            autoCorrect={false}
-          />
+        <Text style={styles.label}>Device IP</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="192.168.254.100"
+          placeholderTextColor="#64748b"
+          value={deviceIp}
+          onChangeText={setDeviceIp}
+          keyboardType="numbers-and-punctuation"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
 
-          <TouchableOpacity
-            style={styles.scanButton}
-            onPress={() => Alert.alert("QR Scanner", "Navigate to AddCamera screen for QR scanning")}
-          >
-            <Text style={styles.scanButtonText}>Scan QR Code Instead</Text>
-          </TouchableOpacity>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoText}>
+            This device will be added as a Primary device for {session?.email || "your email"}.
+          </Text>
+        </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <TouchableOpacity style={styles.button} onPress={handleVerify}>
-            <Text style={styles.buttonText}>Next</Text>
-          </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          <View style={styles.deviceInfo}>
-            <Text style={styles.deviceInfoText}>Connecting to: {deviceId}</Text>
-            <Text style={styles.deviceInfoUrl}>{url}</Text>
-          </View>
-
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Your username"
-            placeholderTextColor="#6b7280"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Your password"
-            placeholderTextColor="#6b7280"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handlePair}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#030712" />
-            ) : (
-              <Text style={styles.buttonText}>Pair Device</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => { setStep("url"); setError(""); }}
-          >
-            <Text style={styles.backButtonText}>Back</Text>
-          </TouchableOpacity>
-        </>
-      )}
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleAddDevice}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#f8fafc" />
+          ) : (
+            <Text style={styles.buttonText}>Add Device</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
-  content: { padding: 24, paddingTop: 80 },
-  header: { alignItems: "center", marginBottom: 40 },
-  logo: { color: "#22d3ee", fontSize: 32, fontWeight: "800", letterSpacing: 6 },
-  subtitle: { color: "#9ca3af", fontSize: 16, marginTop: 8 },
-  label: { color: "#9ca3af", fontSize: 13, marginBottom: 6, marginTop: 16 },
-  input: {
-    backgroundColor: "#1f2937",
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  content: { flexGrow: 1, justifyContent: "center", padding: 24, paddingVertical: 60 },
+  header: { alignItems: "center", marginBottom: 32 },
+  backButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
-    padding: 14,
-    color: "#e5e7eb",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    marginBottom: 24,
+  },
+  backText: { color: "#2563eb", fontSize: 13, fontWeight: "800" },
+  logoMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    backgroundColor: "#2563eb",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  logoMarkText: { color: "#ffffff", fontSize: 32, fontWeight: "600", marginTop: -4 },
+  logo: { color: "#0f172a", fontSize: 30, fontWeight: "800" },
+  subtitle: { color: "#64748b", fontSize: 14, marginTop: 6, textAlign: "center" },
+  card: {
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 20,
+    elevation: 8,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+  },
+  label: { color: "#334155", fontSize: 13, fontWeight: "800", marginBottom: 8, marginTop: 14 },
+  input: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 16,
+    padding: 16,
+    color: "#0f172a",
     fontSize: 15,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#e2e8f0",
   },
+  infoCard: {
+    backgroundColor: "#dbeafe",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 18,
+  },
+  infoText: { color: "#334155", fontSize: 13, lineHeight: 18 },
   button: {
-    backgroundColor: "#22d3ee",
-    borderRadius: 8,
-    padding: 16,
+    backgroundColor: "#2563eb",
+    borderRadius: 16,
+    padding: 18,
     alignItems: "center",
-    marginTop: 24,
+    marginTop: 22,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#030712", fontWeight: "700", fontSize: 16 },
-  scanButton: { alignItems: "center", marginTop: 16, padding: 12 },
-  scanButtonText: { color: "#22d3ee", fontSize: 14 },
-  backButton: { alignItems: "center", marginTop: 16, padding: 12 },
-  backButtonText: { color: "#6b7280", fontSize: 14 },
-  error: { color: "#f87171", fontSize: 13, marginTop: 12, textAlign: "center" },
-  deviceInfo: {
-    backgroundColor: "#1f2937",
-    borderRadius: 8,
-    padding: 14,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  deviceInfoText: { color: "#22d3ee", fontWeight: "600", fontSize: 14 },
-  deviceInfoUrl: { color: "#6b7280", fontSize: 12, marginTop: 4 },
+  buttonText: { color: "#f8fafc", fontWeight: "800", fontSize: 16 },
+  error: { color: "#dc2626", fontSize: 13, marginTop: 12, textAlign: "center" },
 });

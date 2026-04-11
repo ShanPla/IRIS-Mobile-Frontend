@@ -3,20 +3,20 @@ import { StyleSheet } from "react-native";
 export const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#f8fafc",
   },
   header: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     paddingTop: 56,
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e2e8f0",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#e5e7eb",
+    color: "#0f172a",
   },
   content: {
     paddingBottom: 40,
@@ -24,12 +24,12 @@ export const styles = StyleSheet.create({
 
   // Hero section
   heroSection: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     paddingVertical: 32,
     paddingHorizontal: 24,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e2e8f0",
     gap: 10,
   },
   avatarWrapper: {
@@ -40,11 +40,11 @@ export const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
-    borderColor: "#22d3ee",
+    borderColor: "#2563eb",
   },
   avatarIcon: {
     fontSize: 40,
@@ -56,11 +56,11 @@ export const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "#111827",
+    borderColor: "#e2e8f0",
   },
   username: {
     fontSize: 20,
@@ -78,7 +78,7 @@ export const styles = StyleSheet.create({
   },
   roleText: {
     fontSize: 12,
-    color: "#22d3ee",
+    color: "#2563eb",
     fontWeight: "600",
     textTransform: "capitalize",
   },
@@ -99,27 +99,27 @@ export const styles = StyleSheet.create({
     width: 4,
     height: 16,
     borderRadius: 2,
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
   },
   sectionTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#9ca3af",
+    color: "#475569",
     textTransform: "uppercase",
     letterSpacing: 1.2,
   },
   card: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     overflow: "hidden",
   },
   fieldRow: {
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+    borderBottomColor: "#e2e8f0",
     gap: 4,
   },
   fieldRowLast: {
@@ -127,7 +127,7 @@ export const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 11,
-    color: "#6b7280",
+    color: "#64748b",
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.8,
@@ -144,7 +144,7 @@ export const styles = StyleSheet.create({
     marginTop: 4,
   },
   primaryBtn: {
-    backgroundColor: "#22d3ee",
+    backgroundColor: "#2563eb",
     borderRadius: 12,
     padding: 15,
     alignItems: "center",
@@ -160,11 +160,11 @@ export const styles = StyleSheet.create({
     padding: 15,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: "#cbd5e1",
     marginTop: 10,
   },
   secondaryBtnText: {
-    color: "#9ca3af",
+    color: "#475569",
     fontWeight: "600",
     fontSize: 15,
   },
@@ -178,17 +178,17 @@ export const styles = StyleSheet.create({
     marginTop: 10,
   },
   dangerBtnText: {
-    color: "#f87171",
+    color: "#dc2626",
     fontWeight: "600",
     fontSize: 15,
   },
 
   // Face profile card
   faceProfileCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     padding: 20,
     flexDirection: "row",
     alignItems: "center",
@@ -199,13 +199,13 @@ export const styles = StyleSheet.create({
     height: 64,
     borderRadius: 32,
     borderWidth: 2,
-    borderColor: "#22d3ee",
+    borderColor: "#2563eb",
   },
   faceAvatarPlaceholder: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -220,35 +220,35 @@ export const styles = StyleSheet.create({
   },
   faceDate: {
     fontSize: 12,
-    color: "#6b7280",
+    color: "#64748b",
   },
   faceStatus: {
     fontSize: 12,
-    color: "#4ade80",
+    color: "#16a34a",
     fontWeight: "500",
   },
   faceEditBtn: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#ffffff",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   faceEditBtnText: {
-    color: "#22d3ee",
+    color: "#2563eb",
     fontSize: 13,
     fontWeight: "600",
   },
   noFaceCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
     padding: 24,
     alignItems: "center",
     gap: 8,
   },
   noFaceText: {
-    color: "#6b7280",
+    color: "#64748b",
     fontSize: 14,
   },
 
@@ -257,11 +257,11 @@ export const styles = StyleSheet.create({
     marginTop: 4,
   },
   error: {
-    color: "#f87171",
+    color: "#dc2626",
     fontSize: 13,
   },
   success: {
-    color: "#4ade80",
+    color: "#16a34a",
     fontSize: 13,
   },
 });

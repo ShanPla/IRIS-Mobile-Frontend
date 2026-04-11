@@ -150,16 +150,16 @@ export default function AdminScreen() {
   const roleBadgeColor = (role: string) => {
     switch (role) {
       case "admin": return "#f59e0b";
-      case "homeowner_primary": return "#22d3ee";
-      case "homeowner_invited": return "#a78bfa";
-      default: return "#6b7280";
+      case "homeowner_primary": return "#2563eb";
+      case "homeowner_invited": return "#7c3aed";
+      default: return "#64748b";
     }
   };
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#22d3ee" size="large" />
+        <ActivityIndicator color="#2563eb" size="large" />
         <Text style={styles.loadingText}>Loading admin panel...</Text>
       </View>
     );
@@ -170,7 +170,7 @@ export default function AdminScreen() {
       style={styles.container}
       contentContainerStyle={styles.content}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#22d3ee" />
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2563eb" />
       }
     >
       <Text style={styles.title}>Admin Panel</Text>
@@ -272,34 +272,39 @@ function StatBox({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#030712" },
-  content: { padding: 20, paddingTop: 60 },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  content: { padding: 20, paddingTop: 60, paddingBottom: 116 },
   center: {
     flex: 1,
-    backgroundColor: "#030712",
+    backgroundColor: "#f8fafc",
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingText: { color: "#6b7280", marginTop: 12, fontSize: 13 },
+  loadingText: { color: "#64748b", marginTop: 12, fontSize: 13 },
   title: {
-    color: "#e5e7eb",
+    color: "#0f172a",
     fontSize: 24,
     fontWeight: "800",
     marginBottom: 20,
   },
-  errorText: { color: "#f87171", fontSize: 13, marginBottom: 12 },
+  errorText: { color: "#dc2626", fontSize: 13, marginBottom: 12 },
 
   // Cards
   card: {
-    backgroundColor: "#111827",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#e2e8f0",
+    elevation: 3,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
   },
   cardTitle: {
-    color: "#e5e7eb",
+    color: "#0f172a",
     fontSize: 16,
     fontWeight: "700",
     marginBottom: 12,
@@ -311,10 +316,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f293766",
+    borderBottomColor: "rgba(226,232,240,0.8)",
   },
-  label: { color: "#9ca3af", fontSize: 13 },
-  value: { color: "#e5e7eb", fontSize: 13, fontWeight: "600" },
+  label: { color: "#475569", fontSize: 13 },
+  value: { color: "#0f172a", fontSize: 13, fontWeight: "600" },
 
   // Stats grid
   statsGrid: {
@@ -323,37 +328,37 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statBox: {
-    backgroundColor: "#1f2937",
+    backgroundColor: "#f1f5f9",
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 14,
     alignItems: "center",
     minWidth: 72,
   },
-  statValue: { color: "#22d3ee", fontSize: 20, fontWeight: "800" },
-  statLabel: { color: "#9ca3af", fontSize: 11, marginTop: 2 },
+  statValue: { color: "#2563eb", fontSize: 20, fontWeight: "800" },
+  statLabel: { color: "#475569", fontSize: 11, marginTop: 2 },
 
   // Paired users
   userRow: {
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#1f293766",
+    borderBottomColor: "rgba(226,232,240,0.8)",
   },
   userInfo: { flex: 1 },
   userNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
-  username: { color: "#e5e7eb", fontSize: 15, fontWeight: "600" },
+  username: { color: "#0f172a", fontSize: 15, fontWeight: "600" },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
   },
-  badgeText: { color: "#030712", fontSize: 10, fontWeight: "700" },
-  userMeta: { color: "#6b7280", fontSize: 12 },
-  emptyText: { color: "#6b7280", fontSize: 13, fontStyle: "italic" },
+  badgeText: { color: "#f8fafc", fontSize: 10, fontWeight: "700" },
+  userMeta: { color: "#64748b", fontSize: 12 },
+  emptyText: { color: "#64748b", fontSize: 13, fontStyle: "italic" },
 
   // Danger zone
-  dangerCard: { borderColor: "#7f1d1d" },
-  dangerText: { color: "#9ca3af", fontSize: 13, marginBottom: 14, lineHeight: 18 },
+  dangerCard: { borderColor: "#fecaca" },
+  dangerText: { color: "#475569", fontSize: 13, marginBottom: 14, lineHeight: 18 },
   resetButton: {
     backgroundColor: "#dc2626",
     borderRadius: 8,
