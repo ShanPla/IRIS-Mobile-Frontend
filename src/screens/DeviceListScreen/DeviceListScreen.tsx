@@ -14,7 +14,8 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../../App";
 import { useAuth } from "../../context/AuthContext";
-import { getDevices, piPostToDevice, removeDevice } from "../../lib/pi";
+import { getDevices, piPostToDevice, removeDevice, ensureDeviceAuth } from "../../lib/pi";
+import { getAccountPassword } from "../../lib/accounts";
 import type { PiDevice } from "../../lib/pi";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "DeviceList">;
@@ -74,9 +75,21 @@ export default function DeviceListScreen() {
       Alert.alert("Missing Gmail", "This primary device has no Gmail attached.");
       return;
     }
+    if (!session?.username) {
+      Alert.alert("Sign In Required", "Sign in again to verify this action.");
+      return;
+    }
+    const password = await getAccountPassword(session.username);
+    if (!password) {
+      Alert.alert("Sign In Required", "Sign in again to verify this action.");
+      return;
+    }
     setSecureActionLoading(true);
     try {
-      await piPostToDevice(pendingAction.device, "/api/admin/action-verification", {
+      await ensureDeviceAuth(session.username, password, session.username);
+      const refreshed = await getDevices(session.username);
+      const target = refreshed.find((d) => d.deviceId === pendingAction.device.deviceId) ?? pendingAction.device;
+      await piPostToDevice(target, "/api/admin/action-verification", {
         gmail,
         action: pendingAction.action === "remove" ? "remove_device" : "factory_reset",
       });
@@ -118,12 +131,24 @@ export default function DeviceListScreen() {
       Alert.alert("Missing Gmail", "This primary device has no Gmail attached.");
       return;
     }
+    if (!session?.username) {
+      Alert.alert("Sign In Required", "Sign in again to verify this action.");
+      return;
+    }
+    const password = await getAccountPassword(session.username);
+    if (!password) {
+      Alert.alert("Sign In Required", "Sign in again to verify this action.");
+      return;
+    }
 
     setSecureActionLoading(true);
 
     try {
+      await ensureDeviceAuth(session.username, password, session.username);
+      const refreshed = await getDevices(session.username);
+      const target = refreshed.find((d) => d.deviceId === pendingAction.device.deviceId) ?? pendingAction.device;
       if (pendingAction.action === "remove") {
-        await piPostToDevice(pendingAction.device, "/api/admin/action-verification/verify", {
+        await piPostToDevice(target, "/api/admin/action-verification/verify", {
           gmail,
           action: "remove_device",
           code: gmailCode.trim(),
@@ -135,7 +160,7 @@ export default function DeviceListScreen() {
       }
 
       await selectDevice(pendingAction.device.deviceId);
-      await piPostToDevice(pendingAction.device, "/api/admin/factory-reset/verified", {
+      await piPostToDevice(target, "/api/admin/factory-reset/verified", {
         gmail,
         action: "factory_reset",
         code: gmailCode.trim(),

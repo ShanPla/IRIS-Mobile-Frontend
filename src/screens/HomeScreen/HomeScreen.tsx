@@ -167,7 +167,7 @@ export default function HomeScreen() {
         );
       }
     },
-  }), [navigation]);
+  }), [navigation, status]);
 
   useWebSocket(wsHandlers, session?.username);
 
