@@ -3,11 +3,15 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -237,32 +241,42 @@ export default function LogsScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <ReferenceBackdrop />
-      <FlatList
-        style={styles.container}
-        data={visibleEvents}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderEvent}
-        ListHeaderComponent={renderHeader}
-        contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={referenceColors.primary} />}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.3}
-        ListEmptyComponent={
-          loading ? <ActivityIndicator color={referenceColors.primary} style={{ marginTop: 40 }} /> : <Text style={styles.emptyText}>No events found</Text>
-        }
-        ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator color={referenceColors.primary} style={{ padding: 16 }} />
-          ) : events.length < total ? (
-            <TouchableOpacity style={styles.loadMore} onPress={handleLoadMore}>
-              <Text style={styles.loadMoreText}>Load more</Text>
-            </TouchableOpacity>
-          ) : null
-        }
-      />
-    </View>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <ReferenceBackdrop />
+          <FlatList
+            style={styles.container}
+            data={visibleEvents}
+            keyExtractor={(item) => String(item.id)}
+            renderItem={renderEvent}
+            ListHeaderComponent={renderHeader}
+            contentContainerStyle={styles.list}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={referenceColors.primary} />}
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.3}
+            ListEmptyComponent={
+              loading ? <ActivityIndicator color={referenceColors.primary} style={{ marginTop: 40 }} /> : <Text style={styles.emptyText}>No events found</Text>
+            }
+            ListFooterComponent={
+              loadingMore ? (
+                <ActivityIndicator color={referenceColors.primary} style={{ padding: 16 }} />
+              ) : events.length < total ? (
+                <TouchableOpacity style={styles.loadMore} onPress={handleLoadMore}>
+                  <Text style={styles.loadMoreText}>Load more</Text>
+                </TouchableOpacity>
+              ) : null
+            }
+          />
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 

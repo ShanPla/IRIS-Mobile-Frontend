@@ -109,6 +109,7 @@ export default function SetupScreen() {
             style={styles.container}
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate(session ? "DeviceList" : "Login")}>

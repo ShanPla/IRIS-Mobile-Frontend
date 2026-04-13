@@ -2,12 +2,16 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -277,185 +281,195 @@ export default function DeviceListScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <ReferenceBackdrop />
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              void loadDevices();
-            }}
-            tintColor={referenceColors.primary}
-          />
-        }
-      >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>My Devices</Text>
-            <Text style={styles.subtitle}>Select a device to monitor</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate("Profile")}>
-              <User size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
-              <Text style={styles.profileButtonText}>{initials}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleWrap}>
-              <View style={styles.sectionIconPrimary}>
-                <Crown size={18} color={referenceColors.primary} strokeWidth={2.2} />
-              </View>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <ReferenceBackdrop />
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => {
+                  setRefreshing(true);
+                  void loadDevices();
+                }}
+                tintColor={referenceColors.primary}
+              />
+            }
+          >
+            <View style={styles.header}>
               <View>
-                <Text style={styles.sectionTitle}>Primary Devices</Text>
-                <Text style={styles.sectionSubtitle}>Full control and sharing permissions</Text>
+                <Text style={styles.title}>My Devices</Text>
+                <Text style={styles.subtitle}>Select a device to monitor</Text>
+              </View>
+              <View style={styles.headerActions}>
+                <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate("Profile")}>
+                  <User size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
+                  <Text style={styles.profileButtonText}>{initials}</Text>
+                </TouchableOpacity>
               </View>
             </View>
-            <Text style={styles.sectionCount}>{primaryDevices.length}</Text>
-          </View>
 
-          {primaryDevices.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No primary devices yet</Text>
-              <Text style={styles.emptyText}>Add a device to become its Primary User.</Text>
-            </View>
-          ) : (
-            primaryDevices.map((device) => renderDeviceCard(device, "primary"))
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleWrap}>
-              <View style={styles.sectionIconSecondary}>
-                <Users size={18} color={referenceColors.success} strokeWidth={2.2} />
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleWrap}>
+                  <View style={styles.sectionIconPrimary}>
+                    <Crown size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                  </View>
+                  <View>
+                    <Text style={styles.sectionTitle}>Primary Devices</Text>
+                    <Text style={styles.sectionSubtitle}>Full control and sharing permissions</Text>
+                  </View>
+                </View>
+                <Text style={styles.sectionCount}>{primaryDevices.length}</Text>
               </View>
-              <View>
-                <Text style={styles.sectionTitle}>Secondary Devices</Text>
-                <Text style={styles.sectionSubtitle}>Shared access from another Primary User</Text>
+
+              {primaryDevices.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>No primary devices yet</Text>
+                  <Text style={styles.emptyText}>Add a device to become its Primary User.</Text>
+                </View>
+              ) : (
+                primaryDevices.map((device) => renderDeviceCard(device, "primary"))
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleWrap}>
+                  <View style={styles.sectionIconSecondary}>
+                    <Users size={18} color={referenceColors.success} strokeWidth={2.2} />
+                  </View>
+                  <View>
+                    <Text style={styles.sectionTitle}>Secondary Devices</Text>
+                    <Text style={styles.sectionSubtitle}>Shared access from another Primary User</Text>
+                  </View>
+                </View>
+                <Text style={styles.sectionCount}>{secondaryDevices.length}</Text>
               </View>
+
+              {secondaryDevices.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>No secondary devices</Text>
+                  <Text style={styles.emptyText}>Shared devices will appear here after you accept an invite.</Text>
+                </View>
+              ) : (
+                secondaryDevices.map((device) => renderDeviceCard(device, "secondary"))
+              )}
             </View>
-            <Text style={styles.sectionCount}>{secondaryDevices.length}</Text>
-          </View>
 
-          {secondaryDevices.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>No secondary devices</Text>
-              <Text style={styles.emptyText}>Shared devices will appear here after you accept an invite.</Text>
-            </View>
-          ) : (
-            secondaryDevices.map((device) => renderDeviceCard(device, "secondary"))
-          )}
-        </View>
-
-        <TouchableOpacity style={styles.primaryCTAWrap} onPress={() => navigation.navigate("Setup")} activeOpacity={0.9}>
-          <View style={styles.primaryCTA}>
-            <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
-            <Text style={styles.primaryCTAText}>Add New Device</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.secondaryCTA} onPress={openInvitePlaceholder}>
-          <Text style={styles.secondaryCTAText}>Join with Invite Code</Text>
-        </TouchableOpacity>
-
-        {joiningInvite ? (
-          <View style={styles.joinCard}>
-            <Text style={styles.joinTitle}>Join Shared Device</Text>
-            <Text style={styles.joinText}>
-              Enter the device code and invite code from the primary user to add this Pi as shared access.
-            </Text>
-
-            <TextInput
-              style={styles.joinInput}
-              placeholder="Device code"
-              placeholderTextColor="#94a3b8"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              value={joinDeviceCode}
-              onChangeText={setJoinDeviceCode}
-              editable={!joinLoading}
-            />
-
-            <TextInput
-              style={[styles.joinInput, styles.joinInviteInput]}
-              placeholder="Invite code"
-              placeholderTextColor="#94a3b8"
-              autoCapitalize="none"
-              autoCorrect={false}
-              multiline
-              value={joinInviteCode}
-              onChangeText={setJoinInviteCode}
-              editable={!joinLoading}
-            />
-
-            {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
-
-            <View style={styles.joinActions}>
-              <TouchableOpacity style={styles.cancelButton} onPress={cancelJoinInvite} disabled={joinLoading}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.joinConfirmButton, joinLoading && styles.buttonDisabled]}
-                onPress={() => void joinSharedDevice()}
-                disabled={joinLoading}
-              >
-                {joinLoading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.joinConfirmText}>Join Device</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
-
-        {pendingAction ? (
-          <View style={styles.verificationCard}>
-            <Text style={styles.verificationTitle}>{pendingAction.action === "remove" ? "Remove Device" : "Factory Reset"}</Text>
-            <Text style={styles.verificationText}>
-              Send a 6-digit code to {pendingAction.device.primaryEmail || session?.email || "the primary Gmail"} before continuing.
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.verificationSendButton, secureActionLoading && styles.buttonDisabled]}
-              onPress={() => void sendGmailCode()}
-              disabled={secureActionLoading}
-            >
-              <Text style={styles.verificationSendText}>
-                {secureActionLoading ? "Working..." : codeSent ? "Resend Gmail Code" : "Send Gmail Code"}
-              </Text>
+            <TouchableOpacity style={styles.primaryCTAWrap} onPress={() => navigation.navigate("Setup")} activeOpacity={0.9}>
+              <View style={styles.primaryCTA}>
+                <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
+                <Text style={styles.primaryCTAText}>Add New Device</Text>
+              </View>
             </TouchableOpacity>
 
-            <TextInput
-              style={styles.codeInput}
-              placeholder="6-digit code"
-              placeholderTextColor="#94a3b8"
-              value={gmailCode}
-              onChangeText={setGmailCode}
-              keyboardType="number-pad"
-              maxLength={6}
-              editable={!secureActionLoading}
-            />
+            <TouchableOpacity style={styles.secondaryCTA} onPress={openInvitePlaceholder}>
+              <Text style={styles.secondaryCTAText}>Join with Invite Code</Text>
+            </TouchableOpacity>
 
-            <View style={styles.verificationActions}>
-              <TouchableOpacity style={styles.cancelButton} onPress={cancelSecureAction} disabled={secureActionLoading}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.confirmButton, secureActionLoading && styles.buttonDisabled]}
-                onPress={() => void confirmSecureAction()}
-                disabled={secureActionLoading}
-              >
-                <Text style={styles.confirmText}>Confirm</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
-      </ScrollView>
-    </View>
+            {joiningInvite ? (
+              <View style={styles.joinCard}>
+                <Text style={styles.joinTitle}>Join Shared Device</Text>
+                <Text style={styles.joinText}>
+                  Enter the device code and invite code from the primary user to add this Pi as shared access.
+                </Text>
+
+                <TextInput
+                  style={styles.joinInput}
+                  placeholder="Device code"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  value={joinDeviceCode}
+                  onChangeText={setJoinDeviceCode}
+                  editable={!joinLoading}
+                />
+
+                <TextInput
+                  style={[styles.joinInput, styles.joinInviteInput]}
+                  placeholder="Invite code"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  multiline
+                  value={joinInviteCode}
+                  onChangeText={setJoinInviteCode}
+                  editable={!joinLoading}
+                />
+
+                {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
+
+                <View style={styles.joinActions}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={cancelJoinInvite} disabled={joinLoading}>
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.joinConfirmButton, joinLoading && styles.buttonDisabled]}
+                    onPress={() => void joinSharedDevice()}
+                    disabled={joinLoading}
+                  >
+                    {joinLoading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.joinConfirmText}>Join Device</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            {pendingAction ? (
+              <View style={styles.verificationCard}>
+                <Text style={styles.verificationTitle}>{pendingAction.action === "remove" ? "Remove Device" : "Factory Reset"}</Text>
+                <Text style={styles.verificationText}>
+                  Send a 6-digit code to {pendingAction.device.primaryEmail || session?.email || "the primary Gmail"} before continuing.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.verificationSendButton, secureActionLoading && styles.buttonDisabled]}
+                  onPress={() => void sendGmailCode()}
+                  disabled={secureActionLoading}
+                >
+                  <Text style={styles.verificationSendText}>
+                    {secureActionLoading ? "Working..." : codeSent ? "Resend Gmail Code" : "Send Gmail Code"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TextInput
+                  style={styles.codeInput}
+                  placeholder="6-digit code"
+                  placeholderTextColor="#94a3b8"
+                  value={gmailCode}
+                  onChangeText={setGmailCode}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  editable={!secureActionLoading}
+                />
+
+                <View style={styles.verificationActions}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={cancelSecureAction} disabled={secureActionLoading}>
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.confirmButton, secureActionLoading && styles.buttonDisabled]}
+                    onPress={() => void confirmSecureAction()}
+                    disabled={secureActionLoading}
+                  >
+                    <Text style={styles.confirmText}>Confirm</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+          </ScrollView>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 

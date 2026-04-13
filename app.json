@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.iris.mobile"
+      "bundleIdentifier": "com.iris.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.iris.mobile",
@@ -33,7 +36,17 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-web-browser"
-    ]
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.261281750852-j4bprb92a2o24dn6rqgt3r24rmk16bad"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a48f43c1-ae6d-4740-98cc-ee9bf0748fe4"
+      }
+    }
   }
 }

@@ -3,11 +3,15 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -134,148 +138,158 @@ export default function TrustedFacesScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <ReferenceBackdrop />
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>Trusted Users</Text>
-            <Text style={styles.subtitle}>Users paired with your devices</Text>
-          </View>
-        </View>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <View style={styles.inviteCard}>
-          <Text style={styles.inviteTitle}>Add Trusted User</Text>
-          <Text style={styles.inviteSubtitle}>
-            Enter the username, choose their access, then share the device code and invite code.
-          </Text>
-
-          <TextInput
-            style={styles.inviteInput}
-            placeholder="Username to invite"
-            placeholderTextColor="#94a3b8"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={inviteUsername}
-            onChangeText={setInviteUsername}
-          />
-
-          <View style={styles.invitePermissionsCard}>
-            {PERMISSION_LABELS.map(({ key, label }) => (
-              <View key={key} style={styles.permissionRow}>
-                <Text style={styles.permissionLabel}>{label}</Text>
-                <Switch
-                  value={invitePermissions[key]}
-                  onValueChange={() => toggleInvitePermission(key)}
-                  trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-                  thumbColor="#ffffff"
-                />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <ReferenceBackdrop />
+          <View style={styles.content}>
+            <View style={styles.header}>
+              <View>
+                <Text style={styles.title}>Trusted Users</Text>
+                <Text style={styles.subtitle}>Users paired with your devices</Text>
               </View>
-            ))}
-          </View>
+            </View>
 
-          {inviteError ? <Text style={styles.error}>{inviteError}</Text> : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <TouchableOpacity
-            style={[styles.generateButton, creatingInvite && styles.buttonDisabled]}
-            onPress={() => void generateInviteCode()}
-            disabled={creatingInvite}
-          >
-            {creatingInvite ? (
-              <ActivityIndicator color={referenceColors.primary} />
-            ) : (
-              <Text style={styles.generateButtonText}>Generate Invite Code</Text>
-            )}
-          </TouchableOpacity>
-
-          {latestInvite ? (
-            <View style={styles.generatedCodeCard}>
-              <Text style={styles.generatedCodeTitle}>Share These Codes</Text>
-              <View style={styles.generatedCodeRow}>
-                <Text style={styles.generatedCodeLabel}>Device Code</Text>
-                <Text style={styles.generatedCodeValue}>{latestInvite.device_id}</Text>
-              </View>
-              <View style={styles.generatedCodeBlock}>
-                <Text style={styles.generatedCodeLabel}>Invite Code</Text>
-                <Text style={styles.generatedInviteCode}>{latestInvite.invite_code}</Text>
-              </View>
-              <Text style={styles.generatedCodeHint}>
-                {inviteUsername.trim()} must join with this device code and invite code before {new Date(latestInvite.expires_at).toLocaleString()}.
+            <View style={styles.inviteCard}>
+              <Text style={styles.inviteTitle}>Add Trusted User</Text>
+              <Text style={styles.inviteSubtitle}>
+                Enter the username, choose their access, then share the device code and invite code.
               </Text>
-            </View>
-          ) : null}
-        </View>
 
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryIcon}>
-            <Users size={20} color={referenceColors.primary} strokeWidth={2.2} />
-          </View>
-          <View>
-            <Text style={styles.summaryValue}>{users.length}</Text>
-            <Text style={styles.summaryLabel}>Total Users</Text>
-          </View>
-        </View>
+              <TextInput
+                style={styles.inviteInput}
+                placeholder="Username to invite"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={inviteUsername}
+                onChangeText={setInviteUsername}
+              />
 
-        {users.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No invited users. Invite homeowners from the admin panel.</Text>
-          </View>
-        ) : (
-          <>
-            <FlatList
-              data={users}
-              keyExtractor={(item) => String(item.id)}
-              style={styles.userList}
-              contentContainerStyle={styles.userListContent}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.userCard, selected?.id === item.id && styles.userCardSelected]}
-                  onPress={() => setSelected(item)}
-                >
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{getInitials(item.username)}</Text>
+              <View style={styles.invitePermissionsCard}>
+                {PERMISSION_LABELS.map(({ key, label }) => (
+                  <View key={key} style={styles.permissionRow}>
+                    <Text style={styles.permissionLabel}>{label}</Text>
+                    <Switch
+                      value={invitePermissions[key]}
+                      onValueChange={() => toggleInvitePermission(key)}
+                      trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                      thumbColor="#ffffff"
+                    />
                   </View>
-                  <View style={styles.userCopy}>
-                    <Text style={styles.userName}>{item.username}</Text>
-                    <View style={styles.userBadge}>
-                      <Shield size={12} color={referenceColors.primary} strokeWidth={2.2} />
-                      <Text style={styles.userBadgeText}>{item.role}</Text>
-                    </View>
+                ))}
+              </View>
+
+              {inviteError ? <Text style={styles.error}>{inviteError}</Text> : null}
+
+              <TouchableOpacity
+                style={[styles.generateButton, creatingInvite && styles.buttonDisabled]}
+                onPress={() => void generateInviteCode()}
+                disabled={creatingInvite}
+              >
+                {creatingInvite ? (
+                  <ActivityIndicator color={referenceColors.primary} />
+                ) : (
+                  <Text style={styles.generateButtonText}>Generate Invite Code</Text>
+                )}
+              </TouchableOpacity>
+
+              {latestInvite ? (
+                <View style={styles.generatedCodeCard}>
+                  <Text style={styles.generatedCodeTitle}>Share These Codes</Text>
+                  <View style={styles.generatedCodeRow}>
+                    <Text style={styles.generatedCodeLabel}>Device Code</Text>
+                    <Text style={styles.generatedCodeValue}>{latestInvite.device_id}</Text>
                   </View>
-                </TouchableOpacity>
-              )}
-            />
-
-            <View style={styles.permissionsCard}>
-              {selected && selected.permissions ? (
-                <>
-                  <Text style={styles.permissionsTitle}>Permissions for {selected.username}</Text>
-                  {PERMISSION_LABELS.map(({ key, label }) => (
-                    <View key={key} style={styles.permissionRow}>
-                      <Text style={styles.permissionLabel}>{label}</Text>
-                      <Switch
-                        value={selected.permissions![key]}
-                        onValueChange={() => togglePermission(key)}
-                        trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-                        thumbColor="#ffffff"
-                      />
-                    </View>
-                  ))}
-
-                  <TouchableOpacity style={[styles.saveButton, saving && styles.buttonDisabled]} onPress={() => void savePermissions()} disabled={saving}>
-                    {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveText}>Save</Text>}
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <Text style={styles.selectHint}>Select a user to manage permissions</Text>
-              )}
+                  <View style={styles.generatedCodeBlock}>
+                    <Text style={styles.generatedCodeLabel}>Invite Code</Text>
+                    <Text style={styles.generatedInviteCode}>{latestInvite.invite_code}</Text>
+                  </View>
+                  <Text style={styles.generatedCodeHint}>
+                    {inviteUsername.trim()} must join with this device code and invite code before {new Date(latestInvite.expires_at).toLocaleString()}.
+                  </Text>
+                </View>
+              ) : null}
             </View>
-          </>
-        )}
-      </View>
-    </View>
+
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryIcon}>
+                <Users size={20} color={referenceColors.primary} strokeWidth={2.2} />
+              </View>
+              <View>
+                <Text style={styles.summaryValue}>{users.length}</Text>
+                <Text style={styles.summaryLabel}>Total Users</Text>
+              </View>
+            </View>
+
+            {users.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>No invited users. Invite homeowners from the admin panel.</Text>
+              </View>
+            ) : (
+              <>
+                <FlatList
+                  data={users}
+                  keyExtractor={(item) => String(item.id)}
+                  style={styles.userList}
+                  contentContainerStyle={styles.userListContent}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[styles.userCard, selected?.id === item.id && styles.userCardSelected]}
+                      onPress={() => setSelected(item)}
+                    >
+                      <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{getInitials(item.username)}</Text>
+                      </View>
+                      <View style={styles.userCopy}>
+                        <Text style={styles.userName}>{item.username}</Text>
+                        <View style={styles.userBadge}>
+                          <Shield size={12} color={referenceColors.primary} strokeWidth={2.2} />
+                          <Text style={styles.userBadgeText}>{item.role}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  )}
+                />
+
+                <View style={styles.permissionsCard}>
+                  {selected && selected.permissions ? (
+                    <>
+                      <Text style={styles.permissionsTitle}>Permissions for {selected.username}</Text>
+                      {PERMISSION_LABELS.map(({ key, label }) => (
+                        <View key={key} style={styles.permissionRow}>
+                          <Text style={styles.permissionLabel}>{label}</Text>
+                          <Switch
+                            value={selected.permissions![key]}
+                            onValueChange={() => togglePermission(key)}
+                            trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                            thumbColor="#ffffff"
+                          />
+                        </View>
+                      ))}
+
+                      <TouchableOpacity style={[styles.saveButton, saving && styles.buttonDisabled]} onPress={() => void savePermissions()} disabled={saving}>
+                        {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveText}>Save</Text>}
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <Text style={styles.selectHint}>Select a user to manage permissions</Text>
+                  )}
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import * as Google from "expo-auth-session/providers/google";
-import * as WebBrowser from "expo-web-browser";
+import { useEffect, useState } from "react";
+import {
+  GoogleSignin,
+  isCancelledResponse,
+  isErrorWithCode,
+  isSuccessResponse,
+  statusCodes,
+} from "@react-native-google-signin/google-signin";
 import {
   ActivityIndicator,
   Keyboard,
@@ -18,6 +23,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Eye, EyeOff, Lock, Mail, Shield, User } from "lucide-react-native";
+import Constants from "expo-constants";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
@@ -25,11 +31,9 @@ import { listStoredAccounts, updateStoredAccountPassword } from "../../lib/accou
 import type { StoredAccountRecovery } from "../../lib/accounts";
 import { getPlatformGoogleClientId } from "../../lib/google";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
-
-WebBrowser.maybeCompleteAuthSession();
-
+ 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Login">;
-
+ 
 type InputRowProps = {
   label: string;
   value: string;
@@ -41,7 +45,7 @@ type InputRowProps = {
   keyboardType?: "default" | "email-address";
   onSubmitEditing?: () => void;
 };
-
+ 
 function InputRow({
   label,
   value,
@@ -54,7 +58,7 @@ function InputRow({
   onSubmitEditing,
 }: InputRowProps) {
   const Icon = icon === "mail" ? Mail : icon === "lock" ? Lock : User;
-
+ 
   return (
     <View style={styles.fieldBlock}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -82,18 +86,18 @@ function InputRow({
     </View>
   );
 }
-
+ 
 export default function LoginScreen() {
   const navigation = useNavigation<Nav>();
   const { login, continueWithGoogle, register } = useAuth();
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
-
+ 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
-
+ 
   const [regUsername, setRegUsername] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
@@ -102,7 +106,7 @@ export default function LoginScreen() {
   const [regSuccess, setRegSuccess] = useState("");
   const [regLoading, setRegLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-
+ 
   const [recoveryVisible, setRecoveryVisible] = useState(false);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryAccounts, setRecoveryAccounts] = useState<StoredAccountRecovery[]>([]);
@@ -113,32 +117,23 @@ export default function LoginScreen() {
   const [resettingPasswordFor, setResettingPasswordFor] = useState<string | null>(null);
   const [newRecoveryPassword, setNewRecoveryPassword] = useState("");
   const [confirmRecoveryPassword, setConfirmRecoveryPassword] = useState("");
-
+ 
   const googlePlatformClientId = getPlatformGoogleClientId();
-  const googleClientConfig = useMemo(
-    () => ({
-      clientId: googlePlatformClientId ?? "missing-google-client-id",
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim() || undefined,
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() || undefined,
-      androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim() || undefined,
-      selectAccount: true,
-    }),
-    [googlePlatformClientId],
-  );
-  const [googleRequest, googleResponse, promptGoogleAsync] = Google.useIdTokenAuthRequest(
-    googleClientConfig,
-    {
-      scheme: "irismobile",
-      path: "oauthredirect",
-    },
-  );
-
+  const isExpoGoRuntime = Boolean(Constants.expoGoConfig);
+ 
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim(),
+      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim(),
+    });
+  }, []);
+ 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
       setLoginError("Username and password are required");
       return;
     }
-
+ 
     setLoginLoading(true);
     setLoginError("");
     try {
@@ -149,7 +144,7 @@ export default function LoginScreen() {
       setLoginLoading(false);
     }
   };
-
+ 
   const handleRegister = async () => {
     if (!regUsername.trim() || !regEmail.trim() || !regPassword.trim()) {
       setRegError("Username, Gmail, and password are required");
@@ -163,7 +158,7 @@ export default function LoginScreen() {
       setRegError("Password must be at least 6 characters");
       return;
     }
-
+ 
     setRegLoading(true);
     setRegError("");
     setRegSuccess("");
@@ -176,59 +171,72 @@ export default function LoginScreen() {
       setRegLoading(false);
     }
   };
-
+ 
   const setGoogleError = (message: string) => {
     if (activeTab === "signin") {
       setLoginError(message);
       setRegError("");
       return;
     }
-
     setRegError(message);
     setLoginError("");
   };
 
-  useEffect(() => {
-    if (!googleResponse) {
-      return;
-    }
-
-    if (googleResponse.type === "cancel" || googleResponse.type === "dismiss") {
-      setGoogleLoading(false);
-      return;
-    }
-
-    if (googleResponse.type === "error") {
-      setGoogleLoading(false);
-      setGoogleError(googleResponse.error?.message ?? "Google sign-in failed");
-      return;
-    }
-
-    if (googleResponse.type !== "success") {
-      return;
-    }
-
-    const idToken = googleResponse.params.id_token || googleResponse.authentication?.idToken;
-    if (!idToken) {
-      setGoogleLoading(false);
-      setGoogleError("Google sign-in did not return an ID token");
-      return;
-    }
-
-    void (async () => {
-      try {
-        setLoginError("");
-        setRegError("");
-        setRegSuccess("");
-        await continueWithGoogle(idToken);
-      } catch (error) {
-        setGoogleError(error instanceof Error ? error.message : "Google sign-in failed");
-      } finally {
-        setGoogleLoading(false);
+  const getGoogleErrorMessage = (error: unknown): string => {
+    if (isErrorWithCode(error)) {
+      if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        return "Google Play Services is missing or outdated on this emulator. Update it and try again.";
       }
-    })();
-  }, [googleResponse]);
 
+      if (error.code === statusCodes.IN_PROGRESS) {
+        return "Google sign-in is already in progress.";
+      }
+
+      if (error.code === "10" || error.message.includes("DEVELOPER_ERROR")) {
+        return "Google Sign-In is not configured for this Android build yet. Add an Android OAuth client for package `com.iris.mobile` with the correct SHA-1 fingerprint in Google Cloud Console.";
+      }
+    }
+
+    return error instanceof Error ? error.message : "Google sign-in failed";
+  };
+ 
+  const handleGoogleAuth = async () => {
+    if (isExpoGoRuntime) {
+      setGoogleError("Google sign-in requires a native Android build. Open the app with `npx expo run:android` or install your EAS APK instead of Expo Go.");
+      return;
+    }
+
+    if (!googlePlatformClientId) {
+      setGoogleError("Google sign-in is missing the client ID for this app.");
+      return;
+    }
+ 
+    setLoginError("");
+    setRegError("");
+    setRegSuccess("");
+    setGoogleLoading(true);
+ 
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin.signIn();
+      if (isCancelledResponse(response)) {
+        return;
+      }
+
+      if (!isSuccessResponse(response)) {
+        throw new Error("Google sign-in did not complete.");
+      }
+
+      const idToken = response.data?.idToken;
+      if (!idToken) throw new Error("Google sign-in did not return an ID token");
+      await continueWithGoogle(idToken);
+    } catch (error) {
+      setGoogleError(getGoogleErrorMessage(error));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+ 
   const openRecovery = async () => {
     setRecoveryVisible(true);
     setRecoveryLoading(true);
@@ -246,7 +254,7 @@ export default function LoginScreen() {
       setRecoveryLoading(false);
     }
   };
-
+ 
   const closeRecovery = () => {
     setRecoveryVisible(false);
     setRecoveryQuery("");
@@ -257,7 +265,7 @@ export default function LoginScreen() {
     setNewRecoveryPassword("");
     setConfirmRecoveryPassword("");
   };
-
+ 
   const useRecoveredAccount = (account: StoredAccountRecovery) => {
     setActiveTab("signin");
     setUsername(account.username);
@@ -272,7 +280,7 @@ export default function LoginScreen() {
     }
     closeRecovery();
   };
-
+ 
   const startResetPassword = (usernameToReset: string) => {
     setResettingPasswordFor(usernameToReset);
     setNewRecoveryPassword("");
@@ -280,21 +288,20 @@ export default function LoginScreen() {
     setRecoveryError("");
     setRecoverySuccess("");
   };
-
+ 
   const saveRecoveredPassword = async (account: StoredAccountRecovery) => {
     if (newRecoveryPassword.length < 6) {
       setRecoveryError("New password must be at least 6 characters");
       return;
     }
-
+ 
     if (newRecoveryPassword !== confirmRecoveryPassword) {
       setRecoveryError("Passwords do not match");
       return;
     }
-
+ 
     try {
       const updatedAccount = await updateStoredAccountPassword(account.username, newRecoveryPassword);
-
       setRecoveryAccounts((current) =>
         current.map((item) => (item.username === account.username ? updatedAccount : item)),
       );
@@ -314,50 +321,17 @@ export default function LoginScreen() {
       setRecoveryError(error instanceof Error ? error.message : "Unable to update the saved password");
     }
   };
-
-  const handleGoogleAuth = async () => {
-    if (!googlePlatformClientId) {
-      setGoogleError("Google sign-in is missing the client ID for this app.");
-      return;
-    }
-
-    if (!googleRequest) {
-      setGoogleError("Google sign-in is still getting ready.");
-      return;
-    }
-
-    setLoginError("");
-    setRegError("");
-    setRegSuccess("");
-    setGoogleLoading(true);
-
-    try {
-      const result = await promptGoogleAsync();
-      if (result.type === "cancel" || result.type === "dismiss") {
-        setGoogleLoading(false);
-      } else if (result.type === "error") {
-        setGoogleLoading(false);
-        setGoogleError(result.error?.message ?? "Google sign-in failed");
-      }
-    } catch (error) {
-      setGoogleLoading(false);
-      setGoogleError(error instanceof Error ? error.message : "Google sign-in failed");
-    }
-  };
-
+ 
   const isSignIn = activeTab === "signin";
   const normalizedRecoveryQuery = recoveryQuery.trim().toLowerCase();
   const filteredRecoveryAccounts = recoveryAccounts.filter((account) => {
-    if (!normalizedRecoveryQuery) {
-      return true;
-    }
-
+    if (!normalizedRecoveryQuery) return true;
     return (
       account.username.toLowerCase().includes(normalizedRecoveryQuery) ||
       account.email.toLowerCase().includes(normalizedRecoveryQuery)
     );
   });
-
+ 
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -371,6 +345,7 @@ export default function LoginScreen() {
             style={styles.container}
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.brand}>
@@ -382,10 +357,10 @@ export default function LoginScreen() {
                 {isSignIn ? "Sign in to your account" : "Create your I.R.I.S account"}
               </Text>
             </View>
-
+ 
             <View style={styles.card}>
               {regSuccess && isSignIn ? <Text style={styles.success}>{regSuccess}</Text> : null}
-
+ 
               {isSignIn ? (
                 <>
                   <InputRow
@@ -409,7 +384,7 @@ export default function LoginScreen() {
                     <Text style={styles.inlineLink}>Forgot username or password?</Text>
                   </TouchableOpacity>
                   {loginError ? <Text style={styles.error}>{loginError}</Text> : null}
-
+ 
                   <TouchableOpacity
                     style={[styles.primaryButtonWrap, loginLoading && styles.buttonDisabled]}
                     onPress={() => void handleLogin()}
@@ -450,7 +425,7 @@ export default function LoginScreen() {
                   />
                   {regError ? <Text style={styles.error}>{regError}</Text> : null}
                   {regSuccess ? <Text style={styles.success}>{regSuccess}</Text> : null}
-
+ 
                   <TouchableOpacity
                     style={[styles.primaryButtonWrap, regLoading && styles.buttonDisabled]}
                     onPress={() => void handleRegister()}
@@ -463,13 +438,13 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 </>
               )}
-
+ 
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>Or continue with</Text>
                 <View style={styles.dividerLine} />
               </View>
-
+ 
               <TouchableOpacity
                 style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
                 onPress={() => void handleGoogleAuth()}
@@ -478,7 +453,7 @@ export default function LoginScreen() {
                 {googleLoading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.googleIcon}>G</Text>}
                 <Text style={styles.googleText}>{isSignIn ? "Sign in with Google" : "Sign up with Google"}</Text>
               </TouchableOpacity>
-
+ 
               <View style={styles.switchRow}>
                 <Text style={styles.switchText}>
                   {isSignIn ? "Don't have an account?" : "Already have an account?"}
@@ -487,7 +462,7 @@ export default function LoginScreen() {
                   <Text style={styles.switchLink}>{isSignIn ? "Sign up" : "Sign in"}</Text>
                 </TouchableOpacity>
               </View>
-
+ 
               <TouchableOpacity style={styles.footerLink} onPress={() => navigation.navigate("Setup")}>
                 <Text style={styles.footerLinkText}>Set up a device anytime</Text>
               </TouchableOpacity>
@@ -495,7 +470,7 @@ export default function LoginScreen() {
           </ScrollView>
         </View>
       </TouchableWithoutFeedback>
-
+ 
       <Modal visible={recoveryVisible} transparent animationType="fade" onRequestClose={closeRecovery}>
         <TouchableWithoutFeedback onPress={closeRecovery}>
           <View style={styles.modalOverlay}>
@@ -509,13 +484,14 @@ export default function LoginScreen() {
                   <ScrollView
                     contentContainerStyle={styles.modalScrollContent}
                     keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
                     showsVerticalScrollIndicator={false}
                   >
                     <Text style={styles.modalTitle}>Recover Account</Text>
                     <Text style={styles.modalSubtitle}>
                       Find any username saved on this phone, reveal the saved password, or update the saved password here.
                     </Text>
-
+ 
                     <View style={styles.recoverySearchShell}>
                       <User size={18} color="#94a3b8" strokeWidth={2.2} />
                       <TextInput
@@ -528,10 +504,10 @@ export default function LoginScreen() {
                         autoCorrect={false}
                       />
                     </View>
-
+ 
                     {recoveryError ? <Text style={styles.error}>{recoveryError}</Text> : null}
                     {recoverySuccess ? <Text style={styles.success}>{recoverySuccess}</Text> : null}
-
+ 
                     {recoveryLoading ? (
                       <View style={styles.recoveryLoading}>
                         <ActivityIndicator color={referenceColors.primary} />
@@ -555,7 +531,7 @@ export default function LoginScreen() {
                         {filteredRecoveryAccounts.map((account) => {
                           const showSavedPassword = revealedPasswordFor === account.username;
                           const showResetForm = resettingPasswordFor === account.username;
-
+ 
                           return (
                             <View key={account.username} style={styles.recoveryItem}>
                               <View style={styles.recoveryHeader}>
@@ -575,7 +551,7 @@ export default function LoginScreen() {
                                   </Text>
                                 </TouchableOpacity>
                               </View>
-
+ 
                               {account.provider === "google" ? (
                                 <View style={styles.googleRecoveryCard}>
                                   <Text style={styles.googleRecoveryText}>
@@ -594,7 +570,7 @@ export default function LoginScreen() {
                                       {showSavedPassword ? `Password: ${account.password}` : "Show saved password"}
                                     </Text>
                                   </TouchableOpacity>
-
+ 
                                   <TouchableOpacity
                                     style={styles.recoverySecondaryButton}
                                     onPress={() =>
@@ -607,7 +583,7 @@ export default function LoginScreen() {
                                   </TouchableOpacity>
                                 </View>
                               )}
-
+ 
                               {showResetForm && account.provider !== "google" ? (
                                 <View style={styles.resetCard}>
                                   <Text style={styles.resetTitle}>Update saved password on this phone</Text>
@@ -650,7 +626,7 @@ export default function LoginScreen() {
                         })}
                       </View>
                     )}
-
+ 
                     <TouchableOpacity style={styles.closeButton} onPress={closeRecovery}>
                       <Text style={styles.closeButtonText}>Close</Text>
                     </TouchableOpacity>
@@ -664,7 +640,7 @@ export default function LoginScreen() {
     </KeyboardAvoidingView>
   );
 }
-
+ 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1058,4 +1034,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
-});
+})

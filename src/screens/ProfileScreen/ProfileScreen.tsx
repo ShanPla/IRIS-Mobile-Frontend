@@ -2,12 +2,16 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -97,156 +101,169 @@ export default function ProfileScreen() {
   const secondaryCount = devices.length - primaryCount;
 
   return (
-    <View style={styles.container}>
-      <ReferenceBackdrop />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("DeviceList")}>
-          <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
-          <Text style={styles.backText}>Back to Devices</Text>
-        </TouchableOpacity>
-
-        <View style={styles.header}>
-          <Text style={styles.pageTitle}>Profile</Text>
-          <Text style={styles.pageSubtitle}>Manage your account preferences</Text>
-        </View>
-
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.username}>{username}</Text>
-            <Text style={styles.emailText}>{session?.email || "Email not linked"}</Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleText}>{session?.role?.replace(/_/g, " ") ?? "User"}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{primaryCount}</Text>
-            <Text style={styles.metricLabel}>Primary</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{secondaryCount}</Text>
-            <Text style={styles.metricLabel}>Secondary</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricValue}>{devices.length}</Text>
-            <Text style={styles.metricLabel}>Devices</Text>
-          </View>
-        </View>
-
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickAction}>
-            <User size={20} color={referenceColors.primary} strokeWidth={2.2} />
-            <View style={styles.quickCopy}>
-              <Text style={styles.quickTitle}>Account Settings</Text>
-              <Text style={styles.quickSubtitle}>Profile details</Text>
-            </View>
-            <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.quickAction}>
-            <KeyRound size={20} color={referenceColors.warning} strokeWidth={2.2} />
-            <View style={styles.quickCopy}>
-              <Text style={styles.quickTitle}>Change Password</Text>
-              <Text style={styles.quickSubtitle}>Update account access</Text>
-            </View>
-            <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate("DeviceList")}>
-            <Smartphone size={20} color={referenceColors.textSoft} strokeWidth={2.2} />
-            <View style={styles.quickCopy}>
-              <Text style={styles.quickTitle}>My Devices</Text>
-              <Text style={styles.quickSubtitle}>Return to device list</Text>
-            </View>
-            <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
-
-          <View style={styles.preferenceRow}>
-            <View style={styles.preferenceCopy}>
-              <Text style={styles.preferenceTitle}>Push Notifications</Text>
-              <Text style={styles.preferenceText}>Alerts for registered devices</Text>
-            </View>
-            <Switch
-              value={pushAlerts}
-              onValueChange={setPushAlerts}
-              trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-              thumbColor="#ffffff"
-            />
-          </View>
-
-          <View style={styles.preferenceRow}>
-            <View style={styles.preferenceCopy}>
-              <Text style={styles.preferenceTitle}>Sound Alerts</Text>
-              <Text style={styles.preferenceText}>Play alarm sounds on this phone</Text>
-            </View>
-            <Switch
-              value={soundAlerts}
-              onValueChange={setSoundAlerts}
-              trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-              thumbColor="#ffffff"
-            />
-          </View>
-
-          <View style={[styles.preferenceRow, styles.preferenceRowLast]}>
-            <View style={styles.preferenceCopy}>
-              <Text style={styles.preferenceTitle}>Email Digest</Text>
-              <Text style={styles.preferenceText}>Daily security summary</Text>
-            </View>
-            <Switch
-              value={emailDigest}
-              onValueChange={setEmailDigest}
-              trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-              thumbColor="#ffffff"
-            />
-          </View>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Change Password</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Current password"
-            placeholderTextColor="#94a3b8"
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            secureTextEntry
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="New password (min 6 chars)"
-            placeholderTextColor="#94a3b8"
-            value={newPassword}
-            onChangeText={setNewPassword}
-            secureTextEntry
-          />
-
-          {passwordSuccess ? <Text style={styles.success}>{passwordSuccess}</Text> : null}
-
-          <TouchableOpacity
-            style={[styles.primaryButton, changingPassword && styles.buttonDisabled]}
-            onPress={() => void handlePasswordChange()}
-            disabled={changingPassword}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <ReferenceBackdrop />
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           >
-            {changingPassword ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Change Password</Text>}
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("DeviceList")}>
+              <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
+              <Text style={styles.backText}>Back to Devices</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity style={styles.logoutCard} onPress={logout}>
-          <LogOut size={18} color={referenceColors.danger} strokeWidth={2.2} />
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
+            <View style={styles.header}>
+              <Text style={styles.pageTitle}>Profile</Text>
+              <Text style={styles.pageSubtitle}>Manage your account preferences</Text>
+            </View>
+
+            <View style={styles.profileCard}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials}</Text>
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.username}>{username}</Text>
+                <Text style={styles.emailText}>{session?.email || "Email not linked"}</Text>
+                <View style={styles.roleBadge}>
+                  <Text style={styles.roleText}>{session?.role?.replace(/_/g, " ") ?? "User"}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.metricsRow}>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricValue}>{primaryCount}</Text>
+                <Text style={styles.metricLabel}>Primary</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricValue}>{secondaryCount}</Text>
+                <Text style={styles.metricLabel}>Secondary</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricValue}>{devices.length}</Text>
+                <Text style={styles.metricLabel}>Devices</Text>
+              </View>
+            </View>
+
+            <View style={styles.quickActions}>
+              <TouchableOpacity style={styles.quickAction}>
+                <User size={20} color={referenceColors.primary} strokeWidth={2.2} />
+                <View style={styles.quickCopy}>
+                  <Text style={styles.quickTitle}>Account Settings</Text>
+                  <Text style={styles.quickSubtitle}>Profile details</Text>
+                </View>
+                <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.quickAction}>
+                <KeyRound size={20} color={referenceColors.warning} strokeWidth={2.2} />
+                <View style={styles.quickCopy}>
+                  <Text style={styles.quickTitle}>Change Password</Text>
+                  <Text style={styles.quickSubtitle}>Update account access</Text>
+                </View>
+                <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate("DeviceList")}>
+                <Smartphone size={20} color={referenceColors.textSoft} strokeWidth={2.2} />
+                <View style={styles.quickCopy}>
+                  <Text style={styles.quickTitle}>My Devices</Text>
+                  <Text style={styles.quickSubtitle}>Return to device list</Text>
+                </View>
+                <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Preferences</Text>
+
+              <View style={styles.preferenceRow}>
+                <View style={styles.preferenceCopy}>
+                  <Text style={styles.preferenceTitle}>Push Notifications</Text>
+                  <Text style={styles.preferenceText}>Alerts for registered devices</Text>
+                </View>
+                <Switch
+                  value={pushAlerts}
+                  onValueChange={setPushAlerts}
+                  trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                  thumbColor="#ffffff"
+                />
+              </View>
+
+              <View style={styles.preferenceRow}>
+                <View style={styles.preferenceCopy}>
+                  <Text style={styles.preferenceTitle}>Sound Alerts</Text>
+                  <Text style={styles.preferenceText}>Play alarm sounds on this phone</Text>
+                </View>
+                <Switch
+                  value={soundAlerts}
+                  onValueChange={setSoundAlerts}
+                  trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                  thumbColor="#ffffff"
+                />
+              </View>
+
+              <View style={[styles.preferenceRow, styles.preferenceRowLast]}>
+                <View style={styles.preferenceCopy}>
+                  <Text style={styles.preferenceTitle}>Email Digest</Text>
+                  <Text style={styles.preferenceText}>Daily security summary</Text>
+                </View>
+                <Switch
+                  value={emailDigest}
+                  onValueChange={setEmailDigest}
+                  trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                  thumbColor="#ffffff"
+                />
+              </View>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Change Password</Text>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Current password"
+                placeholderTextColor="#94a3b8"
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                secureTextEntry
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="New password (min 6 chars)"
+                placeholderTextColor="#94a3b8"
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry
+              />
+
+              {passwordSuccess ? <Text style={styles.success}>{passwordSuccess}</Text> : null}
+
+              <TouchableOpacity
+                style={[styles.primaryButton, changingPassword && styles.buttonDisabled]}
+                onPress={() => void handlePasswordChange()}
+                disabled={changingPassword}
+              >
+                {changingPassword ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Change Password</Text>}
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.logoutCard} onPress={logout}>
+              <LogOut size={18} color={referenceColors.danger} strokeWidth={2.2} />
+              <Text style={styles.logoutText}>Log Out</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 

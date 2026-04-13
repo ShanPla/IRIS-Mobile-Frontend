@@ -3,11 +3,15 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -330,132 +334,145 @@ export default function FacialRegistrationScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <ReferenceBackdrop />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <ReferenceBackdrop />
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+              <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
 
-        <View style={styles.header}>
-          <Text style={styles.title}>Facial Recognition</Text>
-          <Text style={styles.subtitle}>Register trusted faces for secure access</Text>
-        </View>
+            <View style={styles.header}>
+              <Text style={styles.title}>Facial Recognition</Text>
+              <Text style={styles.subtitle}>Register trusted faces for secure access</Text>
+            </View>
 
-        {success && phoneCaptured.length > 0 ? (
-          <View style={styles.completionCard}>
-            <Text style={styles.completionTitle}>Enrollment Complete</Text>
-            <Text style={styles.success}>{success}</Text>
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {success && phoneCaptured.length > 0 ? (
+              <View style={styles.completionCard}>
+                <Text style={styles.completionTitle}>Enrollment Complete</Text>
+                <Text style={styles.success}>{success}</Text>
+                {error ? <Text style={styles.error}>{error}</Text> : null}
 
-            <Text style={styles.completionSubtitle}>Captured Photos</Text>
-            <View style={styles.completionGrid}>
-              {phoneCaptured.map((photo) => (
-                <View key={photo.angle} style={styles.completionItem}>
-                  <Image source={{ uri: photo.uri }} style={styles.completionThumbnail} />
-                  <Text style={styles.completionAngle}>{photo.angle}</Text>
+                <Text style={styles.completionSubtitle}>Captured Photos</Text>
+                <View style={styles.completionGrid}>
+                  {phoneCaptured.map((photo) => (
+                    <View key={photo.angle} style={styles.completionItem}>
+                      <Image source={{ uri: photo.uri }} style={styles.completionThumbnail} />
+                      <Text style={styles.completionAngle}>{photo.angle}</Text>
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
 
-            <Text style={styles.completionHint}>
-              These photos have been sent to the Pi for face recognition training.
-            </Text>
+                <Text style={styles.completionHint}>
+                  These photos have been sent to the Pi for face recognition training.
+                </Text>
 
-            <TouchableOpacity style={styles.primaryButtonWrap} onPress={() => navigation.goBack()}>
-              <View style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Done</Text>
+                <TouchableOpacity style={styles.primaryButtonWrap} onPress={() => navigation.goBack()}>
+                  <View style={styles.primaryButton}>
+                    <Text style={styles.primaryButtonText}>Done</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryButton} onPress={resetEnrollment}>
+                  <Text style={styles.secondaryButtonText}>Register Another</Text>
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={resetEnrollment}>
-              <Text style={styles.secondaryButtonText}>Register Another</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <>
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryIcon}>
-                <ScanFace size={22} color={referenceColors.primary} strokeWidth={2.2} />
-              </View>
-              <View style={styles.summaryCopy}>
-                <Text style={styles.summaryTitle}>Add New Face</Text>
-                <Text style={styles.summaryText}>Capture 5 guided angles or upload a single portrait image.</Text>
-              </View>
-            </View>
+            ) : (
+              <>
+                <View style={styles.summaryCard}>
+                  <View style={styles.summaryIcon}>
+                    <ScanFace size={22} color={referenceColors.primary} strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.summaryCopy}>
+                    <Text style={styles.summaryTitle}>Add New Face</Text>
+                    <Text style={styles.summaryText}>Capture 5 guided angles or upload a single portrait image.</Text>
+                  </View>
+                </View>
 
-            <View style={styles.formCard}>
-              <Text style={styles.label}>Person&apos;s Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Steephen"
-                placeholderTextColor="#94a3b8"
-                value={name}
-                onChangeText={setName}
-              />
+                <View style={styles.formCard}>
+                  <Text style={styles.label}>Person&apos;s Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Steephen"
+                    placeholderTextColor="#94a3b8"
+                    value={name}
+                    onChangeText={setName}
+                  />
 
-              <View style={styles.modeRow}>
-                {([
-                  { key: "phone" as Mode, label: "Phone Camera", icon: Camera },
-                  { key: "upload" as Mode, label: "Upload Photo", icon: Upload },
-                ]).map((item) => {
-                  const Icon = item.icon;
-                  const active = mode === item.key;
-                  return (
-                    <TouchableOpacity
-                      key={item.key}
-                      style={[styles.modeTab, active && styles.modeTabActive]}
-                      onPress={() => {
-                        setMode(item.key);
-                        setError("");
-                        setSuccess("");
-                      }}
-                    >
-                      <Icon size={16} color={active ? "#ffffff" : referenceColors.textSoft} strokeWidth={2.2} />
-                      <Text style={[styles.modeText, active && styles.modeTextActive]}>{item.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-              {success ? <Text style={styles.success}>{success}</Text> : null}
-
-              {mode === "phone" ? (
-                <>
-                  <View style={styles.captureCard}>
-                    <Text style={styles.captureTitle}>Automatic Face Enrollment</Text>
-                    <Text style={styles.captureInstruction}>
-                      The camera will automatically capture 5 angles of your face. Just follow the on-screen prompts.
-                    </Text>
+                  <View style={styles.modeRow}>
+                    {([
+                      { key: "phone" as Mode, label: "Phone Camera", icon: Camera },
+                      { key: "upload" as Mode, label: "Upload Photo", icon: Upload },
+                    ]).map((item) => {
+                      const Icon = item.icon;
+                      const active = mode === item.key;
+                      return (
+                        <TouchableOpacity
+                          key={item.key}
+                          style={[styles.modeTab, active && styles.modeTabActive]}
+                          onPress={() => {
+                            setMode(item.key);
+                            setError("");
+                            setSuccess("");
+                          }}
+                        >
+                          <Icon size={16} color={active ? "#ffffff" : referenceColors.textSoft} strokeWidth={2.2} />
+                          <Text style={[styles.modeText, active && styles.modeTextActive]}>{item.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
 
-                  <TouchableOpacity style={styles.primaryButtonWrap} onPress={startPhoneEnroll}>
-                    <View style={styles.primaryButton}>
-                      <Text style={styles.primaryButtonText}>Start Face Enrollment</Text>
-                    </View>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" /> : null}
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  {success ? <Text style={styles.success}>{success}</Text> : null}
 
-                  <TouchableOpacity style={styles.secondaryButton} onPress={pickImage}>
-                    <Text style={styles.secondaryButtonText}>{imageUri ? "Change Image" : "Select Image"}</Text>
-                  </TouchableOpacity>
+                  {mode === "phone" ? (
+                    <>
+                      <View style={styles.captureCard}>
+                        <Text style={styles.captureTitle}>Automatic Face Enrollment</Text>
+                        <Text style={styles.captureInstruction}>
+                          The camera will automatically capture 5 angles of your face. Just follow the on-screen prompts.
+                        </Text>
+                      </View>
 
-                  <TouchableOpacity style={[styles.primaryButtonWrap, uploading && styles.buttonDisabled]} onPress={() => void handleUpload()} disabled={uploading}>
-                    <View style={styles.primaryButton}>
-                      {uploading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.primaryButtonText}>Upload & Register</Text>}
-                    </View>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </View>
+                      <TouchableOpacity style={styles.primaryButtonWrap} onPress={startPhoneEnroll}>
+                        <View style={styles.primaryButton}>
+                          <Text style={styles.primaryButtonText}>Start Face Enrollment</Text>
+                        </View>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" /> : null}
+
+                      <TouchableOpacity style={styles.secondaryButton} onPress={pickImage}>
+                        <Text style={styles.secondaryButtonText}>{imageUri ? "Change Image" : "Select Image"}</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity style={[styles.primaryButtonWrap, uploading && styles.buttonDisabled]} onPress={() => void handleUpload()} disabled={uploading}>
+                        <View style={styles.primaryButton}>
+                          {uploading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.primaryButtonText}>Upload & Register</Text>}
+                        </View>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
