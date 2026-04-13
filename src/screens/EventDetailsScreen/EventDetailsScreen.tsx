@@ -1,18 +1,21 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  View,
-  Text,
   Image,
   ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
+  View,
 } from "react-native";
-import { useRoute, useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
+import { AlertTriangle, ArrowLeft, CheckCircle2 } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
-import { buildPiUrl } from "../../lib/pi";
+import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
+import { buildPiUrl } from "../../lib/pi";
 import type { SecurityEvent } from "../../types/iris";
+import { cardShadow, referenceColors } from "../../theme/reference";
 
 type Route = RouteProp<RootStackParamList, "EventDetails">;
 
@@ -31,73 +34,88 @@ export default function EventDetailsScreen() {
 
   const getBadgeColor = (type: string) => {
     switch (type) {
-      case "authorized": return "#16a34a";
-      case "unknown": return "#dc2626";
-      case "possible_threat": return "#ea580c";
-      default: return "#64748b";
+      case "authorized":
+        return referenceColors.success;
+      case "unknown":
+        return referenceColors.danger;
+      case "possible_threat":
+        return referenceColors.warning;
+      default:
+        return referenceColors.textMuted;
     }
   };
 
   const getBadgeLabel = (type: string) => {
     switch (type) {
-      case "authorized": return "Authorized";
-      case "unknown": return "Intruder Detected";
-      case "possible_threat": return "Possible Threat";
-      default: return type;
+      case "authorized":
+        return "Authorized";
+      case "unknown":
+        return "Intruder Detected";
+      case "possible_threat":
+        return "Possible Threat";
+      default:
+        return type;
     }
   };
 
   const badgeColor = getBadgeColor(event.event_type);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+    <View style={styles.container}>
+      <ReferenceBackdrop />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Event Details</Text>
-        <View style={{ width: 40 }} />
-      </View>
 
-      {/* Snapshot */}
-      {snapshotUrl ? (
-        <Image source={{ uri: snapshotUrl }} style={styles.snapshot} resizeMode="contain" />
-      ) : (
-        <View style={styles.snapshotPlaceholder}>
-          <Text style={styles.placeholderText}>No snapshot</Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>Event Details</Text>
+          <Text style={styles.subtitle}>Review the captured event and metadata</Text>
         </View>
-      )}
 
-      {/* Badge */}
-      <View style={styles.badgeRow}>
-        <View style={[styles.badge, { backgroundColor: `${badgeColor}20` }]}>
-          <Text style={[styles.badgeText, { color: badgeColor }]}>{getBadgeLabel(event.event_type)}</Text>
-        </View>
-        {event.alarm_triggered && (
-          <View style={[styles.badge, { backgroundColor: "#dc262620" }]}>
-            <Text style={[styles.badgeText, { color: "#dc2626" }]}>Alarm Triggered</Text>
+        {snapshotUrl ? (
+          <Image source={{ uri: snapshotUrl }} style={styles.snapshot} resizeMode="cover" />
+        ) : (
+          <View style={styles.snapshotPlaceholder}>
+            <Text style={styles.placeholderText}>No snapshot</Text>
           </View>
         )}
-      </View>
 
-      {/* Details */}
-      <View style={styles.details}>
-        <DetailRow label="Event ID" value={String(event.id)} />
-        <DetailRow label="Type" value={getBadgeLabel(event.event_type)} />
-        <DetailRow label="Matched Name" value={event.matched_name ?? "-"} />
-        <DetailRow label="Timestamp" value={new Date(event.timestamp).toLocaleString()} />
-        <DetailRow label="Mode" value={event.mode ?? "-"} />
-        <DetailRow label="Alarm Triggered" value={event.alarm_triggered ? "Yes" : "No"} />
-        <DetailRow label="Notification Sent" value={event.notification_sent ? "Yes" : "No"} />
-        {event.notes ? <DetailRow label="Notes" value={event.notes} /> : null}
-      </View>
-    </ScrollView>
+        <View style={styles.badgeRow}>
+          <View style={[styles.badge, { backgroundColor: `${badgeColor}18`, borderColor: `${badgeColor}44` }]}>
+            {event.event_type === "authorized" ? (
+              <CheckCircle2 size={14} color={badgeColor} strokeWidth={2.2} />
+            ) : (
+              <AlertTriangle size={14} color={badgeColor} strokeWidth={2.2} />
+            )}
+            <Text style={[styles.badgeText, { color: badgeColor }]}>{getBadgeLabel(event.event_type)}</Text>
+          </View>
+          {event.alarm_triggered ? (
+            <View style={styles.alarmBadge}>
+              <Text style={styles.alarmBadgeText}>Alarm Triggered</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.detailsCard}>
+          <DetailRow label="Event ID" value={String(event.id)} />
+          <DetailRow label="Type" value={getBadgeLabel(event.event_type)} />
+          <DetailRow label="Matched Name" value={event.matched_name ?? "-"} />
+          <DetailRow label="Timestamp" value={new Date(event.timestamp).toLocaleString()} />
+          <DetailRow label="Mode" value={event.mode ?? "-"} />
+          <DetailRow label="Alarm Triggered" value={event.alarm_triggered ? "Yes" : "No"} />
+          <DetailRow label="Notification Sent" value={event.notification_sent ? "Yes" : "No"} />
+          {event.notes ? <DetailRow label="Notes" value={event.notes} isLast /> : null}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, isLast = false }: { label: string; value: string; isLast?: boolean }) {
   return (
-    <View style={styles.detailRow}>
+    <View style={[styles.detailRow, isLast && styles.detailRowLast]}>
       <Text style={styles.detailLabel}>{label}</Text>
       <Text style={styles.detailValue}>{value}</Text>
     </View>
@@ -105,55 +123,129 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { paddingBottom: 40 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
+  container: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
   },
-  backText: { color: "#2563eb", fontSize: 15 },
-  title: { color: "#0f172a", fontSize: 18, fontWeight: "700" },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 18,
+  },
+  backText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  header: {
+    marginBottom: 20,
+  },
+  title: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  subtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    marginTop: 4,
+  },
   snapshot: {
-    width: "90%",
-    height: 280,
-    alignSelf: "center",
+    width: "100%",
+    height: 300,
+    borderRadius: 28,
     backgroundColor: "#0f172a",
-    borderRadius: 16,
   },
   snapshotPlaceholder: {
-    width: "90%",
-    height: 200,
-    alignSelf: "center",
+    width: "100%",
+    height: 240,
+    borderRadius: 28,
     backgroundColor: "#e2e8f0",
-    borderRadius: 16,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
   },
-  placeholderText: { color: "#64748b", fontSize: 13 },
-  badgeRow: { flexDirection: "row", gap: 8, paddingHorizontal: 20, marginTop: 16 },
-  badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
-  badgeText: { fontSize: 13, fontWeight: "600" },
-  details: {
-    marginHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 40,
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+  placeholderText: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+  },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 18,
+  },
+  badge: {
+    minHeight: 34,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  alarmBadge: {
+    minHeight: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  alarmBadgeText: {
+    color: referenceColors.danger,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  detailsCard: {
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
     paddingHorizontal: 16,
+    ...cardShadow,
   },
   detailRow: {
+    minHeight: 54,
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 12,
+    alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
+    gap: 12,
   },
-  detailLabel: { color: "#64748b", fontSize: 14 },
-  detailValue: { color: "#0f172a", fontSize: 14, fontWeight: "500" },
+  detailRowLast: {
+    borderBottomWidth: 0,
+  },
+  detailLabel: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    flex: 1,
+  },
+  detailValue: {
+    color: referenceColors.text,
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
+    textAlign: "right",
+  },
 });

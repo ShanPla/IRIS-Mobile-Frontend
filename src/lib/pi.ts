@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { PermissionSet, UserResponse } from "../types/iris";
 
 const LEGACY_DEVICES_KEY = "securewatch_devices_v1";
 const LEGACY_ACTIVE_KEY = "securewatch_active_device_id_v1";
@@ -30,9 +31,62 @@ export interface PairResponse {
   device_name: string;
 }
 
+interface DeviceAuthResult {
+  accessToken: string;
+  user: UserResponse;
+  device: PiDevice;
+  accountId?: string;
+}
+
+interface GoogleDeviceAuthResponse {
+  access_token: string;
+  token_type: string;
+  username: string;
+  email: string;
+  role: string;
+}
+
+interface GoogleDeviceAuthResult {
+  accessToken: string;
+  username: string;
+  email: string;
+  role: string;
+  device: PiDevice;
+  accountId?: string;
+}
+
+export interface DeviceInviteResult {
+  invite_code: string;
+  device_id: string;
+  device_name: string;
+  expires_at: string;
+  permissions: PermissionSet;
+}
+
+interface DecodedDeviceInvite {
+  device_id: string;
+  device_name?: string;
+  device_url: string;
+  device_ip?: string | null;
+  invited_username: string;
+  exp?: number;
+}
+
+interface RedeemDeviceInviteResult {
+  access_token: string;
+  token_type: string;
+  device_id: string;
+  device_name: string;
+  device_url: string;
+  device_ip?: string | null;
+  access_role: "secondary";
+}
+
 const NGROK_HEADERS: HeadersInit = {
   "ngrok-skip-browser-warning": "true",
 };
+
+const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function authHeaders(token: string, extra?: HeadersInit): HeadersInit {
   return {
@@ -53,6 +107,107 @@ function devicesKey(accountId?: string): string {
 
 function activeKey(accountId?: string): string {
   return `${ACTIVE_KEY_PREFIX}${normalizeAccountId(accountId)}`;
+}
+
+function decodeBase64Url(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const remainder = normalized.length % 4;
+  const padded = remainder === 0 ? normalized : normalized + "=".repeat(4 - remainder);
+  let output = "";
+  let buffer = 0;
+  let bits = 0;
+
+  for (const char of padded) {
+    if (char === "=") {
+      break;
+    }
+
+    const index = BASE64_CHARS.indexOf(char);
+    if (index < 0) {
+      continue;
+    }
+
+    buffer = (buffer << 6) | index;
+    bits += 6;
+
+    if (bits >= 8) {
+      bits -= 8;
+      output += String.fromCharCode((buffer >> bits) & 0xff);
+    }
+  }
+
+  return output;
+}
+
+export function parseDeviceInviteCode(inviteCode: string): DecodedDeviceInvite {
+  const parts = inviteCode.trim().split(".");
+  if (parts.length !== 3 || !parts[1]) {
+    throw new Error("Invalid invite code");
+  }
+
+  try {
+    return JSON.parse(decodeBase64Url(parts[1])) as DecodedDeviceInvite;
+  } catch {
+    throw new Error("Invite code could not be read");
+  }
+}
+
+function buildScopeList(...accountIds: Array<string | undefined>): Array<string | undefined> {
+  const seen = new Set<string>();
+  const scopes: Array<string | undefined> = [];
+
+  for (const accountId of accountIds) {
+    const normalized = normalizeAccountId(accountId);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    scopes.push(accountId);
+  }
+
+  return scopes;
+}
+
+async function parseErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const data = (await res.json()) as { detail?: string };
+      if (data.detail) return data.detail;
+    }
+
+    const text = (await res.text()).trim();
+    if (text) return text;
+  } catch {
+    // Ignore parsing failures and use the fallback.
+  }
+
+  return fallback;
+}
+
+async function getCandidateDevices(...accountIds: Array<string | undefined>): Promise<Array<{ accountId?: string; device: PiDevice }>> {
+  const seen = new Set<string>();
+  const candidates: Array<{ accountId?: string; device: PiDevice }> = [];
+
+  for (const accountId of buildScopeList(...accountIds)) {
+    const devices = await getDevices(accountId);
+    if (devices.length === 0) continue;
+
+    const activeId = await AsyncStorage.getItem(activeKey(accountId));
+    const ordered = activeId
+      ? [
+          ...devices.filter((device) => device.deviceId === activeId),
+          ...devices.filter((device) => device.deviceId !== activeId),
+        ]
+      : devices;
+
+    for (const device of ordered) {
+      const key = `${normalizeAccountId(accountId)}:${device.deviceId}:${device.url}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({ accountId, device });
+    }
+  }
+
+  return candidates;
 }
 
 async function migrateLegacyDevices(accountId?: string): Promise<PiDevice[]> {
@@ -157,6 +312,76 @@ export async function removeDevice(deviceId: string, accountId?: string): Promis
   }
 }
 
+export async function createTrustedUserInvite(
+  username: string,
+  permissions: PermissionSet,
+  accountId?: string,
+): Promise<DeviceInviteResult> {
+  return piPost<DeviceInviteResult>(
+    "/api/auth/device-invites",
+    {
+      username,
+      ...permissions,
+    },
+    accountId,
+  );
+}
+
+export async function redeemTrustedUserInvite(
+  deviceId: string,
+  inviteCode: string,
+  username: string,
+  password: string,
+  accountId?: string,
+): Promise<PiDevice> {
+  const decoded = parseDeviceInviteCode(inviteCode);
+
+  if (!decoded.device_url) {
+    throw new Error("Invite code is missing device connection details");
+  }
+  if (decoded.device_id !== deviceId.trim()) {
+    throw new Error("Device code does not match this invite code");
+  }
+  if (decoded.invited_username.toLowerCase() !== username.trim().toLowerCase()) {
+    throw new Error("Invite code was created for a different username");
+  }
+
+  const response = await fetch(`${decoded.device_url}/api/auth/device-invites/redeem`, {
+    method: "POST",
+    headers: {
+      ...NGROK_HEADERS,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      device_id: deviceId.trim(),
+      invite_code: inviteCode.trim(),
+      username: username.trim(),
+      password,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await parseErrorMessage(response, `Invite redemption failed (${response.status}).`);
+    throw new Error(message);
+  }
+
+  const data = (await response.json()) as RedeemDeviceInviteResult;
+  const sharedDevice: PiDevice = {
+    deviceId: data.device_id,
+    name: data.device_name,
+    url: data.device_url,
+    token: data.access_token,
+    addedAt: new Date().toISOString(),
+    accessRole: "secondary",
+    deviceIp: data.device_ip ?? decoded.device_ip ?? "",
+    primaryEmail: "",
+  };
+
+  await upsertDevice(sharedDevice, accountId);
+  await setActiveDevice(sharedDevice.deviceId, accountId);
+  return sharedDevice;
+}
+
 export async function piGet<T>(path: string, accountId?: string): Promise<T> {
   const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
@@ -183,6 +408,186 @@ async function updateDeviceToken(deviceId: string, token: string, accountId?: st
     devices[idx] = { ...devices[idx], token };
     await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(devices));
   }
+}
+
+async function upsertDevice(device: PiDevice, accountId?: string): Promise<void> {
+  const devices = await getDevices(accountId);
+  const index = devices.findIndex((existing) => existing.deviceId === device.deviceId);
+  if (index >= 0) {
+    devices[index] = {
+      ...devices[index],
+      ...device,
+    };
+  } else {
+    devices.push(device);
+  }
+
+  await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(devices));
+}
+
+export async function registerDeviceAccount(
+  username: string,
+  password: string,
+  preferredAccountId?: string,
+): Promise<void> {
+  const candidates = await getCandidateDevices(preferredAccountId, username, undefined);
+  if (candidates.length === 0) {
+    throw new Error("Add a device on the Setup screen before creating an account.");
+  }
+
+  let lastError = "Unable to create the account on any configured device.";
+
+  for (const candidate of candidates) {
+    try {
+      const res = await fetch(`${candidate.device.url}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          ...NGROK_HEADERS,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (res.ok) return;
+
+      lastError = await parseErrorMessage(res, `Registration failed (${res.status}).`);
+      if (res.status < 500) {
+        throw new Error(lastError);
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : lastError;
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+export async function loginDeviceAccount(
+  username: string,
+  password: string,
+  preferredAccountId?: string,
+): Promise<DeviceAuthResult> {
+  const candidates = await getCandidateDevices(preferredAccountId, username, undefined);
+  if (candidates.length === 0) {
+    throw new Error("Add a device on the Setup screen before signing in.");
+  }
+
+  let lastError = "Invalid username or password";
+
+  for (const candidate of candidates) {
+    try {
+      const loginRes = await fetch(`${candidate.device.url}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          ...NGROK_HEADERS,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ username, password }).toString(),
+      });
+
+      if (!loginRes.ok) {
+        lastError = await parseErrorMessage(loginRes, `Device login failed (${loginRes.status}).`);
+        if (loginRes.status === 401 || loginRes.status === 400) {
+          continue;
+        }
+        throw new Error(lastError);
+      }
+
+      const data = (await loginRes.json()) as { access_token: string };
+      await updateDeviceToken(candidate.device.deviceId, data.access_token, candidate.accountId);
+
+      const meRes = await fetch(`${candidate.device.url}/api/auth/me`, {
+        headers: authHeaders(data.access_token),
+      });
+      if (!meRes.ok) {
+        lastError = await parseErrorMessage(meRes, `Failed to load account details (${meRes.status}).`);
+        throw new Error(lastError);
+      }
+
+      const user = (await meRes.json()) as UserResponse;
+      return {
+        accessToken: data.access_token,
+        user,
+        device: candidate.device,
+        accountId: candidate.accountId,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : lastError;
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+export async function loginDeviceWithGoogle(
+  idToken: string,
+  preferredAccountId?: string,
+): Promise<GoogleDeviceAuthResult> {
+  const candidates = await getCandidateDevices(preferredAccountId, undefined);
+  if (candidates.length === 0) {
+    throw new Error("Add a device on the Setup screen before using Google sign in.");
+  }
+
+  let lastError = "Google sign-in failed";
+
+  for (const candidate of candidates) {
+    try {
+      const response = await fetch(`${candidate.device.url}/api/auth/google`, {
+        method: "POST",
+        headers: {
+          ...NGROK_HEADERS,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id_token: idToken.trim() }),
+      });
+
+      if (!response.ok) {
+        lastError = await parseErrorMessage(response, `Google sign-in failed (${response.status}).`);
+        continue;
+      }
+
+      const data = (await response.json()) as GoogleDeviceAuthResponse;
+      await updateDeviceToken(candidate.device.deviceId, data.access_token, candidate.accountId);
+
+      return {
+        accessToken: data.access_token,
+        username: data.username,
+        email: data.email,
+        role: data.role,
+        device: candidate.device,
+        accountId: candidate.accountId,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : lastError;
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+export async function transferDevices(fromAccountId: string | undefined, toAccountId: string | undefined): Promise<void> {
+  if (normalizeAccountId(fromAccountId) === normalizeAccountId(toAccountId)) return;
+
+  const sourceDevices = await getDevices(fromAccountId);
+  if (sourceDevices.length === 0) return;
+
+  const destinationDevices = await getDevices(toAccountId);
+  const merged = new Map(destinationDevices.map((device) => [device.deviceId, device]));
+
+  for (const device of sourceDevices) {
+    const existing = merged.get(device.deviceId);
+    merged.set(device.deviceId, { ...existing, ...device });
+  }
+
+  await AsyncStorage.setItem(devicesKey(toAccountId), JSON.stringify([...merged.values()]));
+
+  const sourceActive = await AsyncStorage.getItem(activeKey(fromAccountId));
+  if (sourceActive) {
+    await AsyncStorage.setItem(activeKey(toAccountId), sourceActive);
+  }
+
+  await AsyncStorage.removeItem(devicesKey(fromAccountId));
+  await AsyncStorage.removeItem(activeKey(fromAccountId));
 }
 
 export async function ensureDeviceAuth(username: string, password: string, accountId?: string): Promise<void> {

@@ -1,14 +1,14 @@
-import { View, Text, LogBox, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, LogBox, StyleSheet } from "react-native";
 
 LogBox.ignoreLogs(["The action 'GO_BACK' was not handled"]);
-import { NavigationContainer, useNavigation } from "@react-navigation/native";
+import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { useEffect } from "react";
 import * as NavigationBar from "expo-navigation-bar";
 import * as Notifications from "expo-notifications";
+import { Activity, Home, ScanFace, Settings, Users, Video } from "lucide-react-native";
 
 import SetupScreen from "./src/screens/SetupScreen/SetupScreen";
 import LoginScreen from "./src/screens/LoginScreen/LoginScreen";
@@ -23,6 +23,7 @@ import ProfileScreen from "./src/screens/ProfileScreen/ProfileScreen";
 import AddCameraScreen from "./src/screens/AddCameraScreen/AddCameraScreen";
 import LiveFeedScreen from "./src/screens/LiveFeedScreen/LiveFeedScreen";
 import AdminScreen from "./src/screens/AdminScreen/AdminScreen";
+import { referenceColors } from "./src/theme/reference";
 
 export type RootStackParamList = {
   Setup: undefined;
@@ -51,87 +52,74 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
-  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-
-  const renderTabIcon = (label: string) => ({ color, focused }: { color: string; focused: boolean }) => (
+  const renderTabIcon = (Icon: typeof Home) => ({ color, focused }: { color: string; focused: boolean }) => (
     <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
-      <Text style={[styles.tabIconText, { color }]}>{label}</Text>
+      <Icon size={18} color={color} strokeWidth={2.2} />
     </View>
   );
 
   return (
     <Tab.Navigator
       screenOptions={{
-        headerShown: true,
-        headerTransparent: true,
-        headerTitle: "",
-        headerShadowVisible: false,
-        headerLeft: () => (
-          <TouchableOpacity style={styles.headerPill} onPress={() => rootNavigation.navigate("DeviceList")}>
-            <Text style={styles.headerPillText}>{"< Devices"}</Text>
-          </TouchableOpacity>
-        ),
-        headerRight: () => (
-          <TouchableOpacity style={styles.headerPill} onPress={() => rootNavigation.navigate("Profile")}>
-            <Text style={styles.headerPillText}>Profile</Text>
-          </TouchableOpacity>
-        ),
+        headerShown: false,
         tabBarStyle: {
           position: "absolute",
           left: 16,
           right: 16,
           bottom: 16,
-          height: 68,
-          paddingTop: 8,
-          paddingBottom: 8,
-          backgroundColor: "rgba(255,255,255,0.94)",
+          height: 76,
+          paddingTop: 10,
+          paddingBottom: 10,
+          backgroundColor: "rgba(255,255,255,0.82)",
           borderTopWidth: 0,
-          borderRadius: 24,
+          borderRadius: 26,
           borderWidth: 1,
-          borderColor: "#dbe3ef",
-          elevation: 12,
-          shadowColor: "#2563eb",
+          borderColor: "rgba(226,232,240,0.7)",
+          elevation: 10,
+          shadowColor: "#0f172a",
           shadowOffset: { width: 0, height: 10 },
           shadowOpacity: 0.12,
-          shadowRadius: 18,
+          shadowRadius: 20,
         },
         tabBarItemStyle: {
           borderRadius: 18,
+          marginHorizontal: 2,
         },
-        tabBarActiveTintColor: "#2563eb",
-        tabBarInactiveTintColor: "#64748b",
-        tabBarLabelStyle: { fontSize: 11, marginTop: 2, fontWeight: "600" },
+        tabBarActiveTintColor: referenceColors.primary,
+        tabBarInactiveTintColor: referenceColors.textMuted,
+        tabBarLabelStyle: { fontSize: 10, marginTop: 2, fontWeight: "600" },
+        tabBarShowLabel: true,
       }}
     >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ tabBarLabel: "Home", tabBarIcon: renderTabIcon("H") }}
+        options={{ tabBarLabel: "Home", tabBarIcon: renderTabIcon(Home) }}
       />
       <Tab.Screen
         name="Events"
         component={LogsScreen}
-        options={{ tabBarLabel: "Events", tabBarIcon: renderTabIcon("E") }}
+        options={{ tabBarLabel: "Events", tabBarIcon: renderTabIcon(Activity) }}
       />
       <Tab.Screen
         name="Live"
         component={LiveFeedScreen}
-        options={{ tabBarLabel: "Live", tabBarIcon: renderTabIcon("L") }}
+        options={{ tabBarLabel: "Live", tabBarIcon: renderTabIcon(Video) }}
       />
       <Tab.Screen
         name="Faces"
         component={FacialRegistrationScreen}
-        options={{ tabBarLabel: "Faces", tabBarIcon: renderTabIcon("F") }}
+        options={{ tabBarLabel: "Faces", tabBarIcon: renderTabIcon(ScanFace) }}
       />
       <Tab.Screen
         name="Settings"
         component={SettingsScreen}
-        options={{ tabBarLabel: "Settings", tabBarIcon: renderTabIcon("S") }}
+        options={{ tabBarLabel: "Settings", tabBarIcon: renderTabIcon(Settings) }}
       />
       <Tab.Screen
         name="SharedUsers"
         component={TrustedFacesScreen}
-        options={{ tabBarLabel: "Shared", tabBarIcon: renderTabIcon("U") }}
+        options={{ tabBarLabel: "Users", tabBarIcon: renderTabIcon(Users) }}
       />
     </Tab.Navigator>
   );
@@ -158,9 +146,9 @@ function RootNavigator() {
   
   if (bootstrapping) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#f8fafc", justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ color: "#2563eb", fontSize: 22, fontWeight: "800" }}>SecureWatch</Text>
-        <Text style={{ color: "#64748b", marginTop: 8 }}>Loading...</Text>
+      <View style={{ flex: 1, backgroundColor: referenceColors.background, justifyContent: "center", alignItems: "center" }}>
+        <Text style={{ color: referenceColors.primary, fontSize: 22, fontWeight: "800" }}>I.R.I.S</Text>
+        <Text style={{ color: referenceColors.textMuted, marginTop: 8 }}>Loading...</Text>
       </View>
     );
   }
@@ -202,31 +190,13 @@ export default function App() {
 
 const styles = StyleSheet.create({
   tabIcon: {
-    width: 28,
-    height: 24,
+    width: 34,
+    height: 28,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
   },
   tabIconActive: {
-    backgroundColor: "#dbeafe",
-  },
-  tabIconText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  headerPill: {
-    marginHorizontal: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  headerPillText: {
-    color: "#2563eb",
-    fontSize: 13,
-    fontWeight: "800",
+    backgroundColor: "rgba(219,234,254,0.82)",
   },
 });

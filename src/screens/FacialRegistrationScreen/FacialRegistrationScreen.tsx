@@ -1,20 +1,23 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Image,
-  ActivityIndicator,
-  Dimensions,
+  View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation } from "@react-navigation/native";
+import { ArrowLeft, Camera, ScanFace, Upload } from "lucide-react-native";
+import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { piPostForm } from "../../lib/pi";
 import type { FaceProfile } from "../../types/iris";
+import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const OVAL_W = SCREEN_WIDTH * 0.55;
@@ -35,7 +38,6 @@ export default function FacialRegistrationScreen() {
   const [name, setName] = useState("");
   const [mode, setMode] = useState<Mode>("phone");
 
-  // Phone camera state
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [phoneStep, setPhoneStep] = useState(0);
@@ -46,26 +48,25 @@ export default function FacialRegistrationScreen() {
   const [cameraReady, setCameraReady] = useState(false);
   const [captureFlash, setCaptureFlash] = useState(false);
 
-  // Refs to avoid stale closures in the auto-capture effect
   const phoneStepRef = useRef(0);
   const capturedRef = useRef<Array<{ angle: string; uri: string }>>([]);
   const capturingRef = useRef(false);
   const cancelledRef = useRef(false);
 
-  // Upload mode state
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Keep refs in sync with state
-  useEffect(() => { phoneStepRef.current = phoneStep; }, [phoneStep]);
-
-  // ── Auto-capture sequence ─────────────────────────────────────────
+  useEffect(() => {
+    phoneStepRef.current = phoneStep;
+  }, [phoneStep]);
 
   const startPhoneEnroll = () => {
-    if (!name.trim()) { setError("Name is required"); return; }
+    if (!name.trim()) {
+      setError("Name is required");
+      return;
+    }
     setError("");
     setSuccess("");
     setPhoneStep(0);
@@ -78,7 +79,6 @@ export default function FacialRegistrationScreen() {
     setPhoneCameraActive(true);
   };
 
-  // Auto-capture: runs automatically when camera is ready and step changes
   useEffect(() => {
     if (!phoneCameraActive || !cameraReady) return;
 
@@ -86,12 +86,10 @@ export default function FacialRegistrationScreen() {
     let active = true;
 
     const runCapture = async () => {
-      // Wait 1.5s for user to read the instruction and position
       await sleep(1500);
       if (!active || cancelledRef.current) return;
 
-      // 3-second countdown
-      for (let i = 3; i > 0; i--) {
+      for (let i = 3; i > 0; i -= 1) {
         if (!active || cancelledRef.current) return;
         setCountdown(i);
         await sleep(1000);
@@ -99,12 +97,10 @@ export default function FacialRegistrationScreen() {
       if (!active || cancelledRef.current) return;
       setCountdown(null);
 
-      // Take the photo
       if (!cameraRef.current || capturingRef.current) return;
       capturingRef.current = true;
 
       try {
-        // Flash effect
         setCaptureFlash(true);
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.85,
@@ -126,13 +122,10 @@ export default function FacialRegistrationScreen() {
         setPhoneCaptured(updated);
 
         if (step < PHONE_ANGLES.length - 1) {
-          // Advance to next angle
           const next = step + 1;
           phoneStepRef.current = next;
           setPhoneStep(next);
-          // The effect re-runs due to phoneStep changing
         } else {
-          // All done; upload.
           setPhoneCameraActive(false);
           void uploadPhonePhotos(updated);
         }
@@ -149,7 +142,7 @@ export default function FacialRegistrationScreen() {
     return () => {
       active = false;
     };
-  }, [phoneCameraActive, cameraReady, phoneStep]);
+  }, [cameraReady, phoneCameraActive, phoneStep]);
 
   const uploadPhonePhotos = async (photos: Array<{ angle: string; uri: string }>) => {
     setPhoneUploading(true);
@@ -167,7 +160,7 @@ export default function FacialRegistrationScreen() {
         } as unknown as Blob);
 
         await piPostForm<FaceProfile>("/api/faces/", formData);
-        uploaded++;
+        uploaded += 1;
       }
       setSuccess(`Face registered! ${uploaded}/${photos.length} angles uploaded.`);
     } catch (e) {
@@ -197,8 +190,6 @@ export default function FacialRegistrationScreen() {
     capturedRef.current = [];
   };
 
-  // ── Upload mode methods ───────────────────────────────────────────
-
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",
@@ -211,8 +202,14 @@ export default function FacialRegistrationScreen() {
   };
 
   const handleUpload = async () => {
-    if (!name.trim()) { setError("Name is required"); return; }
-    if (!imageUri) { setError("Select an image first"); return; }
+    if (!name.trim()) {
+      setError("Name is required");
+      return;
+    }
+    if (!imageUri) {
+      setError("Select an image first");
+      return;
+    }
     setUploading(true);
     setError("");
     try {
@@ -235,19 +232,22 @@ export default function FacialRegistrationScreen() {
     }
   };
 
-  // ── Phone camera fullscreen UI ────────────────────────────────────
-
   if (phoneCameraActive) {
     if (!permission?.granted) {
       return (
         <View style={styles.centered}>
-          <Text style={styles.permissionText}>Camera permission is required for face enrollment.</Text>
-          <TouchableOpacity style={styles.button} onPress={requestPermission}>
-            <Text style={styles.buttonText}>Grant Camera Permission</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton} onPress={cancelPhoneEnroll}>
-            <Text style={styles.secondaryButtonText}>Cancel</Text>
-          </TouchableOpacity>
+          <ReferenceBackdrop />
+          <View style={styles.centerCard}>
+            <Text style={styles.permissionText}>Camera permission is required for face enrollment.</Text>
+            <TouchableOpacity style={styles.primaryButtonWrap} onPress={() => void requestPermission()}>
+              <View style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>Grant Camera Permission</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} onPress={cancelPhoneEnroll}>
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       );
     }
@@ -257,34 +257,22 @@ export default function FacialRegistrationScreen() {
 
     return (
       <View style={styles.cameraContainer}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing="front"
-          mode="picture"
-          onCameraReady={() => setCameraReady(true)}
-        />
+        <CameraView ref={cameraRef} style={styles.camera} facing="front" mode="picture" onCameraReady={() => setCameraReady(true)} />
 
-        {/* Oval face guide overlay */}
         <View style={styles.overlayContainer} pointerEvents="box-none">
           <View style={styles.overlayTop} />
           <View style={styles.overlayMiddle}>
             <View style={styles.overlaySide} />
             <View style={styles.ovalCutout}>
-              <View style={[
-                styles.ovalBorder,
-                countdown !== null && countdown <= 1 && styles.ovalBorderReady,
-              ]} />
+              <View style={[styles.ovalBorder, countdown !== null && countdown <= 1 && styles.ovalBorderReady]} />
             </View>
             <View style={styles.overlaySide} />
           </View>
           <View style={styles.overlayBottom} />
         </View>
 
-        {/* Flash overlay on capture */}
-        {captureFlash && <View style={styles.flashOverlay} />}
+        {captureFlash ? <View style={styles.flashOverlay} /> : null}
 
-        {/* Top status bar */}
         <View style={styles.cameraTopBar}>
           <TouchableOpacity onPress={cancelPhoneEnroll}>
             <Text style={styles.cancelText}>Cancel</Text>
@@ -293,268 +281,446 @@ export default function FacialRegistrationScreen() {
           <View style={{ width: 60 }} />
         </View>
 
-        {/* Progress dots */}
         <View style={styles.cameraProgressRow}>
-          {PHONE_ANGLES.map((a, i) => (
+          {PHONE_ANGLES.map((angle, index) => (
             <View
-              key={a.key}
+              key={angle.key}
               style={[
                 styles.cameraDot,
-                i < phoneStep && styles.cameraDotDone,
-                i === phoneStep && styles.cameraDotActive,
+                index < phoneStep && styles.cameraDotDone,
+                index === phoneStep && styles.cameraDotActive,
               ]}
             />
           ))}
         </View>
 
-        {/* Countdown overlay */}
-        {countdown !== null && (
+        {countdown !== null ? (
           <View style={styles.countdownOverlay}>
             <Text style={styles.countdownText}>{countdown}</Text>
           </View>
-        )}
+        ) : null}
 
-        {/* "Get ready" before countdown starts */}
-        {!cameraReady && (
+        {!cameraReady ? (
           <View style={styles.countdownOverlay}>
-            <ActivityIndicator size="large" color="#2563eb" />
+            <ActivityIndicator size="large" color={referenceColors.primary} />
             <Text style={styles.getReadyText}>Starting camera...</Text>
           </View>
-        )}
+        ) : null}
 
-        {/* Bottom instruction */}
         <View style={styles.cameraBottomBar}>
           <Text style={styles.cameraAngleLabel}>{currentPrompt.label}</Text>
           <Text style={styles.cameraInstruction}>{currentPrompt.instruction}</Text>
-          <Text style={styles.autoHint}>
-            {countdown !== null ? "Hold still..." : "Position your face in the oval"}
-          </Text>
+          <Text style={styles.autoHint}>{countdown !== null ? "Hold still..." : "Position your face in the oval"}</Text>
         </View>
       </View>
     );
   }
-
-  // ── Uploading overlay ─────────────────────────────────────────────
 
   if (phoneUploading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
-        <Text style={styles.uploadingText}>Uploading {capturedRef.current.length} photos to Pi...</Text>
-        <Text style={styles.uploadingSubText}>Registering face profile for {name}</Text>
+        <ReferenceBackdrop />
+        <View style={styles.centerCard}>
+          <ActivityIndicator size="large" color={referenceColors.primary} />
+          <Text style={styles.uploadingText}>Uploading {capturedRef.current.length} photos to Pi...</Text>
+          <Text style={styles.uploadingSubText}>Registering face profile for {name}</Text>
+        </View>
       </View>
     );
   }
 
-  // ── Main form UI ──────────────────────────────────────────────────
-
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+    <View style={styles.container}>
+      <ReferenceBackdrop />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Register Face</Text>
-        <View style={{ width: 40 }} />
-      </View>
 
-      {/* Show completion screen with thumbnails after successful phone enrollment */}
-      {success && phoneCaptured.length > 0 ? (
-        <View style={styles.completionContainer}>
-          <Text style={styles.completionTitle}>Enrollment Complete</Text>
-          <Text style={styles.success}>{success}</Text>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Text style={styles.completionSubtitle}>Captured Photos</Text>
-          <View style={styles.completionGrid}>
-            {phoneCaptured.map((p) => (
-              <View key={p.angle} style={styles.completionItem}>
-                <Image source={{ uri: p.uri }} style={styles.completionThumbnail} />
-                <Text style={styles.completionAngle}>{p.angle}</Text>
-              </View>
-            ))}
-          </View>
-
-          <Text style={styles.completionHint}>
-            These photos have been sent to the Pi for face recognition training.
-            {"\n"}You can view registered profiles in the Profile tab.
-          </Text>
-
-          <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-            <Text style={styles.buttonText}>Done</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton} onPress={resetEnrollment}>
-            <Text style={styles.secondaryButtonText}>Register Another</Text>
-          </TouchableOpacity>
+        <View style={styles.header}>
+          <Text style={styles.title}>Facial Recognition</Text>
+          <Text style={styles.subtitle}>Register trusted faces for secure access</Text>
         </View>
-      ) : (
-        <>
-          <Text style={styles.label}>Person's Name</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Steephen"
-            placeholderTextColor="#64748b"
-            value={name}
-            onChangeText={setName}
-          />
 
-          <View style={styles.modeRow}>
-            {([
-              { key: "phone" as Mode, label: "Phone Camera" },
-              { key: "upload" as Mode, label: "Upload Photo" },
-            ]).map((m) => (
-              <TouchableOpacity
-                key={m.key}
-                style={[styles.modeTab, mode === m.key && styles.modeTabActive]}
-                onPress={() => { setMode(m.key); setError(""); setSuccess(""); }}
-              >
-                <Text style={[styles.modeText, mode === m.key && styles.modeTextActive]}>{m.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+        {success && phoneCaptured.length > 0 ? (
+          <View style={styles.completionCard}>
+            <Text style={styles.completionTitle}>Enrollment Complete</Text>
+            <Text style={styles.success}>{success}</Text>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {success ? <Text style={styles.success}>{success}</Text> : null}
+            <Text style={styles.completionSubtitle}>Captured Photos</Text>
+            <View style={styles.completionGrid}>
+              {phoneCaptured.map((photo) => (
+                <View key={photo.angle} style={styles.completionItem}>
+                  <Image source={{ uri: photo.uri }} style={styles.completionThumbnail} />
+                  <Text style={styles.completionAngle}>{photo.angle}</Text>
+                </View>
+              ))}
+            </View>
 
-          {mode === "phone" ? (
-            <>
-              <View style={styles.captureArea}>
-                <Text style={styles.captureTitle}>Automatic Face Enrollment</Text>
-                <Text style={styles.captureInstruction}>
-                  {"The camera will automatically capture 5 angles of your face.\nJust follow the on-screen prompts; no button presses needed."}
-                </Text>
+            <Text style={styles.completionHint}>
+              These photos have been sent to the Pi for face recognition training.
+            </Text>
+
+            <TouchableOpacity style={styles.primaryButtonWrap} onPress={() => navigation.goBack()}>
+              <View style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>Done</Text>
               </View>
-              <TouchableOpacity style={styles.button} onPress={startPhoneEnroll}>
-                <Text style={styles.buttonText}>Start Face Enrollment</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              {imageUri ? (
-                <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
-              ) : null}
-              <TouchableOpacity style={styles.secondaryButton} onPress={pickImage}>
-                <Text style={styles.secondaryButtonText}>{imageUri ? "Change Image" : "Select Image"}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, uploading && styles.buttonDisabled]}
-                onPress={handleUpload}
-                disabled={uploading}
-              >
-                {uploading ? <ActivityIndicator color="#f8fafc" /> : <Text style={styles.buttonText}>Upload & Register</Text>}
-              </TouchableOpacity>
-            </>
-          )}
-        </>
-      )}
-    </ScrollView>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} onPress={resetEnrollment}>
+              <Text style={styles.secondaryButtonText}>Register Another</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryIcon}>
+                <ScanFace size={22} color={referenceColors.primary} strokeWidth={2.2} />
+              </View>
+              <View style={styles.summaryCopy}>
+                <Text style={styles.summaryTitle}>Add New Face</Text>
+                <Text style={styles.summaryText}>Capture 5 guided angles or upload a single portrait image.</Text>
+              </View>
+            </View>
+
+            <View style={styles.formCard}>
+              <Text style={styles.label}>Person&apos;s Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Steephen"
+                placeholderTextColor="#94a3b8"
+                value={name}
+                onChangeText={setName}
+              />
+
+              <View style={styles.modeRow}>
+                {([
+                  { key: "phone" as Mode, label: "Phone Camera", icon: Camera },
+                  { key: "upload" as Mode, label: "Upload Photo", icon: Upload },
+                ]).map((item) => {
+                  const Icon = item.icon;
+                  const active = mode === item.key;
+                  return (
+                    <TouchableOpacity
+                      key={item.key}
+                      style={[styles.modeTab, active && styles.modeTabActive]}
+                      onPress={() => {
+                        setMode(item.key);
+                        setError("");
+                        setSuccess("");
+                      }}
+                    >
+                      <Icon size={16} color={active ? "#ffffff" : referenceColors.textSoft} strokeWidth={2.2} />
+                      <Text style={[styles.modeText, active && styles.modeTextActive]}>{item.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              {success ? <Text style={styles.success}>{success}</Text> : null}
+
+              {mode === "phone" ? (
+                <>
+                  <View style={styles.captureCard}>
+                    <Text style={styles.captureTitle}>Automatic Face Enrollment</Text>
+                    <Text style={styles.captureInstruction}>
+                      The camera will automatically capture 5 angles of your face. Just follow the on-screen prompts.
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity style={styles.primaryButtonWrap} onPress={startPhoneEnroll}>
+                    <View style={styles.primaryButton}>
+                      <Text style={styles.primaryButtonText}>Start Face Enrollment</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" /> : null}
+
+                  <TouchableOpacity style={styles.secondaryButton} onPress={pickImage}>
+                    <Text style={styles.secondaryButtonText}>{imageUri ? "Change Image" : "Select Image"}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[styles.primaryButtonWrap, uploading && styles.buttonDisabled]} onPress={() => void handleUpload()} disabled={uploading}>
+                    <View style={styles.primaryButton}>
+                      {uploading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.primaryButtonText}>Upload & Register</Text>}
+                    </View>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { paddingBottom: 40 },
-  centered: { flex: 1, backgroundColor: "#f8fafc", justifyContent: "center", alignItems: "center", padding: 20 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
-  backText: { color: "#2563eb", fontSize: 15 },
-  title: { color: "#0f172a", fontSize: 18, fontWeight: "700" },
-  label: { color: "#475569", fontSize: 13, marginBottom: 6, paddingHorizontal: 20, marginTop: 16 },
-  input: {
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    padding: 14,
-    color: "#0f172a",
-    fontSize: 15,
-    marginHorizontal: 20,
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-  },
-  modeRow: { flexDirection: "row", paddingHorizontal: 20, gap: 6, marginTop: 20, marginBottom: 16 },
-  modeTab: {
+  container: {
     flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    alignItems: "center",
+    backgroundColor: referenceColors.background,
   },
-  modeTabActive: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
-  modeText: { color: "#475569", fontSize: 11, fontWeight: "600" },
-  modeTextActive: { color: "#f8fafc" },
-  error: { color: "#dc2626", fontSize: 13, textAlign: "center", marginVertical: 8, paddingHorizontal: 20 },
-  success: { color: "#16a34a", fontSize: 13, textAlign: "center", marginVertical: 8, paddingHorizontal: 20 },
-  permissionText: { color: "#0f172a", fontSize: 15, textAlign: "center", marginBottom: 20, lineHeight: 22 },
-  previewImage: {
-    width: "100%",
-    height: 250,
-    marginVertical: 12,
-    borderRadius: 8,
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 120,
   },
-  secondaryButton: {
-    marginHorizontal: 20,
-    padding: 14,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  secondaryButtonText: { color: "#2563eb", fontWeight: "600" },
-  button: {
-    backgroundColor: "#2563eb",
-    borderRadius: 8,
-    padding: 16,
-    alignItems: "center",
-    marginHorizontal: 20,
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#f8fafc", fontWeight: "700", fontSize: 16 },
-  captureArea: {
-    minHeight: 140,
+  centered: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#ffffff",
-    marginHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    marginVertical: 12,
     padding: 20,
-    elevation: 2,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
   },
-  captureTitle: { color: "#2563eb", fontSize: 16, fontWeight: "700", marginBottom: 8 },
-  captureInstruction: { color: "#475569", fontSize: 14, textAlign: "center", lineHeight: 22 },
-
-  // ── Completion screen ──────────────────────────────────────────────
-  completionContainer: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    padding: 18,
-    backgroundColor: "#ffffff",
+  centerCard: {
+    width: "100%",
+    maxWidth: 360,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 24,
+    alignItems: "center",
+    ...cardShadow,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 18,
+  },
+  backText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  header: {
+    marginBottom: 18,
+  },
+  title: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  subtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  summaryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    borderRadius: 26,
+    backgroundColor: "rgba(238,246,255,0.84)",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    padding: 20,
+    marginBottom: 18,
+    ...cardShadow,
+  },
+  summaryIcon: {
+    width: 52,
+    height: 52,
     borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  summaryCopy: {
+    flex: 1,
+  },
+  summaryTitle: {
+    color: referenceColors.text,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  summaryText: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  formCard: {
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 18,
+    ...cardShadow,
+  },
+  label: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  input: {
+    minHeight: 56,
+    borderRadius: 18,
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    color: referenceColors.text,
+    paddingHorizontal: 16,
+    fontSize: 15,
   },
-  completionTitle: { color: "#16a34a", fontSize: 22, fontWeight: "800", textAlign: "center", marginBottom: 4 },
-  completionSubtitle: { color: "#0f172a", fontSize: 15, fontWeight: "600", marginTop: 16, marginBottom: 12 },
+  modeRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 18,
+    marginBottom: 14,
+  },
+  modeTab: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+  },
+  modeTabActive: {
+    backgroundColor: referenceColors.primary,
+    borderColor: referenceColors.primary,
+  },
+  modeText: {
+    color: referenceColors.textSoft,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  modeTextActive: {
+    color: "#ffffff",
+  },
+  error: {
+    color: referenceColors.danger,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  success: {
+    color: referenceColors.success,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  permissionText: {
+    color: referenceColors.text,
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  previewImage: {
+    width: "100%",
+    height: 260,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  secondaryButton: {
+    minHeight: 54,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+  },
+  secondaryButtonText: {
+    color: referenceColors.primary,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  primaryButtonWrap: {
+    borderRadius: 18,
+    marginTop: 12,
+    ...buttonShadow,
+  },
+  primaryButton: {
+    minHeight: 56,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.74)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  primaryButtonText: {
+    color: referenceColors.primary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+  },
+  captureCard: {
+    minHeight: 150,
+    borderRadius: 22,
+    backgroundColor: "rgba(239,246,255,0.82)",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  captureTitle: {
+    color: referenceColors.primary,
+    fontSize: 17,
+    fontWeight: "800",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  captureInstruction: {
+    color: referenceColors.textSoft,
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  completionCard: {
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 18,
+    ...cardShadow,
+  },
+  completionTitle: {
+    color: referenceColors.success,
+    fontSize: 24,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  completionSubtitle: {
+    color: referenceColors.text,
+    fontSize: 15,
+    fontWeight: "700",
+    marginTop: 16,
+    marginBottom: 12,
+  },
   completionGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -562,41 +728,58 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-  completionItem: { alignItems: "center" },
+  completionItem: {
+    alignItems: "center",
+  },
   completionThumbnail: {
-    width: (SCREEN_WIDTH - 80) / 3,
-    height: (SCREEN_WIDTH - 80) / 3,
-    borderRadius: 10,
+    width: (SCREEN_WIDTH - 88) / 3,
+    height: (SCREEN_WIDTH - 88) / 3,
+    borderRadius: 12,
     borderWidth: 2,
-    borderColor: "#16a34a",
+    borderColor: referenceColors.success,
   },
-  completionAngle: { color: "#475569", fontSize: 11, marginTop: 4, textTransform: "capitalize" },
+  completionAngle: {
+    color: referenceColors.textSoft,
+    fontSize: 11,
+    marginTop: 4,
+    textTransform: "capitalize",
+  },
   completionHint: {
-    color: "#64748b",
+    color: referenceColors.textMuted,
     fontSize: 12,
-    textAlign: "center",
     lineHeight: 18,
-    marginBottom: 20,
+    textAlign: "center",
   },
-
-  // ── Phone camera styles ────────────────────────────────────────────
-  cameraContainer: { flex: 1, backgroundColor: "#000" },
-  camera: { flex: 1 },
-
+  cameraContainer: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  camera: {
+    flex: 1,
+  },
   flashOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(255,255,255,0.7)",
     zIndex: 10,
   },
-
   overlayContainer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
     alignItems: "center",
   },
-  overlayTop: { flex: 1, width: "100%", backgroundColor: "rgba(0,0,0,0.55)" },
-  overlayMiddle: { flexDirection: "row", height: OVAL_H },
-  overlaySide: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)" },
+  overlayTop: {
+    flex: 1,
+    width: "100%",
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  overlayMiddle: {
+    flexDirection: "row",
+    height: OVAL_H,
+  },
+  overlaySide: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
   ovalCutout: {
     width: OVAL_W,
     height: OVAL_H,
@@ -608,15 +791,18 @@ const styles = StyleSheet.create({
     height: OVAL_H,
     borderRadius: OVAL_W / 2,
     borderWidth: 3,
-    borderColor: "#2563eb",
+    borderColor: referenceColors.primary,
     borderStyle: "dashed",
   },
   ovalBorderReady: {
-    borderColor: "#16a34a",
+    borderColor: referenceColors.success,
     borderStyle: "solid",
   },
-  overlayBottom: { flex: 1, width: "100%", backgroundColor: "rgba(0,0,0,0.55)" },
-
+  overlayBottom: {
+    flex: 1,
+    width: "100%",
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
   cameraTopBar: {
     position: "absolute",
     top: 60,
@@ -627,9 +813,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
   },
-  cancelText: { color: "#dc2626", fontSize: 16, fontWeight: "600" },
-  cameraStepText: { color: "#f8fafc", fontSize: 14, fontWeight: "600" },
-
+  cancelText: {
+    color: "#fda4af",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  cameraStepText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
   cameraProgressRow: {
     position: "absolute",
     top: 100,
@@ -645,9 +838,12 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: "#cbd5e1",
   },
-  cameraDotDone: { backgroundColor: "#16a34a" },
-  cameraDotActive: { backgroundColor: "#2563eb" },
-
+  cameraDotDone: {
+    backgroundColor: referenceColors.success,
+  },
+  cameraDotActive: {
+    backgroundColor: referenceColors.primary,
+  },
   countdownOverlay: {
     position: "absolute",
     top: 0,
@@ -660,26 +856,49 @@ const styles = StyleSheet.create({
   countdownText: {
     fontSize: 80,
     fontWeight: "900",
-    color: "rgba(255,255,255,0.8)",
+    color: "rgba(255,255,255,0.82)",
   },
   getReadyText: {
-    color: "#f8fafc",
+    color: "#ffffff",
     fontSize: 14,
     marginTop: 12,
   },
-
   cameraBottomBar: {
     position: "absolute",
-    bottom: 50,
     left: 0,
     right: 0,
+    bottom: 48,
     alignItems: "center",
     paddingHorizontal: 20,
   },
-  cameraAngleLabel: { color: "#60a5fa", fontSize: 22, fontWeight: "800", marginBottom: 4 },
-  cameraInstruction: { color: "#f8fafc", fontSize: 15, textAlign: "center", marginBottom: 8 },
-  autoHint: { color: "#cbd5e1", fontSize: 12, textAlign: "center" },
-
-  uploadingText: { color: "#0f172a", fontSize: 16, marginTop: 20, fontWeight: "600" },
-  uploadingSubText: { color: "#64748b", fontSize: 13, marginTop: 4 },
+  cameraAngleLabel: {
+    color: "#60a5fa",
+    fontSize: 22,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  cameraInstruction: {
+    color: "#ffffff",
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  autoHint: {
+    color: "#cbd5e1",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  uploadingText: {
+    color: referenceColors.text,
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 18,
+  },
+  uploadingSubText: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 6,
+  },
 });

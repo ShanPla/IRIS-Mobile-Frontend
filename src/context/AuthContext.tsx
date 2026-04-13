@@ -3,13 +3,16 @@ import {
   getActiveDevice,
   getDevices,
   setActiveDevice as persistActiveDevice,
+  transferDevices,
 } from "../lib/pi";
 import {
   authenticateAccount,
+  authenticateGoogleAccount,
   clearStoredSession,
   getStoredSession,
   persistSession,
   registerAccount,
+  syncStoredAccountToDevice,
 } from "../lib/accounts";
 import type { AuthSession } from "../types/iris";
 import type { PiDevice } from "../lib/pi";
@@ -19,7 +22,8 @@ interface AuthContextType {
   bootstrapping: boolean;
   hasPi: boolean;
   activeDevice: PiDevice | null;
-  login: (username: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<void>;
+  continueWithGoogle: (idToken: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -48,8 +52,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const restoreSession = async () => {
     try {
       const storedSession = await getStoredSession();
-      setSession(storedSession);
-      await refreshDeviceState(storedSession?.username);
+      let nextSession = storedSession;
+
+      if (storedSession && !storedSession.token) {
+        try {
+          const syncedSession = await syncStoredAccountToDevice(storedSession.username);
+          if (syncedSession) {
+            nextSession = syncedSession;
+            await persistSession(syncedSession);
+          }
+        } catch {
+          // Keep the local-only session until a device sync succeeds.
+        }
+      }
+
+      setSession(nextSession);
+      await refreshDeviceState(nextSession?.username);
     } catch {
       // Keep authentication independent from Pi availability.
       setSession(null);
@@ -58,17 +76,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<void> => {
     const nextSession = await authenticateAccount(username, password);
-    if (!nextSession) return false;
+    await transferDevices(undefined, nextSession.username);
     setSession(nextSession);
     await persistSession(nextSession);
     await refreshDeviceState(nextSession.username);
-    return true;
+  };
+
+  const continueWithGoogle = async (idToken: string): Promise<void> => {
+    const nextSession = await authenticateGoogleAccount(idToken, session?.username);
+    await transferDevices(undefined, nextSession.username);
+    setSession(nextSession);
+    await persistSession(nextSession);
+    await refreshDeviceState(nextSession.username);
   };
 
   const register = async (username: string, email: string, password: string) => {
     const nextSession = await registerAccount(username, email, password);
+    await transferDevices(undefined, nextSession.username);
     setSession(nextSession);
     await persistSession(nextSession);
     await refreshDeviceState(nextSession.username);
@@ -95,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, bootstrapping, hasPi, activeDevice, login, register, logout, refreshSession, selectDevice }}>
+    <AuthContext.Provider value={{ session, bootstrapping, hasPi, activeDevice, login, continueWithGoogle, register, logout, refreshSession, selectDevice }}>
       {children}
     </AuthContext.Provider>
   );

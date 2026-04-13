@@ -1,15 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
   ActivityIndicator,
   Alert,
   RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { AlertTriangle, Shield, Users } from "lucide-react-native";
+import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { piGet, piPost } from "../../lib/pi";
+import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
 interface PairedUser {
   id: number;
@@ -78,37 +81,22 @@ export default function AdminScreen() {
   const handleFactoryReset = () => {
     Alert.alert(
       "Factory Reset",
-      "This will permanently delete:\n\n" +
-        "- All security events & snapshots\n" +
-        "- All face profiles & images\n" +
-        "- All non-admin user accounts\n" +
-        "- All device pairings\n" +
-        "- Reset system config to defaults\n\n" +
-        "Admin accounts will be preserved.\n\n" +
-        "This action CANNOT be undone.",
+      "This will permanently delete all non-admin data from this Pi. This action cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Reset Everything",
-          style: "destructive",
-          onPress: confirmReset,
-        },
-      ],
+        { text: "Reset Everything", style: "destructive", onPress: confirmReset },
+      ]
     );
   };
 
   const confirmReset = () => {
     Alert.alert(
       "Are you absolutely sure?",
-      "Type-level confirmation: all data will be wiped from this Pi.",
+      "All events, faces, pairings, and non-admin accounts will be removed.",
       [
         { text: "No, go back", style: "cancel" },
-        {
-          text: "Yes, factory reset",
-          style: "destructive",
-          onPress: executeReset,
-        },
-      ],
+        { text: "Yes, factory reset", style: "destructive", onPress: executeReset },
+      ]
     );
   };
 
@@ -118,12 +106,7 @@ export default function AdminScreen() {
       const result = await piPost<ResetResult>("/api/admin/factory-reset");
       Alert.alert(
         "Factory Reset Complete",
-        `Deleted:\n` +
-          `- ${result.events_deleted} events\n` +
-          `- ${result.faces_deleted} face profiles\n` +
-          `- ${result.users_deleted} user accounts\n` +
-          `- Snapshots cleared: ${result.snapshots_cleared ? "Yes" : "No"}\n` +
-          `- Config reset: ${result.config_reset ? "Yes" : "No"}`,
+        `Deleted ${result.events_deleted} events, ${result.faces_deleted} faces, and ${result.users_deleted} user accounts.`,
       );
       void loadData();
     } catch (e) {
@@ -134,137 +117,147 @@ export default function AdminScreen() {
   };
 
   const formatDate = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const date = new Date(iso);
+    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
   };
 
   const roleLabel = (role: string) => {
     switch (role) {
-      case "admin": return "Admin";
-      case "homeowner_primary": return "Primary";
-      case "homeowner_invited": return "Invited";
-      default: return role;
+      case "admin":
+        return "Admin";
+      case "homeowner_primary":
+        return "Primary";
+      case "homeowner_invited":
+        return "Invited";
+      default:
+        return role;
     }
   };
 
   const roleBadgeColor = (role: string) => {
     switch (role) {
-      case "admin": return "#f59e0b";
-      case "homeowner_primary": return "#2563eb";
-      case "homeowner_invited": return "#7c3aed";
-      default: return "#64748b";
+      case "admin":
+        return "#f59e0b";
+      case "homeowner_primary":
+        return referenceColors.primary;
+      case "homeowner_invited":
+        return "#7c3aed";
+      default:
+        return referenceColors.textMuted;
     }
   };
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#2563eb" size="large" />
+        <ReferenceBackdrop />
+        <ActivityIndicator color={referenceColors.primary} size="large" />
         <Text style={styles.loadingText}>Loading admin panel...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2563eb" />
-      }
-    >
-      <Text style={styles.title}>Admin Panel</Text>
-
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-      {/* Device Info */}
-      {stats && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Device Info</Text>
-          <View style={styles.row}>
-            <Text style={styles.label}>Device ID</Text>
-            <Text style={styles.value}>{stats.device_id}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Device Name</Text>
-            <Text style={styles.value}>{stats.device_name}</Text>
-          </View>
+    <View style={styles.container}>
+      <ReferenceBackdrop />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={referenceColors.primary} />}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Admin Panel</Text>
+          <Text style={styles.subtitle}>Device ownership, pairing, and reset controls</Text>
         </View>
-      )}
 
-      {/* System Stats */}
-      {stats && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>System Stats</Text>
-          <View style={styles.statsGrid}>
-            <StatBox label="Users" value={stats.total_users} />
-            <StatBox label="Admins" value={stats.admin_count} />
-            <StatBox label="Primary" value={stats.homeowner_count} />
-            <StatBox label="Invited" value={stats.invited_count} />
-            <StatBox label="Paired" value={stats.paired_devices} />
-            <StatBox label="Events" value={stats.total_events} />
-            <StatBox label="Faces" value={stats.total_faces} />
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        {stats ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Device Info</Text>
+            <View style={styles.row}>
+              <Text style={styles.label}>Device ID</Text>
+              <Text style={styles.value}>{stats.device_id}</Text>
+            </View>
+            <View style={[styles.row, styles.rowLast]}>
+              <Text style={styles.label}>Device Name</Text>
+              <Text style={styles.value}>{stats.device_name}</Text>
+            </View>
           </View>
-        </View>
-      )}
+        ) : null}
 
-      {/* Paired Users */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          Paired Users ({pairedUsers.length})
-        </Text>
-        {pairedUsers.length === 0 ? (
-          <Text style={styles.emptyText}>No users have paired with this Pi yet.</Text>
-        ) : (
-          pairedUsers.map((u) => (
-            <View key={u.id} style={styles.userRow}>
-              <View style={styles.userInfo}>
-                <View style={styles.userNameRow}>
-                  <Text style={styles.username}>{u.username}</Text>
-                  <View style={[styles.badge, { backgroundColor: roleBadgeColor(u.role) }]}>
-                    <Text style={styles.badgeText}>{roleLabel(u.role)}</Text>
+        {stats ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>System Stats</Text>
+            <View style={styles.statsGrid}>
+              <StatBox label="Users" value={stats.total_users} />
+              <StatBox label="Admins" value={stats.admin_count} />
+              <StatBox label="Primary" value={stats.homeowner_count} />
+              <StatBox label="Invited" value={stats.invited_count} />
+              <StatBox label="Paired" value={stats.paired_devices} />
+              <StatBox label="Events" value={stats.total_events} />
+              <StatBox label="Faces" value={stats.total_faces} />
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Paired Users ({pairedUsers.length})</Text>
+          {pairedUsers.length === 0 ? (
+            <Text style={styles.emptyText}>No users have paired with this Pi yet.</Text>
+          ) : (
+            pairedUsers.map((user, index) => (
+              <View key={user.id} style={[styles.userRow, index === pairedUsers.length - 1 && styles.rowLast]}>
+                <View style={styles.userHeader}>
+                  <View style={styles.userAvatar}>
+                    <Users size={16} color={referenceColors.primary} strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.userInfo}>
+                    <View style={styles.userNameRow}>
+                      <Text style={styles.username}>{user.username}</Text>
+                      <View style={[styles.badge, { backgroundColor: roleBadgeColor(user.role) }]}>
+                        <Text style={styles.badgeText}>{roleLabel(user.role)}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.userMeta}>Paired: {formatDate(user.paired_at)}</Text>
+                    <Text style={styles.userMeta}>Last active: {formatDate(user.last_active)}</Text>
                   </View>
                 </View>
-                <Text style={styles.userMeta}>
-                  Paired: {formatDate(u.paired_at)}
-                </Text>
-                <Text style={styles.userMeta}>
-                  Last active: {formatDate(u.last_active)}
-                </Text>
               </View>
-            </View>
-          ))
-        )}
-      </View>
-
-      {/* Factory Reset */}
-      <View style={[styles.card, styles.dangerCard]}>
-        <Text style={styles.cardTitle}>Danger Zone</Text>
-        <Text style={styles.dangerText}>
-          Factory reset will permanently delete all events, face profiles,
-          non-admin users, and reset system configuration.
-        </Text>
-        <TouchableOpacity
-          style={[styles.resetButton, resetting && styles.resetButtonDisabled]}
-          onPress={handleFactoryReset}
-          disabled={resetting}
-        >
-          {resetting ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.resetButtonText}>Factory Reset</Text>
+            ))
           )}
-        </TouchableOpacity>
-      </View>
+        </View>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        <View style={[styles.card, styles.dangerCard]}>
+          <View style={styles.dangerHeader}>
+            <View style={styles.dangerIcon}>
+              <AlertTriangle size={18} color={referenceColors.danger} strokeWidth={2.2} />
+            </View>
+            <View style={styles.dangerCopy}>
+              <Text style={styles.cardTitle}>Danger Zone</Text>
+              <Text style={styles.dangerText}>
+                Factory reset permanently deletes events, faces, non-admin users, device pairings, and system configuration.
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.resetButton, resetting && styles.resetButtonDisabled]}
+            onPress={handleFactoryReset}
+            disabled={resetting}
+          >
+            {resetting ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.resetButtonText}>Factory Reset</Text>}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 function StatBox({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.statBox}>
+      <Shield size={16} color={referenceColors.primary} strokeWidth={2.2} />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -272,99 +265,199 @@ function StatBox({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { padding: 20, paddingTop: 60, paddingBottom: 116 },
+  container: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 118,
+  },
   center: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: referenceColors.background,
     justifyContent: "center",
     alignItems: "center",
   },
-  loadingText: { color: "#64748b", marginTop: 12, fontSize: 13 },
-  title: {
-    color: "#0f172a",
-    fontSize: 24,
-    fontWeight: "800",
+  loadingText: {
+    color: referenceColors.textMuted,
+    marginTop: 12,
+    fontSize: 13,
+  },
+  header: {
     marginBottom: 20,
   },
-  errorText: { color: "#dc2626", fontSize: 13, marginBottom: 12 },
-
-  // Cards
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    elevation: 3,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
+  title: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
   },
-  cardTitle: {
-    color: "#0f172a",
-    fontSize: 16,
-    fontWeight: "700",
+  subtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  errorText: {
+    color: referenceColors.danger,
+    fontSize: 13,
     marginBottom: 12,
   },
-
-  // Key-value rows
+  card: {
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 16,
+    marginBottom: 16,
+    ...cardShadow,
+  },
+  cardTitle: {
+    color: referenceColors.text,
+    fontSize: 17,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
   row: {
+    minHeight: 44,
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 6,
+    alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: "rgba(226,232,240,0.8)",
+    gap: 12,
   },
-  label: { color: "#475569", fontSize: 13 },
-  value: { color: "#0f172a", fontSize: 13, fontWeight: "600" },
-
-  // Stats grid
+  rowLast: {
+    borderBottomWidth: 0,
+  },
+  label: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+  },
+  value: {
+    color: referenceColors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
   },
   statBox: {
+    minWidth: 88,
+    borderRadius: 18,
     backgroundColor: "#f1f5f9",
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
     alignItems: "center",
-    minWidth: 72,
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 4,
   },
-  statValue: { color: "#2563eb", fontSize: 20, fontWeight: "800" },
-  statLabel: { color: "#475569", fontSize: 11, marginTop: 2 },
-
-  // Paired users
+  statValue: {
+    color: referenceColors.primary,
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  statLabel: {
+    color: referenceColors.textSoft,
+    fontSize: 11,
+    fontWeight: "700",
+  },
   userRow: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(226,232,240,0.8)",
   },
-  userInfo: { flex: 1 },
-  userNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
-  username: { color: "#0f172a", fontSize: 15, fontWeight: "600" },
+  userHeader: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  userAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#dbeafe",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+    flexWrap: "wrap",
+  },
+  username: {
+    color: referenceColors.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
   badge: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 10,
   },
-  badgeText: { color: "#f8fafc", fontSize: 10, fontWeight: "700" },
-  userMeta: { color: "#64748b", fontSize: 12 },
-  emptyText: { color: "#64748b", fontSize: 13, fontStyle: "italic" },
-
-  // Danger zone
-  dangerCard: { borderColor: "#fecaca" },
-  dangerText: { color: "#475569", fontSize: 13, marginBottom: 14, lineHeight: 18 },
-  resetButton: {
-    backgroundColor: "#dc2626",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
+  badgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "700",
   },
-  resetButtonDisabled: { opacity: 0.5 },
-  resetButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  userMeta: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  emptyText: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+    fontStyle: "italic",
+  },
+  dangerCard: {
+    borderColor: "#fecaca",
+    backgroundColor: "rgba(255,241,242,0.88)",
+  },
+  dangerHeader: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  dangerIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#fee2e2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dangerCopy: {
+    flex: 1,
+  },
+  dangerText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  resetButton: {
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: referenceColors.danger,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 16,
+    ...buttonShadow,
+  },
+  resetButtonDisabled: {
+    opacity: 0.6,
+  },
+  resetButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });

@@ -1,16 +1,27 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
   ActivityIndicator,
+  Image,
   ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { buildPiUrl } from "../../lib/pi";
+import {
+  ArrowLeft,
+  Camera,
+  MicOff,
+  RefreshCw,
+  ScanLine,
+  Video,
+  Volume2,
+} from "lucide-react-native";
+import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
+import { buildPiUrl } from "../../lib/pi";
+import { cardShadow, referenceColors, referenceLiveImage } from "../../theme/reference";
 
 export default function LiveFeedScreen() {
   const navigation = useNavigation();
@@ -57,7 +68,7 @@ export default function LiveFeedScreen() {
     };
 
     void poll();
-    const getDelay = () => consecutiveFailsRef.current >= 5 ? 500 : 150;
+    const getDelay = () => (consecutiveFailsRef.current >= 5 ? 500 : 150);
     intervalRef.current = setInterval(() => void poll(), getDelay());
 
     return () => {
@@ -82,189 +93,266 @@ export default function LiveFeedScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-        <View style={styles.headerCopy}>
-          <Text style={styles.title}>Live Monitor</Text>
-          <Text style={styles.subtitle}>Real-time camera feed</Text>
-        </View>
-      </View>
-
-      <View style={styles.feedContainer}>
-        {loading ? (
-          <ActivityIndicator color="#60a5fa" size="large" />
-        ) : reconnecting ? (
-          <View style={styles.reconnectWrap}>
-            <ActivityIndicator color="#facc15" size="large" />
-            <Text style={styles.reconnectText}>Stream interrupted - reconnecting...</Text>
-          </View>
-        ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
-        ) : (
-          <Image source={{ uri: frameUri }} style={styles.feedImage} resizeMode="cover" />
-        )}
-
-        <View style={styles.liveBadge}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveBadgeText}>{paused ? "PAUSED" : "LIVE"}</Text>
-        </View>
-
-        <View style={styles.feedTimePill}>
-          <Text style={styles.feedTimeText}>{new Date().toLocaleTimeString()}</Text>
-        </View>
-
-        <View pointerEvents="none" style={styles.gridOverlay}>
-          <View style={[styles.gridLineVertical, { left: "25%" }]} />
-          <View style={[styles.gridLineVertical, { left: "50%" }]} />
-          <View style={[styles.gridLineVertical, { left: "75%" }]} />
-          <View style={[styles.gridLineHorizontal, { top: "33%" }]} />
-          <View style={[styles.gridLineHorizontal, { top: "66%" }]} />
-          <View style={styles.scanLine} />
-        </View>
-
-        <View style={styles.feedControls}>
-          <View style={styles.controlSide}>
-            <TouchableOpacity style={styles.overlayControl} onPress={() => void handleRefresh()}>
-              <Text style={styles.overlayControlText}>{isRefreshing ? "..." : "RF"}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.overlayControl} onPress={() => setIsMuted(!isMuted)}>
-              <Text style={styles.overlayControlText}>{isMuted ? "MU" : "AU"}</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.cameraPill}>
-            <Text style={styles.cameraPillText}>Front Door</Text>
-          </View>
-          <View style={styles.controlSide}>
-            <TouchableOpacity style={styles.overlayControl}>
-              <Text style={styles.overlayControlText}>ST</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.overlayControl, paused && styles.overlayControlActive]} onPress={() => setPaused(!paused)}>
-              <Text style={styles.overlayControlText}>{paused ? "PL" : "FS"}</Text>
-            </TouchableOpacity>
+    <View style={styles.container}>
+      <ReferenceBackdrop />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Live Monitor</Text>
+            <Text style={styles.subtitle}>Real-time camera feed</Text>
           </View>
         </View>
-      </View>
 
-      <View style={styles.infoCard}>
-        <Text style={styles.infoTitle}>Stream Information</Text>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Resolution</Text>
-          <Text style={styles.infoValue}>1920 x 1080</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Frame Rate</Text>
-          <Text style={styles.infoValue}>{paused ? "Paused" : "30 FPS"}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Bitrate</Text>
-          <Text style={styles.infoValue}>2.5 Mbps</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Latency</Text>
-          <Text style={[styles.infoValue, reconnecting || error ? styles.infoValueWarn : styles.infoValueGood]}>
-            {reconnecting ? "Reconnecting" : error ? "Interrupted" : "124ms"}
-          </Text>
-        </View>
-      </View>
+        <View style={styles.feedCard}>
+          {loading ? (
+            <ActivityIndicator color="#ffffff" size="large" />
+          ) : reconnecting ? (
+            <View style={styles.centerFeedState}>
+              <ActivityIndicator color="#facc15" size="large" />
+              <Text style={styles.reconnectText}>Stream interrupted. Reconnecting...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.centerFeedState}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : (
+            <Image source={{ uri: frameUri || referenceLiveImage }} style={styles.feedImage} resizeMode="cover" />
+          )}
 
-      <View style={styles.detectionCard}>
-        <View style={styles.detectionHeader}>
-          <View style={styles.detectionIcon}>
-            <Text style={styles.detectionIconText}>AI</Text>
-          </View>
-          <View>
-            <Text style={styles.detectionTitle}>Detection Active</Text>
-            <Text style={styles.detectionSubtitle}>Motion and face recognition</Text>
-          </View>
-        </View>
-        <View style={styles.detectionGrid}>
-          <View style={styles.detectionMetric}>
-            <Text style={styles.metricLabel}>Motion Sensitivity</Text>
-            <Text style={styles.metricValue}>High</Text>
-          </View>
-          <View style={styles.detectionMetric}>
-            <Text style={styles.metricLabel}>Face Tolerance</Text>
-            <Text style={styles.metricValue}>0.6</Text>
-          </View>
-        </View>
-      </View>
+          {(loading || reconnecting || error) && <Image source={{ uri: referenceLiveImage }} style={styles.feedFallback} resizeMode="cover" />}
 
-      <View style={styles.quickControls}>
-        <TouchableOpacity style={[styles.quickControl, styles.snapshotControl]}>
-          <Text style={styles.quickControlText}>Take Snapshot</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.quickControl, styles.recordControl]}>
-          <Text style={styles.quickControlText}>Record Clip</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+          <View style={styles.liveBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveBadgeText}>{paused ? "PAUSED" : "LIVE"}</Text>
+          </View>
+
+          <View style={styles.timePill}>
+            <Text style={styles.timeText}>{new Date().toLocaleTimeString()}</Text>
+          </View>
+
+          <View pointerEvents="none" style={styles.gridOverlay}>
+            <View style={[styles.gridLineVertical, { left: "25%" }]} />
+            <View style={[styles.gridLineVertical, { left: "50%" }]} />
+            <View style={[styles.gridLineVertical, { left: "75%" }]} />
+            <View style={[styles.gridLineHorizontal, { top: "33%" }]} />
+            <View style={[styles.gridLineHorizontal, { top: "66%" }]} />
+            <View style={styles.scanLine} />
+          </View>
+
+          <View style={styles.feedControls}>
+            <View style={styles.controlCluster}>
+              <TouchableOpacity style={styles.overlayControl} onPress={() => void handleRefresh()}>
+                <RefreshCw size={16} color="#ffffff" strokeWidth={2.2} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.overlayControl} onPress={() => setIsMuted((value) => !value)}>
+                {isMuted ? <MicOff size={16} color="#ffffff" strokeWidth={2.2} /> : <Volume2 size={16} color="#ffffff" strokeWidth={2.2} />}
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.cameraPill}>
+              <Camera size={15} color="#ffffff" strokeWidth={2.2} />
+              <Text style={styles.cameraPillText}>Front Door</Text>
+            </View>
+
+            <View style={styles.controlCluster}>
+              <TouchableOpacity style={styles.overlayControl}>
+                <ScanLine size={16} color="#ffffff" strokeWidth={2.2} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.overlayControl, paused && styles.overlayControlActive]}
+                onPress={() => setPaused((value) => !value)}
+              >
+                <Video size={16} color="#ffffff" strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.infoCard}>
+          <Text style={styles.cardTitle}>Stream Information</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Resolution</Text>
+            <Text style={styles.infoValue}>1920 x 1080</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Frame Rate</Text>
+            <Text style={styles.infoValue}>{paused ? "Paused" : "30 FPS"}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Bitrate</Text>
+            <Text style={styles.infoValue}>2.5 Mbps</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Latency</Text>
+            <Text style={[styles.infoValue, reconnecting || error ? styles.warnText : styles.goodText]}>
+              {reconnecting ? "Reconnecting" : error ? "Interrupted" : "124ms"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.detectionCard}>
+          <View style={styles.detectionHeader}>
+            <View style={styles.detectionIcon}>
+              <ScanLine size={20} color={referenceColors.primary} strokeWidth={2.2} />
+            </View>
+            <View>
+              <Text style={styles.cardTitle}>Detection Active</Text>
+              <Text style={styles.detectionSubtitle}>Motion and face recognition</Text>
+            </View>
+          </View>
+
+          <View style={styles.detectionGrid}>
+            <View style={styles.detectionMetric}>
+              <Text style={styles.metricLabel}>Motion Sensitivity</Text>
+              <Text style={styles.metricValue}>High</Text>
+            </View>
+            <View style={styles.detectionMetric}>
+              <Text style={styles.metricLabel}>Face Tolerance</Text>
+              <Text style={styles.metricValue}>0.6</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.quickRow}>
+          <TouchableOpacity style={[styles.quickButton, styles.quickButtonPurple]}>
+            <Text style={styles.quickButtonText}>{isRefreshing ? "Refreshing..." : "Take Snapshot"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.quickButton, styles.quickButtonOrange]}>
+            <Text style={styles.quickButtonText}>Record Clip</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { padding: 20, paddingTop: 60, paddingBottom: 40 },
-  header: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 20 },
-  headerCopy: { flex: 1 },
-  backButton: {
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+  container: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
   },
-  backText: { color: "#2563eb", fontSize: 14, fontWeight: "800" },
-  title: { color: "#0f172a", fontSize: 28, fontWeight: "800" },
-  subtitle: { color: "#64748b", fontSize: 13, marginTop: 2 },
-  feedContainer: {
-    height: 360,
-    justifyContent: "center",
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  header: {
+    marginBottom: 20,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+    marginBottom: 18,
+  },
+  backText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  headerCopy: {
+    gap: 4,
+  },
+  title: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  subtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+  },
+  feedCard: {
+    height: 380,
+    borderRadius: 28,
+    overflow: "hidden",
     backgroundColor: "#0f172a",
-    borderRadius: 24,
     borderWidth: 1,
     borderColor: "#1e293b",
-    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 18,
-    elevation: 6,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
+    ...cardShadow,
   },
-  feedImage: { width: "100%", height: "100%" },
-  reconnectWrap: { alignItems: "center", gap: 12 },
-  reconnectText: { color: "#facc15", fontSize: 13, textAlign: "center" },
-  errorText: { color: "#fecaca", fontSize: 13 },
+  feedImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
+  },
+  feedFallback: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.28,
+  },
+  centerFeedState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    zIndex: 2,
+  },
+  reconnectText: {
+    color: "#fde68a",
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 12,
+  },
+  errorText: {
+    color: "#fecaca",
+    fontSize: 13,
+    textAlign: "center",
+  },
   liveBadge: {
     position: "absolute",
     top: 14,
     left: 14,
+    minHeight: 34,
+    borderRadius: 12,
+    backgroundColor: "rgba(239,68,68,0.92)",
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    backgroundColor: "rgba(220,38,38,0.94)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    gap: 8,
   },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#ffffff" },
-  liveBadgeText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
-  feedTimePill: {
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ffffff",
+  },
+  liveBadgeText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  timePill: {
     position: "absolute",
     top: 14,
     right: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: 34,
+    borderRadius: 12,
     backgroundColor: "rgba(15,23,42,0.78)",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  feedTimeText: { color: "#ffffff", fontSize: 12, fontWeight: "700" },
-  gridOverlay: { ...StyleSheet.absoluteFillObject },
+  timeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  gridOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   gridLineVertical: {
     position: "absolute",
     top: 0,
@@ -285,102 +373,110 @@ const styles = StyleSheet.create({
     right: 0,
     top: "48%",
     height: 2,
-    backgroundColor: "rgba(34,211,238,0.75)",
+    backgroundColor: "rgba(34,211,238,0.74)",
   },
   feedControls: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    padding: 14,
-    backgroundColor: "rgba(15,23,42,0.52)",
+    minHeight: 82,
+    backgroundColor: "rgba(15,23,42,0.56)",
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
-  controlSide: { flexDirection: "row", gap: 8 },
-  overlayControl: {
-    minWidth: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.42)",
-  },
-  overlayControlActive: { backgroundColor: "#2563eb", borderColor: "#60a5fa" },
-  overlayControlText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
-  cameraPill: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.42)",
-  },
-  cameraPillText: { color: "#ffffff", fontSize: 13, fontWeight: "800" },
-  feedBottomBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: 16,
-    backgroundColor: "rgba(15,23,42,0.76)",
+  controlCluster: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+    gap: 8,
   },
-  feedTitle: { color: "#ffffff", fontSize: 17, fontWeight: "800" },
-  feedSubtitle: { color: "#dbeafe", fontSize: 12, marginTop: 2 },
-  feedPauseButton: {
+  overlayControl: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.18)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.34)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
+    borderColor: "rgba(255,255,255,0.38)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  feedPauseButtonActive: { backgroundColor: "#2563eb", borderColor: "#60a5fa" },
-  feedPauseText: { color: "#ffffff", fontWeight: "800", fontSize: 13 },
-  feedPauseTextActive: { color: "#ffffff" },
-  infoCard: {
-    backgroundColor: "#ffffff",
+  overlayControlActive: {
+    backgroundColor: referenceColors.primary,
+    borderColor: "#60a5fa",
+  },
+  cameraPill: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 20,
+    borderColor: "rgba(255,255,255,0.38)",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  cameraPillText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  infoCard: {
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    borderRadius: 24,
     padding: 18,
     marginBottom: 16,
-    elevation: 3,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
+    ...cardShadow,
   },
-  infoTitle: { color: "#0f172a", fontSize: 18, fontWeight: "800", marginBottom: 12 },
+  cardTitle: {
+    color: referenceColors.text,
+    fontSize: 18,
+    fontWeight: "800",
+  },
   infoRow: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 10,
+    minHeight: 42,
     borderTopWidth: 1,
     borderTopColor: "#e2e8f0",
+    marginTop: 12,
+    paddingTop: 12,
   },
-  infoLabel: { color: "#64748b", fontSize: 13 },
-  infoValue: { color: "#0f172a", fontSize: 13, fontWeight: "800" },
-  infoValueGood: { color: "#16a34a" },
-  infoValueWarn: { color: "#dc2626" },
+  infoLabel: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+  },
+  infoValue: {
+    color: referenceColors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  warnText: {
+    color: referenceColors.danger,
+  },
+  goodText: {
+    color: referenceColors.success,
+  },
   detectionCard: {
-    backgroundColor: "#eef6ff",
+    backgroundColor: "rgba(238,246,255,0.84)",
     borderWidth: 1,
     borderColor: "#bfdbfe",
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 18,
+    ...cardShadow,
   },
-  detectionHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+  detectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
   detectionIcon: {
     width: 46,
     height: 46,
@@ -391,34 +487,59 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  detectionIconText: { color: "#2563eb", fontWeight: "900" },
-  detectionTitle: { color: "#0f172a", fontSize: 17, fontWeight: "800" },
-  detectionSubtitle: { color: "#64748b", fontSize: 12, marginTop: 2 },
-  detectionGrid: { flexDirection: "row", gap: 10 },
+  detectionSubtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  detectionGrid: {
+    flexDirection: "row",
+    gap: 10,
+  },
   detectionMetric: {
     flex: 1,
-    backgroundColor: "rgba(255,255,255,0.78)",
-    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.76)",
     borderWidth: 1,
-    borderColor: "rgba(191,219,254,0.9)",
+    borderColor: "#bfdbfe",
+    borderRadius: 16,
     padding: 12,
   },
-  metricLabel: { color: "#64748b", fontSize: 11, fontWeight: "700" },
-  metricValue: { color: "#0f172a", fontSize: 16, fontWeight: "800", marginTop: 3 },
-  quickControls: { flexDirection: "row", gap: 12, marginTop: 4 },
-  quickControl: {
+  metricLabel: {
+    color: referenceColors.textMuted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  metricValue: {
+    color: referenceColors.text,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  quickRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+  },
+  quickButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 16,
+    minHeight: 56,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: "center",
-    elevation: 3,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
+    justifyContent: "center",
+    ...cardShadow,
   },
-  snapshotControl: { backgroundColor: "#f3e8ff", borderColor: "#d8b4fe" },
-  recordControl: { backgroundColor: "#ffedd5", borderColor: "#fdba74" },
-  quickControlText: { color: "#0f172a", fontSize: 14, fontWeight: "800" },
+  quickButtonPurple: {
+    backgroundColor: "#f3e8ff",
+    borderColor: "#d8b4fe",
+  },
+  quickButtonOrange: {
+    backgroundColor: "#ffedd5",
+    borderColor: "#fdba74",
+  },
+  quickButtonText: {
+    color: referenceColors.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
 });

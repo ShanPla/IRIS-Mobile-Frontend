@@ -1,25 +1,44 @@
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
-  View,
+  Alert,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  Image,
-  Alert,
   Vibration,
+  View,
 } from "react-native";
 import * as Notifications from "expo-notifications";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import {
+  Activity,
+  AlertTriangle,
+  Bell,
+  Camera,
+  CheckCircle2,
+  ChevronRight,
+  Cpu,
+  HardDrive,
+  Plus,
+  ScanFace,
+  Shield,
+  ShieldAlert,
+  Users,
+  Video,
+  Wifi,
+} from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
+import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { piGet, piPut, buildPiUrl, ensureDeviceAuth, piPost } from "../../lib/pi";
-import { getAccountPassword } from "../../lib/accounts";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import { usePiHealth } from "../../hooks/usePiHealth";
-import type { SystemStatus, SecurityEvent, SecurityMode, EventsResponse } from "../../types/iris";
+import { buildPiUrl, ensureDeviceAuth, piGet, piPost, piPut } from "../../lib/pi";
+import { getAccountPassword } from "../../lib/accounts";
+import type { EventsResponse, SecurityEvent, SecurityMode, SystemStatus } from "../../types/iris";
+import { buttonShadow, cardShadow, referenceColors, referenceLiveImage } from "../../theme/reference";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -44,19 +63,23 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const notifyEvent = useCallback(async (eventType: string, mode: SecurityMode | null, message: string, vibrate: boolean) => {
-    await requestNotificationPermission();
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "SecureWatch Alert",
-        body: message,
-      },
-      trigger: null,
-    });
-    if (vibrate) {
-      Vibration.vibrate([0, 500, 200, 500, 200, 500]);
-    }
-  }, [requestNotificationPermission]);
+  const notifyEvent = useCallback(
+    async (_eventType: string, _mode: SecurityMode | null, message: string, vibrate: boolean) => {
+      await requestNotificationPermission();
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "I.R.I.S Alert",
+          body: message,
+        },
+        trigger: null,
+      });
+
+      if (vibrate) {
+        Vibration.vibrate([0, 500, 200, 500, 200, 500]);
+      }
+    },
+    [requestNotificationPermission]
+  );
 
   const registerPushToken = useCallback(async () => {
     if (!activeDevice || !session?.username) return;
@@ -65,8 +88,8 @@ export default function HomeScreen() {
 
     try {
       await ensureDeviceAuth(session.username, password, session.username);
-      const { status } = await Notifications.getPermissionsAsync();
-      if (status !== "granted") {
+      const { status: permissionStatus } = await Notifications.getPermissionsAsync();
+      if (permissionStatus !== "granted") {
         await Notifications.requestPermissionsAsync();
       }
       const deviceToken = await Notifications.getDevicePushTokenAsync();
@@ -82,92 +105,90 @@ export default function HomeScreen() {
     }
   }, [activeDevice, session?.username]);
 
-  const wsHandlers = useMemo(() => ({
-    onSecurityEvent: (msg: unknown) => {
-      const d = msg as {
-        id?: number;
-        event_type?: string;
-        alarm_triggered?: boolean;
-        snapshot_url?: string;
-        timestamp?: string;
-        mode?: string;
-        matched_name?: string;
-      };
-      if (!d.event_type || !d.timestamp) return;
+  const wsHandlers = useMemo(
+    () => ({
+      onSecurityEvent: (msg: unknown) => {
+        const d = msg as {
+          id?: number;
+          event_type?: string;
+          alarm_triggered?: boolean;
+          snapshot_url?: string;
+          timestamp?: string;
+          mode?: string;
+          matched_name?: string;
+        };
+        if (!d.event_type || !d.timestamp) return;
 
-      const eventId = d.id ?? Date.now();
-      const currentMode = (d.mode === "home" || d.mode === "away") ? (d.mode as SecurityMode) : status?.mode ?? null;
-      const isIntruder = d.event_type === "unknown";
-      const isUncertain = d.event_type === "possible_threat";
-      const isAuthorized = d.event_type === "authorized";
+        const eventId = d.id ?? Date.now();
+        const currentMode = d.mode === "home" || d.mode === "away" ? (d.mode as SecurityMode) : status?.mode ?? null;
+        const isIntruder = d.event_type === "unknown";
+        const isUncertain = d.event_type === "possible_threat";
+        const isAuthorized = d.event_type === "authorized";
 
-      if (lastNotifiedRef.current !== eventId) {
-        if (currentMode === "home" && (isIntruder || isUncertain)) {
-          void notifyEvent(d.event_type, currentMode, "Intruder or uncertain activity detected while in Home mode.", true);
-          lastNotifiedRef.current = eventId;
+        if (lastNotifiedRef.current !== eventId) {
+          if (currentMode === "home" && (isIntruder || isUncertain)) {
+            void notifyEvent(d.event_type, currentMode, "Intruder or uncertain activity detected while in Home mode.", true);
+            lastNotifiedRef.current = eventId;
+          }
+          if (currentMode === "away" && (isIntruder || isUncertain)) {
+            void notifyEvent(d.event_type, currentMode, "Intruder or uncertain activity detected while in Away mode.", true);
+            lastNotifiedRef.current = eventId;
+          }
+          if (currentMode === "away" && isAuthorized) {
+            void notifyEvent(d.event_type, currentMode, "Authorized person detected while in Away mode.", false);
+            lastNotifiedRef.current = eventId;
+          }
         }
 
-        if (currentMode === "away" && (isIntruder || isUncertain)) {
-          void notifyEvent(d.event_type, currentMode, "Intruder or uncertain activity detected while in Away mode.", true);
-          lastNotifiedRef.current = eventId;
+        if (d.event_type === "unknown" && d.alarm_triggered) {
+          Alert.alert(
+            "INTRUDER ALERT",
+            "An unrecognized person was confirmed after monitoring. Check the live feed immediately.",
+            [
+              { text: "View Live Feed", onPress: () => navigation.navigate("LiveFeed") },
+              { text: "Dismiss", style: "cancel" },
+            ]
+          );
         }
 
-        if (currentMode === "away" && isAuthorized) {
-          void notifyEvent(d.event_type, currentMode, "Authorized person detected while in Away mode.", false);
-          lastNotifiedRef.current = eventId;
+        const evt: SecurityEvent = {
+          id: eventId,
+          event_type: d.event_type as SecurityEvent["event_type"],
+          matched_name: d.matched_name ?? null,
+          snapshot_path: d.snapshot_url ?? null,
+          alarm_triggered: d.alarm_triggered ?? false,
+          notification_sent: false,
+          mode: d.mode ?? "",
+          notes: null,
+          timestamp: d.timestamp,
+        };
+
+        setRecentEvents((prev) => {
+          const deduped = prev.filter((event) => event.id !== evt.id);
+          return [evt, ...deduped].slice(0, 5);
+        });
+      },
+      onModeChange: (msg: unknown) => {
+        const d = msg as { mode?: string };
+        if (d.mode === "home" || d.mode === "away") {
+          setStatus((prev) => (prev ? { ...prev, mode: d.mode as SecurityMode } : prev));
         }
-      }
-
-      if (d.event_type === "unknown" && d.alarm_triggered) {
-        Alert.alert(
-          "INTRUDER ALERT",
-          "An unrecognized person was confirmed after monitoring. Check the live feed immediately.",
-          [
-            { text: "View Live Feed", onPress: () => navigation.navigate("LiveFeed") },
-            { text: "Dismiss", style: "cancel" },
-          ],
-        );
-      }
-
-      const evt: SecurityEvent = {
-        id: eventId,
-        event_type: d.event_type as SecurityEvent["event_type"],
-        matched_name: d.matched_name ?? null,
-        snapshot_path: d.snapshot_url ?? null,
-        alarm_triggered: d.alarm_triggered ?? false,
-        notification_sent: false,
-        mode: d.mode ?? "",
-        notes: null,
-        timestamp: d.timestamp,
-      };
-
-      setRecentEvents((prev) => {
-        const deduped = prev.filter((e) => e.id !== evt.id);
-        return [evt, ...deduped].slice(0, 5);
-      });
-    },
-    onModeChange: (msg: unknown) => {
-      const d = msg as { mode?: string };
-      if (d.mode === "home" || d.mode === "away") {
-        setStatus((prev) => prev ? { ...prev, mode: d.mode as SecurityMode } : prev);
-      }
-    },
-    onAlarmChange: (msg: unknown) => {
-      const d = msg as { active?: boolean };
-      if (typeof d.active === "boolean") {
-        const alarmActive = d.active;
-        setStatus((prev) => prev ? { ...prev, alarm_active: alarmActive } : prev);
-      }
-    },
-    onThreatCleared: (msg: unknown) => {
-      const d = msg as { id?: number };
-      if (d.id) {
-        setRecentEvents((prev) =>
-          prev.map((e) => e.id === d.id ? { ...e, event_type: "authorized" } : e)
-        );
-      }
-    },
-  }), [navigation, status]);
+      },
+      onAlarmChange: (msg: unknown) => {
+        const d = msg as { active?: boolean };
+        if (typeof d.active === "boolean") {
+          setStatus((prev) => (prev ? { ...prev, alarm_active: d.active ?? prev.alarm_active } : prev));
+        }
+      },
+      onThreatCleared: (msg: unknown) => {
+        const d = msg as { id?: number };
+        if (d.id) {
+          setRecentEvents((prev) => prev.map((event) => (event.id === d.id ? { ...event, event_type: "authorized" } : event)));
+        }
+      },
+    }),
+    [navigation, notifyEvent, status]
+  );
 
   useWebSocket(wsHandlers, session?.username);
 
@@ -178,6 +199,7 @@ export default function HomeScreen() {
         piGet<SystemStatus>("/api/system/status", session?.username),
         piGet<EventsResponse>("/api/events/?limit=5", session?.username),
       ]);
+
       setStatus(statusData);
       setRecentEvents(eventsData.items);
 
@@ -189,13 +211,13 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [session?.username]);
 
   useFocusEffect(
     useCallback(() => {
       void fetchData();
       void registerPushToken();
-    }, [fetchData])
+    }, [fetchData, registerPushToken])
   );
 
   const toggleMode = async () => {
@@ -211,19 +233,27 @@ export default function HomeScreen() {
 
   const getEventBadgeColor = (type: string) => {
     switch (type) {
-      case "authorized": return "#16a34a";
-      case "unknown": return "#dc2626";
-      case "possible_threat": return "#ea580c";
-      default: return "#64748b";
+      case "authorized":
+        return referenceColors.success;
+      case "unknown":
+        return referenceColors.danger;
+      case "possible_threat":
+        return referenceColors.warning;
+      default:
+        return referenceColors.textMuted;
     }
   };
 
   const getEventLabel = (type: string) => {
     switch (type) {
-      case "authorized": return "authorized";
-      case "unknown": return "intruder";
-      case "possible_threat": return "possible threat";
-      default: return type;
+      case "authorized":
+        return "authorized";
+      case "unknown":
+        return "intruder";
+      case "possible_threat":
+        return "possible threat";
+      default:
+        return type;
     }
   };
 
@@ -232,387 +262,620 @@ export default function HomeScreen() {
   const engineRunning = health?.engine_running ?? !error;
   const highRiskEvents = recentEvents.filter((event) => event.event_type === "unknown" || event.alarm_triggered).length;
   const metrics = [
-    { label: "CPU", value: cameraReady ? "45%" : "--" },
-    { label: "RAM", value: engineRunning ? "62%" : "--" },
-    { label: "Disk", value: "78%" },
+    { label: "CPU", value: cameraReady ? "45%" : "--", icon: Cpu },
+    { label: "RAM", value: engineRunning ? "62%" : "--", icon: Activity },
+    { label: "Disk", value: "78%", icon: HardDrive },
   ];
+
+  const statusBorderColor = status?.alarm_active ? "#fecaca" : "#bbf7d0";
 
   if (loading) {
     return (
       <View style={styles.centered}>
+        <ReferenceBackdrop />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void fetchData(); }} tintColor="#2563eb" />}
-    >
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>SecureWatch</Text>
-          <Text style={styles.headerDevice}>
-            {activeDevice ? "Your property is protected" : "Connect a Pi to start monitoring"}
-          </Text>
-        </View>
-        <TouchableOpacity style={styles.addButton} onPress={() => navigation.navigate("AddCamera")}>
-          <Text style={styles.addText}>+</Text>
-        </TouchableOpacity>
-      </View>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <View style={[styles.heroCard, status?.alarm_active && styles.heroCardAlert]}>
-        <View style={styles.heroHeader}>
-          <View style={[styles.statusIcon, status?.alarm_active && styles.statusIconAlert]}>
-            <Text style={[styles.statusIconText, status?.alarm_active && styles.statusIconTextAlert]}>
-              {status?.alarm_active ? "!" : "OK"}
-            </Text>
+    <View style={styles.container}>
+      <ReferenceBackdrop />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void fetchData();
+            }}
+            tintColor={referenceColors.primary}
+          />
+        }
+      >
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>I.R.I.S</Text>
+            <Text style={styles.headerSubtitle}>{activeDevice ? "Your property is protected" : "Connect a Pi to start monitoring"}</Text>
           </View>
-          <View style={styles.heroText}>
-            <Text style={styles.heroEyebrow}>System Status</Text>
-            <Text style={[styles.heroTitle, status?.alarm_active && styles.heroTitleAlert]}>
-              {status?.alarm_active ? "warning" : "online"}
-            </Text>
-          </View>
-          <TouchableOpacity style={styles.heroDetailButton} onPress={() => navigation.navigate("LiveFeed")}>
-            <Text style={styles.heroDetailText}>Details</Text>
+          <TouchableOpacity style={styles.addButtonWrap} onPress={() => navigation.navigate("AddCamera")} activeOpacity={0.9}>
+            <View style={styles.addButton}>
+              <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
+            </View>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.metricGrid}>
-          {metrics.map((item) => (
-            <View key={item.label} style={styles.metricTile}>
-              <Text style={styles.metricLabel}>{item.label}</Text>
-              <Text style={styles.metricValue}>{item.value}</Text>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <View
+          style={[
+            styles.statusCard,
+            { borderColor: statusBorderColor },
+            status?.alarm_active ? styles.statusCardAlert : styles.statusCardSafe,
+          ]}
+        >
+          <View style={styles.statusHeader}>
+            <View style={styles.statusLead}>
+              <View style={[styles.statusIconWrap, { borderColor: statusBorderColor }]}>
+                {status?.alarm_active ? (
+                  <AlertTriangle size={20} color={referenceColors.danger} strokeWidth={2.2} />
+                ) : (
+                  <CheckCircle2 size={20} color={referenceColors.success} strokeWidth={2.2} />
+                )}
+              </View>
+              <View>
+                <Text style={styles.statusEyebrow}>System Status</Text>
+                <Text style={[styles.statusValue, status?.alarm_active && styles.statusValueAlert]}>
+                  {status?.alarm_active ? "warning" : "online"}
+                </Text>
+              </View>
             </View>
-          ))}
+            <TouchableOpacity style={styles.detailsButton} onPress={() => navigation.navigate("LiveFeed")}>
+              <Text style={styles.detailsButtonText}>Details</Text>
+              <ChevronRight size={14} color={referenceColors.textSoft} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.metricRow}>
+            {metrics.map((item) => {
+              const Icon = item.icon;
+              return (
+                <View key={item.label} style={styles.metricCard}>
+                  <View style={styles.metricHeader}>
+                    <Icon size={14} color={referenceColors.textMuted} strokeWidth={2.2} />
+                    <Text style={styles.metricLabel}>{item.label}</Text>
+                  </View>
+                  <Text style={styles.metricValue}>{item.value}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={styles.connectionRow}>
+            <View style={[styles.connectionPill, styles.connectionSuccess]}>
+              <Wifi size={14} color={referenceColors.success} strokeWidth={2.2} />
+              <Text style={styles.connectionText}>{cameraReady ? "Connected" : "Disconnected"}</Text>
+            </View>
+            <View style={[styles.connectionPill, styles.connectionInfo]}>
+              <Camera size={14} color={referenceColors.primary} strokeWidth={2.2} />
+              <Text style={styles.connectionText}>{cameraReady ? "Camera Active" : "Camera Offline"}</Text>
+            </View>
+            <View style={styles.connectionPill}>
+              <Bell size={14} color={referenceColors.textSoft} strokeWidth={2.2} />
+              <Text style={styles.connectionText}>{status?.alarm_active ? "Alarm Triggered" : "Alerts On"}</Text>
+            </View>
+          </View>
         </View>
 
-        <View style={styles.chipRow}>
-          <View style={[styles.statusChip, cameraReady && styles.statusChipGood]}>
-            <View style={[styles.chipDot, cameraReady && styles.chipDotGood]} />
-            <Text style={styles.chipText}>{cameraReady ? "Connected" : "Disconnected"}</Text>
-          </View>
-          <View style={[styles.statusChip, cameraReady && styles.statusChipBlue]}>
-            <View style={[styles.chipDot, cameraReady && styles.chipDotBlue]} />
-            <Text style={styles.chipText}>{cameraReady ? "Camera Active" : "Camera Offline"}</Text>
-          </View>
-          <View style={[styles.statusChip, !status?.alarm_active && styles.statusChipNeutral]}>
-            <View style={[styles.chipDot, !status?.alarm_active && styles.chipDotNeutral]} />
-            <Text style={styles.chipText}>{status?.alarm_active ? "Alarm Triggered" : "Alerts On"}</Text>
-          </View>
-        </View>
-      </View>
+        <TouchableOpacity style={styles.liveCard} onPress={() => navigation.navigate("LiveFeed")} activeOpacity={0.92}>
+          <Image source={{ uri: frameUri || referenceLiveImage }} style={styles.liveImage} resizeMode="cover" />
 
-      <TouchableOpacity style={styles.previewCard} onPress={() => navigation.navigate("LiveFeed")}>
-        {frameUri ? (
-          <Image source={{ uri: frameUri }} style={styles.previewImage} resizeMode="cover" />
-        ) : (
-          <View style={styles.previewPlaceholder}>
-            <Text style={styles.previewPlaceholderText}>Camera preview</Text>
+          <View style={styles.liveBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveBadgeText}>LIVE</Text>
           </View>
-        )}
-        <View style={styles.liveBadge}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveBadgeText}>LIVE</Text>
-        </View>
-        <View style={styles.previewFooter}>
-          <Text style={styles.previewTitle}>View Full Screen</Text>
-          <Text style={styles.previewLabel}>Live Monitor</Text>
-        </View>
-      </TouchableOpacity>
 
-      <View style={styles.controlGrid}>
-        <TouchableOpacity style={styles.controlCard} onPress={toggleMode}>
-          <Text style={styles.controlIcon}>{status?.mode === "away" ? "AW" : "HM"}</Text>
-          <Text style={styles.controlLabel}>Mode</Text>
-          <Text style={styles.controlValue}>{status?.mode === "away" ? "Away" : "Home"}</Text>
-          <Text style={styles.controlAction}>Switch</Text>
+          <View style={styles.liveTime}>
+            <Text style={styles.liveTimeText}>{new Date().toLocaleTimeString()}</Text>
+          </View>
+
+          <View style={styles.liveOverlay}>
+            <Video size={18} color="#ffffff" strokeWidth={2.2} />
+            <Text style={styles.liveOverlayTitle}>View Full Screen</Text>
+            <ChevronRight size={18} color="#ffffff" strokeWidth={2.2} />
+          </View>
         </TouchableOpacity>
 
-        <View style={[styles.controlCard, status?.alarm_active ? styles.controlAlert : styles.controlSafe]}>
-          <Text style={styles.controlIcon}>{status?.alarm_active ? "AL" : "AR"}</Text>
-          <Text style={styles.controlLabel}>Security</Text>
-          <Text style={[styles.controlValue, status?.alarm_active && styles.controlValueAlert]}>
-            {status?.alarm_active ? "Triggered" : "Armed"}
-          </Text>
-          <Text style={styles.controlHint}>{highRiskEvents} high risk</Text>
-        </View>
-      </View>
+        <View style={styles.controlGrid}>
+          <TouchableOpacity style={styles.controlCard} onPress={() => void toggleMode()}>
+            {status?.mode === "away" ? (
+              <ShieldAlert size={22} color={referenceColors.warning} strokeWidth={2.2} />
+            ) : (
+              <Shield size={22} color={referenceColors.primary} strokeWidth={2.2} />
+            )}
+            <Text style={styles.controlLabel}>Mode</Text>
+            <Text style={styles.controlValue}>{status?.mode === "away" ? "Away" : "Home"}</Text>
+            <Text style={styles.controlAction}>Switch</Text>
+          </TouchableOpacity>
 
-      <View style={styles.section}>
+          <View style={[styles.controlCard, status?.alarm_active ? styles.controlAlert : styles.controlSafe]}>
+            <Shield size={22} color={status?.alarm_active ? referenceColors.danger : referenceColors.success} strokeWidth={2.2} />
+            <Text style={styles.controlLabel}>Security</Text>
+            <Text style={[styles.controlValue, status?.alarm_active && styles.controlValueAlert]}>
+              {status?.alarm_active ? "Triggered" : "Armed"}
+            </Text>
+            <Text style={styles.controlActionMuted}>{highRiskEvents} high risk</Text>
+          </View>
+        </View>
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <TouchableOpacity onPress={() => navigation.navigate("Logs")}>
-            <Text style={styles.seeAll}>View All</Text>
+          <TouchableOpacity style={styles.sectionLink} onPress={() => navigation.navigate("Logs")}>
+            <Text style={styles.sectionLinkText}>View All</Text>
+            <ChevronRight size={14} color={referenceColors.primary} strokeWidth={2.2} />
           </TouchableOpacity>
         </View>
+
         {recentEvents.length === 0 ? (
-          <Text style={styles.emptyText}>No events yet</Text>
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No events yet</Text>
+          </View>
         ) : (
           recentEvents.map((event) => {
             const badgeColor = getEventBadgeColor(event.event_type);
             return (
-              <TouchableOpacity
-                key={event.id}
-                style={styles.eventRow}
-                onPress={() => navigation.navigate("EventDetails", { event })}
-              >
-                <View style={[styles.eventDot, { backgroundColor: badgeColor }]} />
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventText}>
-                    {event.matched_name ?? getEventLabel(event.event_type)}
-                  </Text>
-                  <Text style={styles.eventTime}>
-                    {new Date(event.timestamp).toLocaleString()}
-                  </Text>
+              <TouchableOpacity key={event.id} style={styles.eventCard} onPress={() => navigation.navigate("EventDetails", { event })}>
+                <View style={[styles.eventIconWrap, { backgroundColor: `${badgeColor}1A`, borderColor: `${badgeColor}4D` }]}>
+                  {event.event_type === "authorized" ? (
+                    <CheckCircle2 size={18} color={badgeColor} strokeWidth={2.2} />
+                  ) : (
+                    <AlertTriangle size={18} color={badgeColor} strokeWidth={2.2} />
+                  )}
                 </View>
-                <View style={[styles.eventBadgePill, { backgroundColor: `${badgeColor}18`, borderColor: `${badgeColor}44` }]}>
-                  <Text style={[styles.eventBadge, { color: badgeColor }]}>
-                    {getEventLabel(event.event_type)}
-                  </Text>
+
+                <View style={styles.eventCopy}>
+                  <Text style={styles.eventName}>{event.matched_name ?? getEventLabel(event.event_type)}</Text>
+                  <Text style={styles.eventMeta}>{new Date(event.timestamp).toLocaleString()}</Text>
+                </View>
+
+                <View style={[styles.eventBadge, { backgroundColor: `${badgeColor}16`, borderColor: `${badgeColor}3A` }]}>
+                  <Text style={[styles.eventBadgeText, { color: badgeColor }]}>{getEventLabel(event.event_type)}</Text>
                 </View>
               </TouchableOpacity>
             );
           })
         )}
-      </View>
 
-      <View style={styles.quickActions}>
-        <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate("FacialRegistration")}>
-          <Text style={styles.quickActionTitle}>Faces</Text>
-          <Text style={styles.quickActionMeta}>{knownFaces}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate("Logs")}>
-          <Text style={styles.quickActionTitle}>Events</Text>
-          <Text style={styles.quickActionMeta}>{recentEvents.length}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate("FacialRegistration")}>
-          <Text style={styles.quickActionTitle}>Users</Text>
-          <Text style={styles.quickActionMeta}>{knownFaces}</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        <View style={styles.quickGrid}>
+          <TouchableOpacity style={styles.quickCard} onPress={() => navigation.navigate("FacialRegistration")}>
+            <ScanFace size={22} color={referenceColors.primary} strokeWidth={2.2} />
+            <Text style={styles.quickTitle}>Faces</Text>
+            <Text style={styles.quickMeta}>{knownFaces}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickCard} onPress={() => navigation.navigate("Logs")}>
+            <Activity size={22} color={referenceColors.textSoft} strokeWidth={2.2} />
+            <Text style={styles.quickTitle}>Events</Text>
+            <Text style={styles.quickMeta}>{recentEvents.length}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.quickCard}
+            onPress={() => navigation.getParent()?.navigate("SharedUsers" as never)}
+          >
+            <Users size={22} color={referenceColors.textSoft} strokeWidth={2.2} />
+            <Text style={styles.quickTitle}>Users</Text>
+            <Text style={styles.quickMeta}>{knownFaces}</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { paddingBottom: 116 },
-  centered: { flex: 1, backgroundColor: "#f8fafc", justifyContent: "center", alignItems: "center" },
-  loadingText: { color: "#64748b" },
+  container: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 118,
+  },
+  centered: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+  },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 18,
+    justifyContent: "space-between",
+    marginBottom: 24,
   },
-  headerTitle: { color: "#0f172a", fontSize: 30, fontWeight: "800" },
-  headerDevice: { color: "#64748b", fontSize: 12, marginTop: 2 },
+  headerTitle: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  headerSubtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+    marginTop: 4,
+  },
+  addButtonWrap: {
+    borderRadius: 18,
+    ...buttonShadow,
+  },
   addButton: {
     width: 52,
     height: 52,
     borderRadius: 18,
-    backgroundColor: "#2563eb",
+    backgroundColor: "rgba(255,255,255,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.74)",
     alignItems: "center",
     justifyContent: "center",
-    elevation: 5,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
   },
-  addText: { color: "#ffffff", fontSize: 28, fontWeight: "600", marginTop: -2 },
-  error: { color: "#dc2626", fontSize: 13, textAlign: "center", marginBottom: 12, paddingHorizontal: 20 },
-  heroCard: {
-    marginHorizontal: 20,
-    marginBottom: 18,
-    backgroundColor: "#dcfce7",
-    borderColor: "#bbf7d0",
+  error: {
+    color: referenceColors.danger,
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  statusCard: {
     borderWidth: 1,
-    borderRadius: 24,
+    borderRadius: 28,
     padding: 20,
-    elevation: 6,
-    shadowColor: "#16a34a",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
+    marginBottom: 18,
+    ...cardShadow,
   },
-  heroCardAlert: { backgroundColor: "#fff1f2", borderColor: "#fecaca" },
-  heroHeader: { flexDirection: "row", alignItems: "center", marginBottom: 16, gap: 12 },
-  statusIcon: {
+  statusCardSafe: {
+    backgroundColor: "rgba(220,252,231,0.62)",
+  },
+  statusCardAlert: {
+    backgroundColor: "rgba(255,241,242,0.68)",
+  },
+  statusHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 16,
+  },
+  statusLead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  statusIconWrap: {
     width: 46,
     height: 46,
     borderRadius: 16,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#bbf7d0",
     alignItems: "center",
     justifyContent: "center",
   },
-  statusIconAlert: { borderColor: "#fecaca" },
-  statusIconText: { color: "#16a34a", fontWeight: "900", fontSize: 13 },
-  statusIconTextAlert: { color: "#dc2626" },
-  heroText: { flex: 1 },
-  heroEyebrow: { color: "#475569", fontSize: 12, fontWeight: "700" },
-  heroTitle: { color: "#0f172a", fontSize: 22, fontWeight: "800", marginTop: 2 },
-  heroTitleAlert: { color: "#b91c1c" },
-  heroDetailButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
+  statusEyebrow: {
+    color: referenceColors.textSoft,
+    fontSize: 12,
+    fontWeight: "700",
   },
-  heroDetailText: { color: "#334155", fontSize: 13, fontWeight: "800" },
-  metricGrid: { flexDirection: "row", gap: 10, marginBottom: 14 },
-  metricTile: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 12,
+  statusValue: {
+    color: referenceColors.text,
+    fontSize: 22,
+    fontWeight: "800",
+    marginTop: 2,
+    textTransform: "capitalize",
+  },
+  statusValueAlert: {
+    color: "#b91c1c",
+  },
+  detailsButton: {
+    minHeight: 40,
+    borderRadius: 14,
     backgroundColor: "rgba(255,255,255,0.82)",
     borderWidth: 1,
-    borderColor: "rgba(187,247,208,0.95)",
+    borderColor: "rgba(255,255,255,0.5)",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  metricLabel: { color: "#64748b", fontSize: 11, fontWeight: "700" },
-  metricValue: { color: "#0f172a", fontSize: 16, fontWeight: "800", marginTop: 3 },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  statusChip: {
+  detailsButtonText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  metricRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 14,
+  },
+  metricCard: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.45)",
+    padding: 12,
+  },
+  metricHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  metricLabel: {
+    color: referenceColors.textMuted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  metricValue: {
+    color: referenceColors.text,
+    fontSize: 17,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  connectionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  connectionPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#fee2e2",
+    minHeight: 38,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.72)",
     borderWidth: 1,
-    borderColor: "#fecaca",
+    borderColor: "rgba(226,232,240,0.9)",
+    paddingHorizontal: 12,
   },
-  statusChipGood: { backgroundColor: "#dcfce7", borderColor: "#bbf7d0" },
-  statusChipBlue: { backgroundColor: "#dbeafe", borderColor: "#bfdbfe" },
-  statusChipNeutral: { backgroundColor: "#f8fafc", borderColor: "#e2e8f0" },
-  chipDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#dc2626" },
-  chipDotGood: { backgroundColor: "#16a34a" },
-  chipDotBlue: { backgroundColor: "#2563eb" },
-  chipDotNeutral: { backgroundColor: "#64748b" },
-  chipText: { color: "#334155", fontSize: 12, fontWeight: "700" },
-  previewCard: {
-    marginHorizontal: 20,
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
+  connectionSuccess: {
+    borderColor: "#bbf7d0",
+  },
+  connectionInfo: {
+    borderColor: "#bfdbfe",
+  },
+  connectionText: {
+    color: referenceColors.textSoft,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  liveCard: {
+    borderRadius: 28,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    backgroundColor: "#ffffff",
     marginBottom: 18,
-    elevation: 6,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
+    ...cardShadow,
   },
-  previewImage: { width: "100%", height: 210 },
-  previewPlaceholder: {
+  liveImage: {
     width: "100%",
-    height: 210,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#e2e8f0",
+    height: 220,
   },
-  previewPlaceholderText: { color: "#64748b", fontSize: 13 },
   liveBadge: {
     position: "absolute",
-    left: 14,
     top: 14,
+    left: 14,
+    minHeight: 34,
+    borderRadius: 12,
+    backgroundColor: "rgba(239,68,68,0.92)",
+    paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: "rgba(220,38,38,0.94)",
+    gap: 8,
   },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#ffffff" },
-  liveBadgeText: { color: "#ffffff", fontSize: 11, fontWeight: "900" },
-  previewFooter: {
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ffffff",
+  },
+  liveBadgeText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  liveTime: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    minHeight: 34,
+    borderRadius: 12,
+    backgroundColor: "rgba(15,23,42,0.78)",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  liveTimeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  liveOverlay: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    padding: 16,
-    backgroundColor: "rgba(15,23,42,0.72)",
-  },
-  previewTitle: { color: "#ffffff", fontSize: 17, fontWeight: "800" },
-  previewLabel: { color: "#dbeafe", fontSize: 12, marginTop: 2 },
-  controlGrid: { flexDirection: "row", paddingHorizontal: 20, gap: 12, marginBottom: 20 },
-  controlCard: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 16,
-    elevation: 3,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-  },
-  controlSafe: { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" },
-  controlAlert: { backgroundColor: "#fff1f2", borderColor: "#fecaca" },
-  controlIcon: { color: "#2563eb", fontSize: 16, fontWeight: "900", marginBottom: 12 },
-  controlLabel: { color: "#64748b", fontSize: 12, fontWeight: "700" },
-  controlValue: { color: "#0f172a", fontSize: 20, fontWeight: "800", marginTop: 2 },
-  controlValueAlert: { color: "#dc2626" },
-  controlAction: { color: "#2563eb", fontSize: 12, fontWeight: "800", marginTop: 12 },
-  controlHint: { color: "#64748b", fontSize: 12, marginTop: 12 },
-  section: { paddingHorizontal: 20, marginBottom: 20 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  sectionTitle: { color: "#0f172a", fontSize: 18, fontWeight: "800" },
-  seeAll: { color: "#2563eb", fontSize: 13, fontWeight: "800" },
-  emptyText: { color: "#64748b", fontSize: 13, textAlign: "center", paddingVertical: 20 },
-  eventRow: {
+    minHeight: 72,
+    backgroundColor: "rgba(15,23,42,0.76)",
+    paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+    justifyContent: "center",
+    gap: 10,
+  },
+  liveOverlayTitle: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  controlGrid: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 20,
+  },
+  controlCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.82)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: referenceColors.border,
+    borderRadius: 22,
+    padding: 18,
+    ...cardShadow,
+  },
+  controlSafe: {
+    backgroundColor: "rgba(220,252,231,0.75)",
+    borderColor: "#bbf7d0",
+  },
+  controlAlert: {
+    backgroundColor: "rgba(255,241,242,0.78)",
+    borderColor: "#fecaca",
+  },
+  controlLabel: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 14,
+  },
+  controlValue: {
+    color: referenceColors.text,
+    fontSize: 20,
+    fontWeight: "800",
+    marginTop: 4,
+  },
+  controlValueAlert: {
+    color: referenceColors.danger,
+  },
+  controlAction: {
+    color: referenceColors.primary,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 12,
+  },
+  controlActionMuted: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    marginTop: 12,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    color: referenceColors.text,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  sectionLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  sectionLinkText: {
+    color: referenceColors.primary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  emptyCard: {
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    marginBottom: 18,
+  },
+  emptyText: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  eventCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
     padding: 14,
     marginBottom: 10,
-    elevation: 2,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    ...cardShadow,
   },
-  eventDot: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
-  eventInfo: { flex: 1 },
-  eventText: { color: "#0f172a", fontSize: 14, fontWeight: "700" },
-  eventTime: { color: "#64748b", fontSize: 11, marginTop: 3 },
-  eventBadgePill: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
+  eventIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  eventBadge: { fontSize: 11, fontWeight: "800" },
-  quickActions: { flexDirection: "row", gap: 10, paddingHorizontal: 20 },
-  quickAction: {
+  eventCopy: {
+    flex: 1,
+  },
+  eventName: {
+    color: referenceColors.text,
+    fontSize: 14,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  eventMeta: {
+    color: referenceColors.textMuted,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  eventBadge: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  eventBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  quickGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+  },
+  quickCard: {
     flex: 1,
     alignItems: "center",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.82)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 14,
+    borderColor: referenceColors.border,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
+    ...cardShadow,
   },
-  quickActionTitle: { color: "#0f172a", fontSize: 13, fontWeight: "800" },
-  quickActionMeta: { color: "#64748b", fontSize: 12, marginTop: 5 },
+  quickTitle: {
+    color: referenceColors.text,
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 10,
+  },
+  quickMeta: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    marginTop: 4,
+  },
 });

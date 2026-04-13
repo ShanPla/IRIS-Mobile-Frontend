@@ -12,10 +12,21 @@ import {
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import {
+  ArrowLeft,
+  Bell,
+  ChevronRight,
+  KeyRound,
+  LogOut,
+  Smartphone,
+  User,
+} from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
+import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { getDevices } from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
+import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Profile">;
 
@@ -74,260 +85,416 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color="#2563eb" />
+        <ReferenceBackdrop />
+        <ActivityIndicator color={referenceColors.primary} />
       </View>
     );
   }
 
-  const username = session?.username ?? "SecureWatch User";
+  const username = session?.username ?? "I.R.I.S User";
   const initials = username.slice(0, 2).toUpperCase();
   const primaryCount = devices.filter(isPrimaryDevice).length;
   const secondaryCount = devices.length - primaryCount;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <ReferenceBackdrop />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("DeviceList")}>
-          <Text style={styles.backText}>{"< Devices"}</Text>
+          <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
+          <Text style={styles.backText}>Back to Devices</Text>
         </TouchableOpacity>
-        <Text style={styles.pageTitle}>Profile</Text>
-        <Text style={styles.pageSubtitle}>Manage your account preferences</Text>
-      </View>
 
-      <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
+        <View style={styles.header}>
+          <Text style={styles.pageTitle}>Profile</Text>
+          <Text style={styles.pageSubtitle}>Manage your account preferences</Text>
         </View>
-        <View style={styles.profileInfo}>
-          <Text style={styles.username}>{username}</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.role}>{session?.role?.replace(/_/g, " ") ?? "User"}</Text>
+
+        <View style={styles.profileCard}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
           </View>
-          <Text style={styles.memberSince}>{session?.email || "Email not linked"}</Text>
-        </View>
-      </View>
-
-      <View style={styles.metricsRow}>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>{primaryCount}</Text>
-          <Text style={styles.metricLabel}>Primary</Text>
-        </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>{secondaryCount}</Text>
-          <Text style={styles.metricLabel}>Secondary</Text>
-        </View>
-        <View style={styles.metricCard}>
-          <Text style={styles.metricValue}>{devices.length}</Text>
-          <Text style={styles.metricLabel}>Devices</Text>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferences</Text>
-        <View style={styles.preferenceRow}>
-          <View style={styles.preferenceCopy}>
-            <Text style={styles.preferenceTitle}>Push Notifications</Text>
-            <Text style={styles.preferenceText}>Alerts for registered devices</Text>
+          <View style={styles.profileInfo}>
+            <Text style={styles.username}>{username}</Text>
+            <Text style={styles.emailText}>{session?.email || "Email not linked"}</Text>
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleText}>{session?.role?.replace(/_/g, " ") ?? "User"}</Text>
+            </View>
           </View>
-          <Switch
-            value={pushAlerts}
-            onValueChange={setPushAlerts}
-            trackColor={{ true: "#2563eb", false: "#cbd5e1" }}
-            thumbColor="#ffffff"
+        </View>
+
+        <View style={styles.metricsRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{primaryCount}</Text>
+            <Text style={styles.metricLabel}>Primary</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{secondaryCount}</Text>
+            <Text style={styles.metricLabel}>Secondary</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{devices.length}</Text>
+            <Text style={styles.metricLabel}>Devices</Text>
+          </View>
+        </View>
+
+        <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.quickAction}>
+            <User size={20} color={referenceColors.primary} strokeWidth={2.2} />
+            <View style={styles.quickCopy}>
+              <Text style={styles.quickTitle}>Account Settings</Text>
+              <Text style={styles.quickSubtitle}>Profile details</Text>
+            </View>
+            <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickAction}>
+            <KeyRound size={20} color={referenceColors.warning} strokeWidth={2.2} />
+            <View style={styles.quickCopy}>
+              <Text style={styles.quickTitle}>Change Password</Text>
+              <Text style={styles.quickSubtitle}>Update account access</Text>
+            </View>
+            <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate("DeviceList")}>
+            <Smartphone size={20} color={referenceColors.textSoft} strokeWidth={2.2} />
+            <View style={styles.quickCopy}>
+              <Text style={styles.quickTitle}>My Devices</Text>
+              <Text style={styles.quickSubtitle}>Return to device list</Text>
+            </View>
+            <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Preferences</Text>
+
+          <View style={styles.preferenceRow}>
+            <View style={styles.preferenceCopy}>
+              <Text style={styles.preferenceTitle}>Push Notifications</Text>
+              <Text style={styles.preferenceText}>Alerts for registered devices</Text>
+            </View>
+            <Switch
+              value={pushAlerts}
+              onValueChange={setPushAlerts}
+              trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+              thumbColor="#ffffff"
+            />
+          </View>
+
+          <View style={styles.preferenceRow}>
+            <View style={styles.preferenceCopy}>
+              <Text style={styles.preferenceTitle}>Sound Alerts</Text>
+              <Text style={styles.preferenceText}>Play alarm sounds on this phone</Text>
+            </View>
+            <Switch
+              value={soundAlerts}
+              onValueChange={setSoundAlerts}
+              trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+              thumbColor="#ffffff"
+            />
+          </View>
+
+          <View style={[styles.preferenceRow, styles.preferenceRowLast]}>
+            <View style={styles.preferenceCopy}>
+              <Text style={styles.preferenceTitle}>Email Digest</Text>
+              <Text style={styles.preferenceText}>Daily security summary</Text>
+            </View>
+            <Switch
+              value={emailDigest}
+              onValueChange={setEmailDigest}
+              trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+              thumbColor="#ffffff"
+            />
+          </View>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Change Password</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Current password"
+            placeholderTextColor="#94a3b8"
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            secureTextEntry
           />
-        </View>
-        <View style={styles.preferenceRow}>
-          <View style={styles.preferenceCopy}>
-            <Text style={styles.preferenceTitle}>Sound Alerts</Text>
-            <Text style={styles.preferenceText}>Play alarm sounds on this phone</Text>
-          </View>
-          <Switch
-            value={soundAlerts}
-            onValueChange={setSoundAlerts}
-            trackColor={{ true: "#2563eb", false: "#cbd5e1" }}
-            thumbColor="#ffffff"
+          <TextInput
+            style={styles.input}
+            placeholder="New password (min 6 chars)"
+            placeholderTextColor="#94a3b8"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry
           />
-        </View>
-        <View style={[styles.preferenceRow, styles.preferenceRowLast]}>
-          <View style={styles.preferenceCopy}>
-            <Text style={styles.preferenceTitle}>Email Digest</Text>
-            <Text style={styles.preferenceText}>Daily security summary</Text>
-          </View>
-          <Switch
-            value={emailDigest}
-            onValueChange={setEmailDigest}
-            trackColor={{ true: "#2563eb", false: "#cbd5e1" }}
-            thumbColor="#ffffff"
-          />
-        </View>
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Change Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Current password"
-          placeholderTextColor="#64748b"
-          value={currentPassword}
-          onChangeText={setCurrentPassword}
-          secureTextEntry
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="New password (min 6 chars)"
-          placeholderTextColor="#64748b"
-          value={newPassword}
-          onChangeText={setNewPassword}
-          secureTextEntry
-        />
-        {passwordSuccess ? <Text style={styles.success}>{passwordSuccess}</Text> : null}
-        <TouchableOpacity
-          style={[styles.button, changingPassword && styles.buttonDisabled]}
-          onPress={() => void handlePasswordChange()}
-          disabled={changingPassword}
-        >
-          {changingPassword ? (
-            <ActivityIndicator color="#f8fafc" />
-          ) : (
-            <Text style={styles.buttonText}>Change Password</Text>
-          )}
+          {passwordSuccess ? <Text style={styles.success}>{passwordSuccess}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.primaryButton, changingPassword && styles.buttonDisabled]}
+            onPress={() => void handlePasswordChange()}
+            disabled={changingPassword}
+          >
+            {changingPassword ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Change Password</Text>}
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.logoutCard} onPress={logout}>
+          <LogOut size={18} color={referenceColors.danger} strokeWidth={2.2} />
+          <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-        <Text style={styles.logoutText}>Log Out</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { paddingBottom: 44 },
-  centered: { flex: 1, backgroundColor: "#f8fafc", justifyContent: "center", alignItems: "center" },
-  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 18 },
+  container: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 40,
+  },
+  centered: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   backButton: {
     alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.82)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     marginBottom: 18,
   },
-  backText: { color: "#2563eb", fontSize: 13, fontWeight: "800" },
-  pageTitle: { color: "#0f172a", fontSize: 30, fontWeight: "800" },
-  pageSubtitle: { color: "#64748b", fontSize: 14, marginTop: 3 },
+  backText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  header: {
+    marginBottom: 18,
+  },
+  pageTitle: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  pageSubtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    marginTop: 4,
+  },
   profileCard: {
-    marginHorizontal: 20,
-    backgroundColor: "#dbeafe",
-    borderWidth: 1,
-    borderColor: "#93c5fd",
-    borderRadius: 24,
-    padding: 20,
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
-    elevation: 6,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 20,
+    ...cardShadow,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: "#2563eb",
-    justifyContent: "center",
-    alignItems: "center",
+    width: 76,
+    height: 76,
+    borderRadius: 24,
+    backgroundColor: "#dbeafe",
     borderWidth: 1,
-    borderColor: "#60a5fa",
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  avatarText: { color: "#ffffff", fontSize: 24, fontWeight: "900" },
-  profileInfo: { flex: 1 },
-  username: { color: "#0f172a", fontSize: 22, fontWeight: "800", textTransform: "capitalize" },
+  avatarText: {
+    color: referenceColors.primary,
+    fontSize: 24,
+    fontWeight: "800",
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  username: {
+    color: referenceColors.text,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  emailText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    marginTop: 6,
+  },
   roleBadge: {
     alignSelf: "flex-start",
-    marginTop: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#bfdbfe",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 10,
   },
-  role: { color: "#2563eb", fontSize: 12, fontWeight: "800", textTransform: "capitalize" },
-  memberSince: { color: "#475569", fontSize: 12, marginTop: 10 },
-  metricsRow: { flexDirection: "row", gap: 10, paddingHorizontal: 20, marginTop: 18 },
+  roleText: {
+    color: referenceColors.primary,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  metricsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+  },
   metricCard: {
     flex: 1,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 18,
-    padding: 14,
     alignItems: "center",
-  },
-  metricValue: { color: "#0f172a", fontSize: 22, fontWeight: "900" },
-  metricLabel: { color: "#64748b", fontSize: 12, marginTop: 3, fontWeight: "700" },
-  section: {
-    marginHorizontal: 20,
-    marginTop: 18,
-    backgroundColor: "rgba(255,255,255,0.94)",
     borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.82)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 16,
-    elevation: 3,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
+    borderColor: referenceColors.border,
+    paddingVertical: 16,
+    ...cardShadow,
   },
-  sectionTitle: { color: "#0f172a", fontSize: 17, fontWeight: "800", marginBottom: 12 },
-  preferenceRow: {
+  metricValue: {
+    color: referenceColors.text,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  metricLabel: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+  },
+  quickActions: {
+    marginTop: 18,
+    gap: 10,
+  },
+  quickAction: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 14,
+    gap: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 16,
+    ...cardShadow,
+  },
+  quickCopy: {
+    flex: 1,
+  },
+  quickTitle: {
+    color: referenceColors.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  quickSubtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  sectionCard: {
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 18,
+    marginTop: 18,
+    ...cardShadow,
+  },
+  sectionTitle: {
+    color: referenceColors.text,
+    fontSize: 17,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
+  preferenceRow: {
+    minHeight: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
     gap: 12,
   },
-  preferenceRowLast: { borderBottomWidth: 0 },
-  preferenceCopy: { flex: 1 },
-  preferenceTitle: { color: "#0f172a", fontSize: 15, fontWeight: "800" },
-  preferenceText: { color: "#64748b", fontSize: 12, marginTop: 3 },
-  input: {
-    backgroundColor: "#ffffff",
-    borderRadius: 8,
-    padding: 14,
-    color: "#0f172a",
-    fontSize: 15,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
+  preferenceRowLast: {
+    borderBottomWidth: 0,
   },
-  button: {
-    backgroundColor: "#2563eb",
-    borderRadius: 8,
-    padding: 14,
-    alignItems: "center",
+  preferenceCopy: {
+    flex: 1,
+  },
+  preferenceTitle: {
+    color: referenceColors.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  preferenceText: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
     marginTop: 4,
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#f8fafc", fontWeight: "700", fontSize: 15 },
-  success: { color: "#16a34a", fontSize: 13, marginBottom: 8 },
-  logoutButton: {
-    marginHorizontal: 20,
-    marginTop: 28,
-    padding: 14,
-    borderRadius: 8,
+  input: {
+    minHeight: 56,
+    borderRadius: 16,
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
-    borderColor: "#dc2626",
-    alignItems: "center",
+    borderColor: "#e2e8f0",
+    color: referenceColors.text,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    marginBottom: 12,
   },
-  logoutText: { color: "#dc2626", fontWeight: "700", fontSize: 15 },
+  success: {
+    color: referenceColors.success,
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  primaryButton: {
+    minHeight: 56,
+    borderRadius: 18,
+    backgroundColor: referenceColors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+    ...buttonShadow,
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+  },
+  logoutCard: {
+    minHeight: 58,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,241,242,0.88)",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    marginTop: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    ...cardShadow,
+  },
+  logoutText: {
+    color: referenceColors.danger,
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });

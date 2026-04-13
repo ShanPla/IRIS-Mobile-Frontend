@@ -32,7 +32,11 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+
+# local logs
+*.log
 
 # typescript
 *.tsbuildinfo

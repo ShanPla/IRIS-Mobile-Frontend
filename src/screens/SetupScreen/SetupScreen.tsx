@@ -1,26 +1,77 @@
 import { useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { ArrowLeft, Link2, Mail, Plus, Router } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
-import { addDevice } from "../../lib/pi";
+import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
+import { addDevice } from "../../lib/pi";
+import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Setup">;
+
+type SetupFieldProps = {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  icon: "url" | "device" | "mail";
+  keyboardType?: "default" | "numbers-and-punctuation" | "email-address";
+  onSubmitEditing?: () => void;
+};
+
+function SetupField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  icon,
+  keyboardType = "default",
+  onSubmitEditing,
+}: SetupFieldProps) {
+  const Icon = icon === "mail" ? Mail : icon === "device" ? Router : Link2;
+
+  return (
+    <View style={styles.fieldBlock}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.inputShell}>
+        <Icon size={18} color="#94a3b8" strokeWidth={2.2} />
+        <TextInput
+          style={styles.input}
+          placeholder={placeholder}
+          placeholderTextColor="#94a3b8"
+          value={value}
+          onChangeText={onChangeText}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType={keyboardType}
+          returnKeyType={onSubmitEditing ? "done" : "next"}
+          onSubmitEditing={onSubmitEditing}
+        />
+      </View>
+    </View>
+  );
+}
 
 export default function SetupScreen() {
   const navigation = useNavigation<Nav>();
   const { refreshSession, session } = useAuth();
   const [url, setUrl] = useState("");
   const [deviceIp, setDeviceIp] = useState("");
+  const [primaryEmail, setPrimaryEmail] = useState(session?.email ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -29,20 +80,15 @@ export default function SetupScreen() {
       setError("Ngrok URL and Device IP are required");
       return;
     }
-    if (!session?.email?.trim()) {
-      setError("Sign in before adding a device");
-      return;
-    }
+
     setLoading(true);
     setError("");
     try {
       const normalized = url.trim().replace(/\/$/, "");
-      const withProtocol = /^https?:\/\//i.test(normalized)
-        ? normalized
-        : `https://${normalized}`;
-      await addDevice(withProtocol, deviceIp.trim(), session.email, session.username);
+      const withProtocol = /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
+      await addDevice(withProtocol, deviceIp.trim(), primaryEmail.trim(), session?.username);
       await refreshSession();
-      navigation.navigate("DeviceList");
+      navigation.navigate(session ? "DeviceList" : "Login");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add device");
     } finally {
@@ -51,132 +97,225 @@ export default function SetupScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("DeviceList")}>
-          <Text style={styles.backText}>{"< Devices"}</Text>
-        </TouchableOpacity>
-        <View style={styles.logoMark}>
-          <Text style={styles.logoMarkText}>+</Text>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <ReferenceBackdrop />
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate(session ? "DeviceList" : "Login")}>
+              <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
+              <Text style={styles.backButtonText}>{session ? "Back to Devices" : "Back to Sign In"}</Text>
+            </TouchableOpacity>
+
+            <View style={styles.brand}>
+              <View style={styles.brandMark}>
+                <Plus size={32} color={referenceColors.primary} strokeWidth={2.6} />
+              </View>
+              <Text style={styles.brandTitle}>Add Device</Text>
+              <Text style={styles.brandSubtitle}>
+                {session ? "Register a camera to this account" : "Connect your IRIS device before signing in"}
+              </Text>
+            </View>
+
+            <View style={styles.card}>
+              <SetupField
+                label="Ngrok URL"
+                value={url}
+                onChangeText={setUrl}
+                placeholder="https://xyz.ngrok-free.dev"
+                icon="url"
+              />
+              <SetupField
+                label="Device IP"
+                value={deviceIp}
+                onChangeText={setDeviceIp}
+                placeholder="192.168.254.100"
+                icon="device"
+                keyboardType="numbers-and-punctuation"
+              />
+              <SetupField
+                label="Primary Gmail (optional)"
+                value={primaryEmail}
+                onChangeText={setPrimaryEmail}
+                placeholder="owner@gmail.com"
+                icon="mail"
+                keyboardType="email-address"
+                onSubmitEditing={() => void handleAddDevice()}
+              />
+
+              <View style={styles.infoCard}>
+                <Text style={styles.infoTitle}>Saved on this phone</Text>
+                <Text style={styles.infoText}>
+                  This device becomes part of your mobile app and will be used for IRIS sign-in.
+                </Text>
+              </View>
+
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+
+              <TouchableOpacity
+                style={[styles.primaryButtonWrap, loading && styles.buttonDisabled]}
+                onPress={() => void handleAddDevice()}
+                disabled={loading}
+                activeOpacity={0.9}
+              >
+                <View style={styles.primaryButton}>
+                  {loading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.primaryButtonText}>Add Device</Text>}
+                </View>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
-        <Text style={styles.logo}>Add Device</Text>
-        <Text style={styles.subtitle}>Register a camera to this account</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>Ngrok URL</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="https://xyz.ngrok-free.dev"
-          placeholderTextColor="#64748b"
-          value={url}
-          onChangeText={setUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <Text style={styles.label}>Device IP</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="192.168.254.100"
-          placeholderTextColor="#64748b"
-          value={deviceIp}
-          onChangeText={setDeviceIp}
-          keyboardType="numbers-and-punctuation"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoText}>
-            This device will be added as a Primary device for {session?.email || "your email"}.
-          </Text>
-        </View>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleAddDevice}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#f8fafc" />
-          ) : (
-            <Text style={styles.buttonText}>Add Device</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  content: { flexGrow: 1, justifyContent: "center", padding: 24, paddingVertical: 60 },
-  header: { alignItems: "center", marginBottom: 32 },
+  container: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
+  },
+  content: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 52,
+  },
   backButton: {
     alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#ffffff",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.78)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     marginBottom: 24,
   },
-  backText: { color: "#2563eb", fontSize: 13, fontWeight: "800" },
-  logoMark: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    backgroundColor: "#2563eb",
+  backButtonText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  brand: {
+    alignItems: "center",
+    marginBottom: 28,
+  },
+  brandMark: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.46)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.75)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 18,
+    ...buttonShadow,
   },
-  logoMarkText: { color: "#ffffff", fontSize: 32, fontWeight: "600", marginTop: -4 },
-  logo: { color: "#0f172a", fontSize: 30, fontWeight: "800" },
-  subtitle: { color: "#64748b", fontSize: 14, marginTop: 6, textAlign: "center" },
+  brandTitle: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  brandSubtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+    textAlign: "center",
+  },
   card: {
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.82)",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 20,
-    elevation: 8,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
+    borderColor: referenceColors.border,
+    borderRadius: 28,
+    padding: 22,
+    ...cardShadow,
   },
-  label: { color: "#334155", fontSize: 13, fontWeight: "800", marginBottom: 8, marginTop: 14 },
-  input: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 16,
-    padding: 16,
-    color: "#0f172a",
-    fontSize: 15,
+  fieldBlock: {
+    marginBottom: 14,
+  },
+  fieldLabel: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  inputShell: {
+    minHeight: 58,
+    borderRadius: 18,
+    backgroundColor: "rgba(248,250,252,0.88)",
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  input: {
+    flex: 1,
+    color: referenceColors.text,
+    fontSize: 15,
+    paddingVertical: 16,
   },
   infoCard: {
-    backgroundColor: "#dbeafe",
+    borderRadius: 20,
+    backgroundColor: "rgba(219,234,254,0.65)",
     borderWidth: 1,
     borderColor: "#bfdbfe",
-    borderRadius: 16,
-    padding: 14,
+    padding: 16,
+    marginTop: 4,
+  },
+  infoTitle: {
+    color: referenceColors.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  infoText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  error: {
+    color: referenceColors.danger,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 12,
+    textAlign: "center",
+  },
+  primaryButtonWrap: {
+    borderRadius: 18,
+    overflow: "hidden",
     marginTop: 18,
+    ...buttonShadow,
   },
-  infoText: { color: "#334155", fontSize: 13, lineHeight: 18 },
-  button: {
-    backgroundColor: "#2563eb",
-    borderRadius: 16,
-    padding: 18,
+  primaryButton: {
+    minHeight: 58,
+    backgroundColor: "rgba(255,255,255,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.74)",
     alignItems: "center",
-    marginTop: 22,
+    justifyContent: "center",
   },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#f8fafc", fontWeight: "800", fontSize: 16 },
-  error: { color: "#dc2626", fontSize: 13, marginTop: 12, textAlign: "center" },
+  primaryButtonText: {
+    color: referenceColors.primary,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  buttonDisabled: {
+    opacity: 0.65,
+  },
 });

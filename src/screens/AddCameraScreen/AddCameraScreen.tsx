@@ -1,7 +1,10 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { ArrowLeft, Camera, ChevronRight } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
+import ReferenceBackdrop from "../../components/ReferenceBackdrop";
+import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -10,19 +13,32 @@ export default function AddCameraScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+      <ReferenceBackdrop />
+      <View style={styles.content}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Add Camera</Text>
-        <View style={{ width: 40 }} />
-      </View>
-      <View style={styles.content}>
+
+        <View style={styles.header}>
+          <Text style={styles.title}>Add Camera</Text>
+          <Text style={styles.subtitle}>Pair another IRIS device to this phone</Text>
+        </View>
+
         <View style={styles.card}>
-        <Text style={styles.desc}>To add a new Pi camera, go to the Setup screen and enter your Pi's URL and Device ID.</Text>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.navigate("Setup")}>
-          <Text style={styles.buttonText}>Go to Setup</Text>
-        </TouchableOpacity>
+          <View style={styles.iconWrap}>
+            <Camera size={22} color={referenceColors.primary} strokeWidth={2.2} />
+          </View>
+          <Text style={styles.desc}>
+            To add a new Pi camera, go to the Setup screen and enter your Pi&apos;s URL and Device ID.
+          </Text>
+
+          <TouchableOpacity style={styles.buttonWrap} onPress={() => navigation.navigate("Setup")} activeOpacity={0.9}>
+            <View style={styles.button}>
+              <Text style={styles.buttonText}>Go to Setup</Text>
+              <ChevronRight size={18} color={referenceColors.primary} strokeWidth={2.2} />
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -30,25 +46,93 @@ export default function AddCameraScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f8fafc" },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16 },
-  backText: { color: "#2563eb", fontSize: 15 },
-  title: { color: "#0f172a", fontSize: 18, fontWeight: "700" },
-  content: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
-  card: {
-    width: "100%",
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    padding: 20,
-    elevation: 3,
-    shadowColor: "#2563eb",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
+  container: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
   },
-  desc: { color: "#475569", fontSize: 15, textAlign: "center", marginBottom: 24 },
-  button: { backgroundColor: "#2563eb", borderRadius: 8, padding: 16, paddingHorizontal: 32, alignItems: "center" },
-  buttonText: { color: "#f8fafc", fontWeight: "700", fontSize: 16 },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 18,
+  },
+  backText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  header: {
+    marginBottom: 20,
+  },
+  title: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  subtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  card: {
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 24,
+    alignItems: "center",
+    ...cardShadow,
+  },
+  iconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "#dbeafe",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  desc: {
+    color: referenceColors.textSoft,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+  },
+  buttonWrap: {
+    borderRadius: 18,
+    marginTop: 24,
+    width: "100%",
+    ...buttonShadow,
+  },
+  button: {
+    minHeight: 56,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.74)",
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  buttonText: {
+    color: referenceColors.primary,
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });
