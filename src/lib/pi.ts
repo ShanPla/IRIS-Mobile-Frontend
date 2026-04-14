@@ -260,7 +260,6 @@ export async function addDevice(
 ): Promise<PiDevice> {
   const normalizedUrl = url.trim().replace(/\/$/, "");
   const trimmedIp = deviceIp.trim();
-  const fallbackId = `SW-${trimmedIp.replace(/[^a-zA-Z0-9]/g, "-")}`;
 
   let info: DeviceInfo | null = null;
   try {
@@ -274,9 +273,18 @@ export async function addDevice(
     info = null;
   }
 
+  if (!info?.device_id) {
+    throw new Error("Couldn't reach the camera at that URL. Check the URL and that the device is online.");
+  }
+
+  const devices = await getDevices(accountId);
+  if (devices.some((d) => d.deviceId === info!.device_id)) {
+    throw new Error("This camera is already added to your account.");
+  }
+
   const device: PiDevice = {
-    deviceId: info?.device_id ?? fallbackId,
-    name: info?.name ?? `Device ${trimmedIp}`,
+    deviceId: info.device_id,
+    name: info.name ?? `Device ${trimmedIp}`,
     url: normalizedUrl,
     token: "",
     addedAt: new Date().toISOString(),
@@ -285,13 +293,7 @@ export async function addDevice(
     primaryEmail: primaryEmail.trim(),
   };
 
-  const devices = await getDevices(accountId);
-  const existing = devices.findIndex((d) => d.deviceId === device.deviceId);
-  if (existing >= 0) {
-    devices[existing] = device;
-  } else {
-    devices.push(device);
-  }
+  devices.push(device);
   await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(devices));
   await setActiveDevice(device.deviceId, accountId);
   return device;
