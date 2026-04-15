@@ -5,6 +5,44 @@ const LEGACY_DEVICES_KEY = "securewatch_devices_v1";
 const LEGACY_ACTIVE_KEY = "securewatch_active_device_id_v1";
 const DEVICES_KEY_PREFIX = "securewatch_devices_v2_";
 const ACTIVE_KEY_PREFIX = "securewatch_active_device_id_v2_";
+const ACCOUNTS_STORAGE_KEY = "securewatch_accounts_v1";
+
+interface StoredAccountShape {
+  username: string;
+  password: string;
+  provider?: string;
+}
+
+async function recoverActiveDeviceToken(accountId?: string): Promise<boolean> {
+  const normalized = (accountId ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+
+  const raw = await AsyncStorage.getItem(ACCOUNTS_STORAGE_KEY);
+  if (!raw) return false;
+
+  let accounts: StoredAccountShape[] = [];
+  try {
+    accounts = JSON.parse(raw) as StoredAccountShape[];
+  } catch {
+    return false;
+  }
+
+  const account = accounts.find((a) => a.username.trim().toLowerCase() === normalized);
+  if (!account?.password) return false;
+
+  try {
+    await loginDeviceAccount(account.username, account.password, accountId);
+    return true;
+  } catch {
+    try {
+      await registerDeviceAccount(account.username, account.password, accountId);
+      await loginDeviceAccount(account.username, account.password, accountId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
 
 export interface PiDevice {
   deviceId: string;
@@ -385,11 +423,16 @@ export async function redeemTrustedUserInvite(
 }
 
 export async function piGet<T>(path: string, accountId?: string): Promise<T> {
-  const device = await getActiveDevice(accountId);
-  if (!device) throw new Error("No active Pi device");
-  const res = await fetch(`${device.url}${path}`, {
-    headers: authHeaders(device.token),
-  });
+  const doGet = async (): Promise<Response> => {
+    const device = await getActiveDevice(accountId);
+    if (!device) throw new Error("No active Pi device");
+    return fetch(`${device.url}${path}`, { headers: authHeaders(device.token) });
+  };
+
+  let res = await doGet();
+  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
+    res = await doGet();
+  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi GET ${path} failed (${res.status}): ${err}`);
@@ -398,9 +441,25 @@ export async function piGet<T>(path: string, accountId?: string): Promise<T> {
 }
 
 export async function piPost<T>(path: string, body?: unknown, accountId?: string): Promise<T> {
-  const device = await getActiveDevice(accountId);
-  if (!device) throw new Error("No active Pi device");
-  return piPostToDevice(device, path, body);
+  const attempt = async (): Promise<Response> => {
+    const device = await getActiveDevice(accountId);
+    if (!device) throw new Error("No active Pi device");
+    return fetch(`${device.url}${path}`, {
+      method: "POST",
+      headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  };
+
+  let res = await attempt();
+  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
+    res = await attempt();
+  }
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Pi POST ${path} failed (${res.status}): ${err}`);
+  }
+  return (await res.json()) as T;
 }
 
 async function updateDeviceToken(deviceId: string, token: string, accountId?: string): Promise<void> {
@@ -628,13 +687,20 @@ export async function piPostToDevice<T>(device: PiDevice, path: string, body?: u
 }
 
 export async function piPostForm<T>(path: string, formData: FormData, accountId?: string): Promise<T> {
-  const device = await getActiveDevice(accountId);
-  if (!device) throw new Error("No active Pi device");
-  const res = await fetch(`${device.url}${path}`, {
-    method: "POST",
-    headers: authHeaders(device.token),
-    body: formData,
-  });
+  const attempt = async (): Promise<Response> => {
+    const device = await getActiveDevice(accountId);
+    if (!device) throw new Error("No active Pi device");
+    return fetch(`${device.url}${path}`, {
+      method: "POST",
+      headers: authHeaders(device.token),
+      body: formData,
+    });
+  };
+
+  let res = await attempt();
+  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
+    res = await attempt();
+  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi POST ${path} failed (${res.status}): ${err}`);
@@ -643,13 +709,20 @@ export async function piPostForm<T>(path: string, formData: FormData, accountId?
 }
 
 export async function piPut<T>(path: string, body?: unknown, accountId?: string): Promise<T> {
-  const device = await getActiveDevice(accountId);
-  if (!device) throw new Error("No active Pi device");
-  const res = await fetch(`${device.url}${path}`, {
-    method: "PUT",
-    headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const attempt = async (): Promise<Response> => {
+    const device = await getActiveDevice(accountId);
+    if (!device) throw new Error("No active Pi device");
+    return fetch(`${device.url}${path}`, {
+      method: "PUT",
+      headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  };
+
+  let res = await attempt();
+  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
+    res = await attempt();
+  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi PUT ${path} failed (${res.status}): ${err}`);
@@ -658,12 +731,19 @@ export async function piPut<T>(path: string, body?: unknown, accountId?: string)
 }
 
 export async function piDelete<T>(path: string, accountId?: string): Promise<T | null> {
-  const device = await getActiveDevice(accountId);
-  if (!device) throw new Error("No active Pi device");
-  const res = await fetch(`${device.url}${path}`, {
-    method: "DELETE",
-    headers: authHeaders(device.token),
-  });
+  const attempt = async (): Promise<Response> => {
+    const device = await getActiveDevice(accountId);
+    if (!device) throw new Error("No active Pi device");
+    return fetch(`${device.url}${path}`, {
+      method: "DELETE",
+      headers: authHeaders(device.token),
+    });
+  };
+
+  let res = await attempt();
+  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
+    res = await attempt();
+  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi DELETE ${path} failed (${res.status}): ${err}`);
@@ -673,8 +753,11 @@ export async function piDelete<T>(path: string, accountId?: string): Promise<T |
 }
 
 export async function buildPiUrl(path: string, accountId?: string): Promise<string> {
-  const device = await getActiveDevice(accountId);
+  let device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
+  if (!device.token && (await recoverActiveDeviceToken(accountId))) {
+    device = (await getActiveDevice(accountId)) ?? device;
+  }
   const sep = path.includes("?") ? "&" : "?";
   return device.token ? `${device.url}${path}${sep}token=${device.token}` : `${device.url}${path}`;
 }

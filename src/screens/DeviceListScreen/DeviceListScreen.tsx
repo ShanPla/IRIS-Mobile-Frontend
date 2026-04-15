@@ -75,6 +75,30 @@ export default function DeviceListScreen() {
       Alert.alert("Primary Only", "Only the Primary User can do this.");
       return;
     }
+
+    if (action === "remove") {
+      Alert.alert(
+        "Remove Device",
+        `Remove ${device.name} from this account? You can re-add it later on the Setup screen.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await removeDevice(device.deviceId, session?.username);
+                await loadDevices();
+              } catch (err) {
+                Alert.alert("Remove Failed", err instanceof Error ? err.message : "Could not remove the device.");
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     setPendingAction({ device, action, access });
     setGmailCode("");
     setCodeSent(false);

@@ -1,12 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  GoogleSignin,
-  isCancelledResponse,
-  isErrorWithCode,
-  isSuccessResponse,
-  statusCodes,
-} from "@react-native-google-signin/google-signin";
-import {
   ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
@@ -31,6 +24,28 @@ import { listStoredAccounts, updateStoredAccountPassword } from "../../lib/accou
 import type { StoredAccountRecovery } from "../../lib/accounts";
 import { getPlatformGoogleClientId } from "../../lib/google";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+
+// Native module, only present in EAS dev/prod builds. Expo Go must not evaluate it
+// because Expo Go's native binary lacks RNGoogleSignin and the library's top-level
+// code calls TurboModuleRegistry.getEnforcing synchronously.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _googleModule: any;
+let _googleLoaded = false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function loadGoogleModule(): any {
+  if (_googleLoaded) return _googleModule;
+  _googleLoaded = true;
+  if (Constants.expoGoConfig) {
+    _googleModule = null;
+    return null;
+  }
+  try {
+    _googleModule = require("@react-native-google-signin/google-signin");
+  } catch {
+    _googleModule = null;
+  }
+  return _googleModule;
+}
  
 type Nav = NativeStackNavigationProp<RootStackParamList, "Login">;
  
@@ -122,7 +137,8 @@ export default function LoginScreen() {
   const isExpoGoRuntime = Boolean(Constants.expoGoConfig);
  
   useEffect(() => {
-    GoogleSignin.configure({
+    const mod = loadGoogleModule();
+    mod?.GoogleSignin.configure({
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim(),
       iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim(),
     });
@@ -183,16 +199,18 @@ export default function LoginScreen() {
   };
 
   const getGoogleErrorMessage = (error: unknown): string => {
-    if (isErrorWithCode(error)) {
-      if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+    const mod = loadGoogleModule();
+    if (mod && mod.isErrorWithCode(error)) {
+      const coded = error as { code: string; message: string };
+      if (coded.code === mod.statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         return "Google Play Services is missing or outdated on this emulator. Update it and try again.";
       }
 
-      if (error.code === statusCodes.IN_PROGRESS) {
+      if (coded.code === mod.statusCodes.IN_PROGRESS) {
         return "Google sign-in is already in progress.";
       }
 
-      if (error.code === "10" || error.message.includes("DEVELOPER_ERROR")) {
+      if (coded.code === "10" || coded.message.includes("DEVELOPER_ERROR")) {
         return "Google Sign-In is not configured for this Android build yet. Add an Android OAuth client for package `com.iris.mobile` with the correct SHA-1 fingerprint in Google Cloud Console.";
       }
     }
@@ -201,8 +219,9 @@ export default function LoginScreen() {
   };
  
   const handleGoogleAuth = async () => {
-    if (isExpoGoRuntime) {
-      setGoogleError("Google sign-in requires a native Android build. Open the app with `npx expo run:android` or install your EAS APK instead of Expo Go.");
+    const mod = loadGoogleModule();
+    if (isExpoGoRuntime || !mod) {
+      setGoogleError("Google sign-in needs a native build. In Expo Go, please register with username and password instead, or install an EAS development build (iOS or Android) to use Google.");
       return;
     }
 
@@ -210,20 +229,20 @@ export default function LoginScreen() {
       setGoogleError("Google sign-in is missing the client ID for this app.");
       return;
     }
- 
+
     setLoginError("");
     setRegError("");
     setRegSuccess("");
     setGoogleLoading(true);
- 
+
     try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const response = await GoogleSignin.signIn();
-      if (isCancelledResponse(response)) {
+      await mod.GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await mod.GoogleSignin.signIn();
+      if (mod.isCancelledResponse(response)) {
         return;
       }
 
-      if (!isSuccessResponse(response)) {
+      if (!mod.isSuccessResponse(response)) {
         throw new Error("Google sign-in did not complete.");
       }
 

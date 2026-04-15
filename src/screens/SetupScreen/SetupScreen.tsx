@@ -18,7 +18,8 @@ import { ArrowLeft, Link2, Mail, Plus, Router } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { addDevice } from "../../lib/pi";
+import { getAccountPassword } from "../../lib/accounts";
+import { addDevice, loginDeviceAccount, registerDeviceAccount, removeDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Setup">;
@@ -86,7 +87,37 @@ export default function SetupScreen() {
     try {
       const normalized = url.trim().replace(/\/$/, "");
       const withProtocol = /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`;
-      await addDevice(withProtocol, deviceIp.trim(), primaryEmail.trim(), session?.username);
+      const newDevice = await addDevice(withProtocol, deviceIp.trim(), primaryEmail.trim(), session?.username);
+
+      if (session?.username) {
+        const password = await getAccountPassword(session.username);
+        if (password) {
+          let userAlreadyOnPi = false;
+          try {
+            try {
+              await registerDeviceAccount(session.username, password, session.username);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message.toLowerCase() : "";
+              const looksLikeExistingUser =
+                msg.includes("already") || msg.includes("taken") || msg.includes("exists") || msg.includes("409");
+              if (!looksLikeExistingUser) throw err;
+              userAlreadyOnPi = true;
+            }
+            await loginDeviceAccount(session.username, password, session.username);
+          } catch (err) {
+            await removeDevice(newDevice.deviceId, session.username);
+            const reason = err instanceof Error ? err.message : "Unknown error";
+            if (userAlreadyOnPi && /incorrect|401|unauthor/i.test(reason)) {
+              throw new Error(
+                `A user named "${session.username}" already exists on this Pi with a different password. ` +
+                  `Pick a different username, or ask the Pi owner to reset that user's password.`,
+              );
+            }
+            throw new Error(`Device added but sign-in failed: ${reason}`);
+          }
+        }
+      }
+
       await refreshSession();
       navigation.navigate(session ? "DeviceList" : "Login");
     } catch (e) {
