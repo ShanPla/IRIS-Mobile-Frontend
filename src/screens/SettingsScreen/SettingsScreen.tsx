@@ -14,23 +14,34 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { CompositeNavigationProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   Bell,
   Camera,
+  ChevronRight,
   Gauge,
   LogOut,
   Shield,
   Siren,
   User,
 } from "lucide-react-native";
+import type { MainTabParamList, RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { piGet, piPut } from "../../lib/pi";
 import type { SystemConfig, SystemStatus } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, "Settings">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
 export default function SettingsScreen() {
+  const navigation = useNavigation<Nav>();
   const { logout, session, activeDevice } = useAuth();
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -330,15 +341,19 @@ export default function SettingsScreen() {
               </View>
             </View>
 
-            <View style={styles.dangerCard}>
+            <TouchableOpacity
+              style={styles.dangerCard}
+              onPress={() => navigation.navigate("DeviceList")}
+            >
               <View style={[styles.settingIcon, styles.iconRed]}>
                 <Siren size={18} color={referenceColors.danger} strokeWidth={2.2} />
               </View>
               <View style={styles.settingCopy}>
                 <Text style={styles.dangerTitle}>Factory Reset</Text>
-                <Text style={styles.settingDesc}>Erase all data and settings from the device</Text>
+                <Text style={styles.settingDesc}>Long-press a device in My Devices to erase it</Text>
               </View>
-            </View>
+              <ChevronRight size={16} color={referenceColors.danger} strokeWidth={2.2} />
+            </TouchableOpacity>
 
             <View style={styles.versionInfo}>
               <Text style={styles.versionText}>I.R.I.S v2.1.0</Text>

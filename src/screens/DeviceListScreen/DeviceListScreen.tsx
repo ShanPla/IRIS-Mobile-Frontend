@@ -21,7 +21,7 @@ import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { getAccountPassword } from "../../lib/accounts";
-import { ensureDeviceAuth, getDevices, piPostToDevice, redeemTrustedUserInvite, removeDevice } from "../../lib/pi";
+import { getDevices, piPost, redeemTrustedUserInvite, removeDevice } from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
@@ -41,10 +41,6 @@ export default function DeviceListScreen() {
   const [devices, setDevices] = useState<PiDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [pendingAction, setPendingAction] = useState<{ device: PiDevice; action: SecureAction; access: DeviceAccess } | null>(null);
-  const [gmailCode, setGmailCode] = useState("");
-  const [codeSent, setCodeSent] = useState(false);
-  const [secureActionLoading, setSecureActionLoading] = useState(false);
   const [joiningInvite, setJoiningInvite] = useState(false);
   const [joinDeviceCode, setJoinDeviceCode] = useState("");
   const [joinInviteCode, setJoinInviteCode] = useState("");
@@ -99,102 +95,50 @@ export default function DeviceListScreen() {
       return;
     }
 
-    setPendingAction({ device, action, access });
-    setGmailCode("");
-    setCodeSent(false);
+    Alert.alert(
+      "Factory Reset",
+      `This will permanently delete all events, faces, pairings, and non-admin accounts on ${device.name}. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () => confirmFactoryReset(device),
+        },
+      ],
+    );
   };
 
-  const sendGmailCode = async () => {
-    if (!pendingAction) return;
-    const gmail = pendingAction.device.primaryEmail || session?.email;
-    if (!gmail) {
-      Alert.alert("Missing Gmail", "This primary device has no Gmail attached.");
-      return;
-    }
-    if (!session?.username) {
-      Alert.alert("Sign In Required", "Sign in again to verify this action.");
-      return;
-    }
-    const password = await getAccountPassword(session.username);
-    if (!password) {
-      Alert.alert("Sign In Required", "Sign in again to verify this action.");
-      return;
-    }
+  const confirmFactoryReset = (device: PiDevice) => {
+    Alert.alert(
+      "Are you absolutely sure?",
+      `Reset ${device.name} to factory defaults now?`,
+      [
+        { text: "No, go back", style: "cancel" },
+        {
+          text: "Yes, reset",
+          style: "destructive",
+          onPress: () => void runFactoryReset(device),
+        },
+      ],
+    );
+  };
 
-    setSecureActionLoading(true);
+  const runFactoryReset = async (device: PiDevice) => {
     try {
-      await ensureDeviceAuth(session.username, password, session.username);
-      const refreshed = await getDevices(session.username);
-      const target = refreshed.find((d) => d.deviceId === pendingAction.device.deviceId) ?? pendingAction.device;
-      await piPostToDevice(target, "/api/admin/action-verification", {
-        gmail,
-        action: pendingAction.action === "remove" ? "remove_device" : "factory_reset",
-      });
-      setCodeSent(true);
-      Alert.alert("Verification Sent", `A verification code was sent to ${gmail}.`);
+      await selectDevice(device.deviceId);
+      const result = await piPost<{ events_deleted: number; faces_deleted: number; users_deleted: number }>(
+        "/api/admin/factory-reset",
+        undefined,
+        session?.username,
+      );
+      Alert.alert(
+        "Factory Reset Complete",
+        `Deleted ${result.events_deleted} events, ${result.faces_deleted} faces, and ${result.users_deleted} user accounts.`,
+      );
+      await loadDevices();
     } catch (e) {
-      Alert.alert("Verification Not Sent", e instanceof Error ? e.message : "The device could not send the Gmail code.");
-    } finally {
-      setSecureActionLoading(false);
-    }
-  };
-
-  const cancelSecureAction = () => {
-    setPendingAction(null);
-    setGmailCode("");
-    setCodeSent(false);
-    setSecureActionLoading(false);
-  };
-
-  const confirmSecureAction = async () => {
-    if (!pendingAction) return;
-    if (!codeSent) {
-      Alert.alert("Verification Required", "Send the Gmail code before confirming.");
-      return;
-    }
-    if (gmailCode.trim().length !== 6) {
-      Alert.alert("Verification Required", "Enter the 6-digit code sent to the Primary User Gmail.");
-      return;
-    }
-    const gmail = pendingAction.device.primaryEmail || session?.email;
-    if (!gmail || !session?.username) {
-      Alert.alert("Sign In Required", "Sign in again to verify this action.");
-      return;
-    }
-    const password = await getAccountPassword(session.username);
-    if (!password) {
-      Alert.alert("Sign In Required", "Sign in again to verify this action.");
-      return;
-    }
-
-    setSecureActionLoading(true);
-    try {
-      await ensureDeviceAuth(session.username, password, session.username);
-      const refreshed = await getDevices(session.username);
-      const target = refreshed.find((d) => d.deviceId === pendingAction.device.deviceId) ?? pendingAction.device;
-
-      if (pendingAction.action === "remove") {
-        await piPostToDevice(target, "/api/admin/action-verification/verify", {
-          gmail,
-          action: "remove_device",
-          code: gmailCode.trim(),
-        });
-        await removeDevice(pendingAction.device.deviceId, session?.username);
-        await loadDevices();
-        Alert.alert("Device Removed", `${pendingAction.device.name} was removed from this account.`);
-      } else {
-        await selectDevice(pendingAction.device.deviceId);
-        await piPostToDevice(target, "/api/admin/factory-reset/verified", {
-          gmail,
-          action: "factory_reset",
-          code: gmailCode.trim(),
-        });
-        Alert.alert("Factory Reset Started", `${pendingAction.device.name} accepted the reset request.`);
-      }
-    } catch (e) {
-      Alert.alert("Action Not Completed", e instanceof Error ? e.message : "The verification code could not be confirmed.");
-    } finally {
-      cancelSecureAction();
+      Alert.alert("Reset Failed", e instanceof Error ? e.message : "The device rejected the reset request.");
     }
   };
 
@@ -448,48 +392,6 @@ export default function DeviceListScreen() {
               </View>
             ) : null}
 
-            {pendingAction ? (
-              <View style={styles.verificationCard}>
-                <Text style={styles.verificationTitle}>{pendingAction.action === "remove" ? "Remove Device" : "Factory Reset"}</Text>
-                <Text style={styles.verificationText}>
-                  Send a 6-digit code to {pendingAction.device.primaryEmail || session?.email || "the primary Gmail"} before continuing.
-                </Text>
-
-                <TouchableOpacity
-                  style={[styles.verificationSendButton, secureActionLoading && styles.buttonDisabled]}
-                  onPress={() => void sendGmailCode()}
-                  disabled={secureActionLoading}
-                >
-                  <Text style={styles.verificationSendText}>
-                    {secureActionLoading ? "Working..." : codeSent ? "Resend Gmail Code" : "Send Gmail Code"}
-                  </Text>
-                </TouchableOpacity>
-
-                <TextInput
-                  style={styles.codeInput}
-                  placeholder="6-digit code"
-                  placeholderTextColor="#94a3b8"
-                  value={gmailCode}
-                  onChangeText={setGmailCode}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  editable={!secureActionLoading}
-                />
-
-                <View style={styles.verificationActions}>
-                  <TouchableOpacity style={styles.cancelButton} onPress={cancelSecureAction} disabled={secureActionLoading}>
-                    <Text style={styles.cancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.confirmButton, secureActionLoading && styles.buttonDisabled]}
-                    onPress={() => void confirmSecureAction()}
-                    disabled={secureActionLoading}
-                  >
-                    <Text style={styles.confirmText}>Confirm</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null}
           </ScrollView>
         </View>
       </TouchableWithoutFeedback>
@@ -845,56 +747,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
   },
-  verificationCard: {
-    backgroundColor: "rgba(255,241,242,0.94)",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    borderRadius: 24,
-    padding: 18,
-  },
-  verificationTitle: {
-    color: "#b91c1c",
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  verificationText: {
-    color: referenceColors.textSoft,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-  },
-  verificationSendButton: {
-    minHeight: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 16,
-  },
-  verificationSendText: {
-    color: referenceColors.danger,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  codeInput: {
-    minHeight: 54,
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    color: referenceColors.text,
-    fontSize: 16,
-    fontWeight: "700",
-    textAlign: "center",
-    marginTop: 12,
-  },
-  verificationActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 12,
-  },
   cancelButton: {
     flex: 1,
     minHeight: 48,
@@ -907,19 +759,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     color: referenceColors.textMuted,
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  confirmButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 14,
-    backgroundColor: referenceColors.danger,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  confirmText: {
-    color: "#ffffff",
     fontSize: 13,
     fontWeight: "700",
   },
