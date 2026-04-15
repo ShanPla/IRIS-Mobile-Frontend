@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -9,13 +11,14 @@ import {
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
-import { AlertTriangle, ArrowLeft, CheckCircle2 } from "lucide-react-native";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { buildPiUrl } from "../../lib/pi";
+import { saveRemoteImageToLibrary } from "../../lib/saveImage";
 import type { SecurityEvent } from "../../types/iris";
-import { cardShadow, referenceColors } from "../../theme/reference";
+import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
 type Route = RouteProp<RootStackParamList, "EventDetails">;
 
@@ -25,12 +28,26 @@ export default function EventDetailsScreen() {
   const { session } = useAuth();
   const event: SecurityEvent = route.params.event;
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (event.snapshot_path) {
       void buildPiUrl(event.snapshot_path, session?.username).then(setSnapshotUrl);
     }
   }, [event.snapshot_path, session?.username]);
+
+  const handleSaveSnapshot = async () => {
+    if (!snapshotUrl || saving) return;
+    setSaving(true);
+    try {
+      await saveRemoteImageToLibrary(snapshotUrl);
+      Alert.alert("Snapshot saved", "Saved to your Photos in the IRIS album.");
+    } catch (e) {
+      Alert.alert("Save failed", e instanceof Error ? e.message : "Could not save snapshot");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const getBadgeColor = (type: string) => {
     switch (type) {
@@ -75,7 +92,23 @@ export default function EventDetailsScreen() {
         </View>
 
         {snapshotUrl ? (
-          <Image source={{ uri: snapshotUrl }} style={styles.snapshot} resizeMode="cover" />
+          <>
+            <Image source={{ uri: snapshotUrl }} style={styles.snapshot} resizeMode="cover" />
+            <TouchableOpacity
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={() => void handleSaveSnapshot()}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <>
+                  <Download size={16} color="#ffffff" strokeWidth={2.4} />
+                  <Text style={styles.saveButtonText}>Save to Photos</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </>
         ) : (
           <View style={styles.snapshotPlaceholder}>
             <Text style={styles.placeholderText}>No snapshot</Text>
@@ -168,6 +201,25 @@ const styles = StyleSheet.create({
     height: 300,
     borderRadius: 28,
     backgroundColor: "#0f172a",
+  },
+  saveButton: {
+    marginTop: 12,
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: referenceColors.primary,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    ...buttonShadow,
+  },
+  saveButtonDisabled: {
+    opacity: 0.65,
+  },
+  saveButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800",
   },
   snapshotPlaceholder: {
     width: "100%",

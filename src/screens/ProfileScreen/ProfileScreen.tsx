@@ -7,7 +7,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -18,17 +17,15 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ArrowLeft,
-  Bell,
   ChevronRight,
-  KeyRound,
   LogOut,
   Smartphone,
-  User,
 } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { getDevices } from "../../lib/pi";
+import { updateStoredAccountPassword } from "../../lib/accounts";
+import { getDevices, piPut } from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
@@ -45,9 +42,6 @@ export default function ProfileScreen() {
   const { session, logout } = useAuth();
   const [devices, setDevices] = useState<PiDevice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pushAlerts, setPushAlerts] = useState(true);
-  const [soundAlerts, setSoundAlerts] = useState(true);
-  const [emailDigest, setEmailDigest] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
@@ -78,12 +72,27 @@ export default function ProfileScreen() {
 
     setChangingPassword(true);
     setPasswordSuccess("");
-    setTimeout(() => {
-      setChangingPassword(false);
+    try {
+      await piPut<{ ok: boolean; message?: string }>(
+        "/api/auth/me/password",
+        { current_password: currentPassword, new_password: newPassword },
+        session?.username,
+      );
+      if (session?.username) {
+        await updateStoredAccountPassword(session.username, newPassword);
+      }
       setCurrentPassword("");
       setNewPassword("");
-      setPasswordSuccess("Password preference saved for this account.");
-    }, 400);
+      setPasswordSuccess("Password updated.");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not change password";
+      const friendly = message.includes("401") || message.toLowerCase().includes("incorrect")
+        ? "Current password is incorrect."
+        : message;
+      Alert.alert("Password Change Failed", friendly);
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   if (loading) {
@@ -154,24 +163,6 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.quickActions}>
-              <TouchableOpacity style={styles.quickAction}>
-                <User size={20} color={referenceColors.primary} strokeWidth={2.2} />
-                <View style={styles.quickCopy}>
-                  <Text style={styles.quickTitle}>Account Settings</Text>
-                  <Text style={styles.quickSubtitle}>Profile details</Text>
-                </View>
-                <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.quickAction}>
-                <KeyRound size={20} color={referenceColors.warning} strokeWidth={2.2} />
-                <View style={styles.quickCopy}>
-                  <Text style={styles.quickTitle}>Change Password</Text>
-                  <Text style={styles.quickSubtitle}>Update account access</Text>
-                </View>
-                <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
-              </TouchableOpacity>
-
               <TouchableOpacity style={styles.quickAction} onPress={() => navigation.navigate("DeviceList")}>
                 <Smartphone size={20} color={referenceColors.textSoft} strokeWidth={2.2} />
                 <View style={styles.quickCopy}>
@@ -180,49 +171,6 @@ export default function ProfileScreen() {
                 </View>
                 <ChevronRight size={16} color="#94a3b8" strokeWidth={2.2} />
               </TouchableOpacity>
-            </View>
-
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Preferences</Text>
-
-              <View style={styles.preferenceRow}>
-                <View style={styles.preferenceCopy}>
-                  <Text style={styles.preferenceTitle}>Push Notifications</Text>
-                  <Text style={styles.preferenceText}>Alerts for registered devices</Text>
-                </View>
-                <Switch
-                  value={pushAlerts}
-                  onValueChange={setPushAlerts}
-                  trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-                  thumbColor="#ffffff"
-                />
-              </View>
-
-              <View style={styles.preferenceRow}>
-                <View style={styles.preferenceCopy}>
-                  <Text style={styles.preferenceTitle}>Sound Alerts</Text>
-                  <Text style={styles.preferenceText}>Play alarm sounds on this phone</Text>
-                </View>
-                <Switch
-                  value={soundAlerts}
-                  onValueChange={setSoundAlerts}
-                  trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-                  thumbColor="#ffffff"
-                />
-              </View>
-
-              <View style={[styles.preferenceRow, styles.preferenceRowLast]}>
-                <View style={styles.preferenceCopy}>
-                  <Text style={styles.preferenceTitle}>Email Digest</Text>
-                  <Text style={styles.preferenceText}>Daily security summary</Text>
-                </View>
-                <Switch
-                  value={emailDigest}
-                  onValueChange={setEmailDigest}
-                  trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-                  thumbColor="#ffffff"
-                />
-              </View>
             </View>
 
             <View style={styles.sectionCard}>
@@ -437,31 +385,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "800",
     marginBottom: 12,
-  },
-  preferenceRow: {
-    minHeight: 60,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-    gap: 12,
-  },
-  preferenceRowLast: {
-    borderBottomWidth: 0,
-  },
-  preferenceCopy: {
-    flex: 1,
-  },
-  preferenceTitle: {
-    color: referenceColors.text,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  preferenceText: {
-    color: referenceColors.textMuted,
-    fontSize: 12,
-    marginTop: 4,
   },
   input: {
     minHeight: 56,

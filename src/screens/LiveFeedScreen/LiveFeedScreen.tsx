@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  AppState,
   Image,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,16 +16,21 @@ import { useNavigation } from "@react-navigation/native";
 import {
   ArrowLeft,
   Camera,
-  MicOff,
   RefreshCw,
   ScanLine,
   Video,
-  Volume2,
+  X,
 } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { buildPiUrl } from "../../lib/pi";
+import { buildPiUrl, getActiveDevice } from "../../lib/pi";
+import { getCachedResolution, invalidateBaseUrlCache } from "../../lib/resolveBaseUrl";
+import { saveRemoteImageToLibrary } from "../../lib/saveImage";
 import { cardShadow, referenceColors, referenceLiveImage } from "../../theme/reference";
+
+const POLL_INTERVAL_MS = 100;          // between successful loads — tight loop, actual cadence bounded by server+network
+const POLL_RETRY_INTERVAL_MS = 500;    // after consecutive failures, back off
+const RECONNECT_THRESHOLD = 5;          // fails before showing "Reconnecting" UI
 
 export default function LiveFeedScreen() {
   const navigation = useNavigation();
@@ -30,56 +39,135 @@ export default function LiveFeedScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [paused, setPaused] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
+  const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [transport, setTransport] = useState<"lan" | "ngrok" | "unknown">("unknown");
+  const [measuredFps, setMeasuredFps] = useState(0);
+  const [lastFrameMs, setLastFrameMs] = useState<number | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consecutiveFailsRef = useRef(0);
+  // Backpressure gate: while a frame is in flight (fetched URL set, but <Image>
+  // hasn't yet fired onLoad/onError) we don't schedule another. Replaces the
+  // old unconditional setInterval that queued requests.
+  const inFlightRef = useRef(false);
+  const frameStartRef = useRef<number>(0);
+  const frameTimesRef = useRef<number[]>([]);
+
+  // Re-probe LAN on foreground so a Wi-Fi ↔ cellular change picks the right path.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        invalidateBaseUrlCache();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Polling driver. The `requestFrame` function is stored in a ref so that
+  // <Image onLoad|onError> callbacks can trigger the next poll without a
+  // closure-capture dance across effect boundaries.
+  const requestFrameRef = useRef<() => void>(() => {});
+  const pausedRef = useRef(paused);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
-    if (paused) {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      return;
-    }
+    pausedRef.current = paused;
+  }, [paused]);
 
-    let cancelled = false;
+  useEffect(() => {
+    cancelledRef.current = false;
 
-    const poll = async () => {
-      if (cancelled) return;
+    const schedule = (delay: number) => {
+      if (cancelledRef.current || pausedRef.current) return;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => void requestFrameRef.current(), delay);
+    };
+
+    const requestFrame = async () => {
+      if (cancelledRef.current || pausedRef.current || inFlightRef.current) return;
+      inFlightRef.current = true;
       try {
         const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`, session?.username);
-        const res = await fetch(url, { headers: { "ngrok-skip-browser-warning": "true" } });
-        if (!res.ok) throw new Error(`Frame error (${res.status})`);
-        consecutiveFailsRef.current = 0;
-        setReconnecting(false);
+        const device = await getActiveDevice(session?.username);
+        if (device) {
+          const res = getCachedResolution(device.deviceId);
+          setTransport(res?.isLan ? "lan" : res ? "ngrok" : "unknown");
+        }
+        frameStartRef.current = Date.now();
         setFrameUri(url);
-        setLoading(false);
-        setError("");
+        // inFlightRef stays true until <Image onLoad|onError> fires.
       } catch (e) {
+        inFlightRef.current = false;
         consecutiveFailsRef.current += 1;
-        if (consecutiveFailsRef.current >= 5) {
+        if (consecutiveFailsRef.current >= RECONNECT_THRESHOLD) {
           setReconnecting(true);
           setError("");
         } else {
           setError(e instanceof Error ? e.message : "Cannot load frame");
         }
         setLoading(false);
+        schedule(POLL_RETRY_INTERVAL_MS);
       }
     };
 
-    void poll();
-    const getDelay = () => (consecutiveFailsRef.current >= 5 ? 500 : 150);
-    intervalRef.current = setInterval(() => void poll(), getDelay());
+    requestFrameRef.current = () => void requestFrame();
+
+    if (paused) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      return;
+    }
+
+    void requestFrame();
 
     return () => {
-      cancelled = true;
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      cancelledRef.current = true;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [paused, session?.username]);
 
+  const onImageLoad = () => {
+    inFlightRef.current = false;
+    consecutiveFailsRef.current = 0;
+    setReconnecting(false);
+    setLoading(false);
+    setError("");
+
+    const now = Date.now();
+    setLastFrameMs(now - frameStartRef.current);
+    const times = frameTimesRef.current;
+    times.push(now);
+    while (times.length > 0 && times[0] < now - 2000) times.shift();
+    if (times.length >= 2) {
+      const windowMs = now - times[0];
+      setMeasuredFps(Math.round((times.length - 1) / (windowMs / 1000)));
+    }
+
+    if (!pausedRef.current && !cancelledRef.current) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => requestFrameRef.current(), POLL_INTERVAL_MS);
+    }
+  };
+
+  const onImageError = () => {
+    inFlightRef.current = false;
+    consecutiveFailsRef.current += 1;
+    if (consecutiveFailsRef.current >= RECONNECT_THRESHOLD) {
+      setReconnecting(true);
+      setError("");
+    } else {
+      setError("Cannot load frame");
+    }
+    setLoading(false);
+    if (!pausedRef.current && !cancelledRef.current) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => requestFrameRef.current(), POLL_RETRY_INTERVAL_MS);
+    }
+  };
+
   const handleRefresh = async () => {
-    setIsRefreshing(true);
     try {
+      invalidateBaseUrlCache();
       const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`, session?.username);
       setFrameUri(url);
       setLoading(false);
@@ -87,8 +175,20 @@ export default function LiveFeedScreen() {
       setReconnecting(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cannot refresh frame");
+    }
+  };
+
+  const handleSnapshot = async () => {
+    if (savingSnapshot) return;
+    setSavingSnapshot(true);
+    try {
+      const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`, session?.username);
+      await saveRemoteImageToLibrary(url);
+      Alert.alert("Snapshot saved", "Saved to your Photos in the IRIS album.");
+    } catch (e) {
+      Alert.alert("Snapshot failed", e instanceof Error ? e.message : "Could not save snapshot");
     } finally {
-      setTimeout(() => setIsRefreshing(false), 500);
+      setSavingSnapshot(false);
     }
   };
 
@@ -108,22 +208,42 @@ export default function LiveFeedScreen() {
         </View>
 
         <View style={styles.feedCard}>
-          {loading ? (
-            <ActivityIndicator color="#ffffff" size="large" />
-          ) : reconnecting ? (
-            <View style={styles.centerFeedState}>
+          {/* Image must always mount when a URI is set, otherwise onLoad/onError
+              never fires and the polling loop stalls. Spinners/errors overlay on top. */}
+          {frameUri ? (
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => setFullscreenOpen(true)}
+              disabled={!!error || reconnecting}
+            >
+              <Image
+                source={{ uri: frameUri }}
+                style={styles.feedImage}
+                resizeMode="cover"
+                onLoad={onImageLoad}
+                onError={onImageError}
+              />
+            </Pressable>
+          ) : (
+            <Image source={{ uri: referenceLiveImage }} style={styles.feedFallback} resizeMode="cover" />
+          )}
+
+          {loading && !reconnecting && !error && (
+            <View style={[StyleSheet.absoluteFillObject, styles.centerFeedState]}>
+              <ActivityIndicator color="#ffffff" size="large" />
+            </View>
+          )}
+          {reconnecting && (
+            <View style={[StyleSheet.absoluteFillObject, styles.centerFeedState]}>
               <ActivityIndicator color="#facc15" size="large" />
               <Text style={styles.reconnectText}>Stream interrupted. Reconnecting...</Text>
             </View>
-          ) : error ? (
-            <View style={styles.centerFeedState}>
+          )}
+          {error && !reconnecting && (
+            <View style={[StyleSheet.absoluteFillObject, styles.centerFeedState]}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
-          ) : (
-            <Image source={{ uri: frameUri || referenceLiveImage }} style={styles.feedImage} resizeMode="cover" />
           )}
-
-          {(loading || reconnecting || error) && <Image source={{ uri: referenceLiveImage }} style={styles.feedFallback} resizeMode="cover" />}
 
           <View style={styles.liveBadge}>
             <View style={styles.liveDot} />
@@ -140,35 +260,24 @@ export default function LiveFeedScreen() {
             <View style={[styles.gridLineVertical, { left: "75%" }]} />
             <View style={[styles.gridLineHorizontal, { top: "33%" }]} />
             <View style={[styles.gridLineHorizontal, { top: "66%" }]} />
-            <View style={styles.scanLine} />
           </View>
 
           <View style={styles.feedControls}>
-            <View style={styles.controlCluster}>
-              <TouchableOpacity style={styles.overlayControl} onPress={() => void handleRefresh()}>
-                <RefreshCw size={16} color="#ffffff" strokeWidth={2.2} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.overlayControl} onPress={() => setIsMuted((value) => !value)}>
-                {isMuted ? <MicOff size={16} color="#ffffff" strokeWidth={2.2} /> : <Volume2 size={16} color="#ffffff" strokeWidth={2.2} />}
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.overlayControl} onPress={() => void handleRefresh()}>
+              <RefreshCw size={16} color="#ffffff" strokeWidth={2.2} />
+            </TouchableOpacity>
 
             <View style={styles.cameraPill}>
               <Camera size={15} color="#ffffff" strokeWidth={2.2} />
               <Text style={styles.cameraPillText}>Front Door</Text>
             </View>
 
-            <View style={styles.controlCluster}>
-              <TouchableOpacity style={styles.overlayControl}>
-                <ScanLine size={16} color="#ffffff" strokeWidth={2.2} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.overlayControl, paused && styles.overlayControlActive]}
-                onPress={() => setPaused((value) => !value)}
-              >
-                <Video size={16} color="#ffffff" strokeWidth={2.2} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={[styles.overlayControl, paused && styles.overlayControlActive]}
+              onPress={() => setPaused((value) => !value)}
+            >
+              <Video size={16} color="#ffffff" strokeWidth={2.2} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -176,20 +285,24 @@ export default function LiveFeedScreen() {
           <Text style={styles.cardTitle}>Stream Information</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Resolution</Text>
-            <Text style={styles.infoValue}>1920 x 1080</Text>
+            <Text style={styles.infoValue}>640 x 480</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Frame Rate</Text>
-            <Text style={styles.infoValue}>{paused ? "Paused" : "30 FPS"}</Text>
+            <Text style={styles.infoValue}>
+              {paused ? "Paused" : measuredFps > 0 ? `${measuredFps} FPS` : "—"}
+            </Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Bitrate</Text>
-            <Text style={styles.infoValue}>2.5 Mbps</Text>
+            <Text style={styles.infoLabel}>Transport</Text>
+            <Text style={[styles.infoValue, transport === "lan" ? styles.goodText : transport === "ngrok" ? styles.warnText : null]}>
+              {transport === "lan" ? "LAN direct" : transport === "ngrok" ? "ngrok tunnel" : "—"}
+            </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Latency</Text>
             <Text style={[styles.infoValue, reconnecting || error ? styles.warnText : styles.goodText]}>
-              {reconnecting ? "Reconnecting" : error ? "Interrupted" : "124ms"}
+              {reconnecting ? "Reconnecting" : error ? "Interrupted" : lastFrameMs != null ? `${lastFrameMs}ms` : "—"}
             </Text>
           </View>
         </View>
@@ -218,14 +331,40 @@ export default function LiveFeedScreen() {
         </View>
 
         <View style={styles.quickRow}>
-          <TouchableOpacity style={[styles.quickButton, styles.quickButtonPurple]}>
-            <Text style={styles.quickButtonText}>{isRefreshing ? "Refreshing..." : "Take Snapshot"}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.quickButton, styles.quickButtonOrange]}>
-            <Text style={styles.quickButtonText}>Record Clip</Text>
+          <TouchableOpacity
+            style={[styles.quickButton, styles.quickButtonPurple]}
+            onPress={() => void handleSnapshot()}
+            disabled={savingSnapshot}
+          >
+            <Text style={styles.quickButtonText}>
+              {savingSnapshot ? "Saving..." : "Take Snapshot"}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={fullscreenOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullscreenOpen(false)}
+      >
+        <View style={styles.fullscreenBackdrop}>
+          {frameUri ? (
+            <Image
+              source={{ uri: frameUri }}
+              style={styles.fullscreenImage}
+              resizeMode="contain"
+            />
+          ) : null}
+          <TouchableOpacity
+            style={styles.fullscreenClose}
+            onPress={() => setFullscreenOpen(false)}
+          >
+            <X size={20} color="#ffffff" strokeWidth={2.4} />
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -367,14 +506,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "rgba(34,211,238,0.22)",
   },
-  scanLine: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: "48%",
-    height: 2,
-    backgroundColor: "rgba(34,211,238,0.74)",
-  },
   feedControls: {
     position: "absolute",
     left: 0,
@@ -387,10 +518,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-  },
-  controlCluster: {
-    flexDirection: "row",
-    gap: 8,
   },
   overlayControl: {
     width: 44,
@@ -533,13 +660,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3e8ff",
     borderColor: "#d8b4fe",
   },
-  quickButtonOrange: {
-    backgroundColor: "#ffedd5",
-    borderColor: "#fdba74",
-  },
   quickButtonText: {
     color: referenceColors.text,
     fontSize: 14,
     fontWeight: "700",
+  },
+  fullscreenBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.96)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullscreenImage: {
+    width: "100%",
+    height: "100%",
+  },
+  fullscreenClose: {
+    position: "absolute",
+    top: 48,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(15,23,42,0.82)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.28)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
