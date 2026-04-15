@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -16,37 +16,13 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Eye, EyeOff, Lock, Mail, Shield, User } from "lucide-react-native";
-import Constants from "expo-constants";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { listStoredAccounts, updateStoredAccountPassword } from "../../lib/accounts";
 import type { StoredAccountRecovery } from "../../lib/accounts";
-import { getPlatformGoogleClientId } from "../../lib/google";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
-// Native module, only present in EAS dev/prod builds. Expo Go must not evaluate it
-// because Expo Go's native binary lacks RNGoogleSignin and the library's top-level
-// code calls TurboModuleRegistry.getEnforcing synchronously.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _googleModule: any;
-let _googleLoaded = false;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function loadGoogleModule(): any {
-  if (_googleLoaded) return _googleModule;
-  _googleLoaded = true;
-  if (Constants.expoGoConfig) {
-    _googleModule = null;
-    return null;
-  }
-  try {
-    _googleModule = require("@react-native-google-signin/google-signin");
-  } catch {
-    _googleModule = null;
-  }
-  return _googleModule;
-}
- 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Login">;
  
 type InputRowProps = {
@@ -104,7 +80,7 @@ function InputRow({
  
 export default function LoginScreen() {
   const navigation = useNavigation<Nav>();
-  const { login, continueWithGoogle, register } = useAuth();
+  const { login, register } = useAuth();
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
  
   const [username, setUsername] = useState("");
@@ -120,8 +96,7 @@ export default function LoginScreen() {
   const [regError, setRegError] = useState("");
   const [regSuccess, setRegSuccess] = useState("");
   const [regLoading, setRegLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
- 
+
   const [recoveryVisible, setRecoveryVisible] = useState(false);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoveryAccounts, setRecoveryAccounts] = useState<StoredAccountRecovery[]>([]);
@@ -132,17 +107,6 @@ export default function LoginScreen() {
   const [resettingPasswordFor, setResettingPasswordFor] = useState<string | null>(null);
   const [newRecoveryPassword, setNewRecoveryPassword] = useState("");
   const [confirmRecoveryPassword, setConfirmRecoveryPassword] = useState("");
- 
-  const googlePlatformClientId = getPlatformGoogleClientId();
-  const isExpoGoRuntime = Boolean(Constants.expoGoConfig);
- 
-  useEffect(() => {
-    const mod = loadGoogleModule();
-    mod?.GoogleSignin.configure({
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim(),
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim(),
-    });
-  }, []);
  
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -188,74 +152,6 @@ export default function LoginScreen() {
     }
   };
  
-  const setGoogleError = (message: string) => {
-    if (activeTab === "signin") {
-      setLoginError(message);
-      setRegError("");
-      return;
-    }
-    setRegError(message);
-    setLoginError("");
-  };
-
-  const getGoogleErrorMessage = (error: unknown): string => {
-    const mod = loadGoogleModule();
-    if (mod && mod.isErrorWithCode(error)) {
-      const coded = error as { code: string; message: string };
-      if (coded.code === mod.statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        return "Google Play Services is missing or outdated on this emulator. Update it and try again.";
-      }
-
-      if (coded.code === mod.statusCodes.IN_PROGRESS) {
-        return "Google sign-in is already in progress.";
-      }
-
-      if (coded.code === "10" || coded.message.includes("DEVELOPER_ERROR")) {
-        return "Google Sign-In is not configured for this Android build yet. Add an Android OAuth client for package `com.iris.mobile` with the correct SHA-1 fingerprint in Google Cloud Console.";
-      }
-    }
-
-    return error instanceof Error ? error.message : "Google sign-in failed";
-  };
- 
-  const handleGoogleAuth = async () => {
-    const mod = loadGoogleModule();
-    if (isExpoGoRuntime || !mod) {
-      setGoogleError("Google sign-in needs a native build. In Expo Go, please register with username and password instead, or install an EAS development build (iOS or Android) to use Google.");
-      return;
-    }
-
-    if (!googlePlatformClientId) {
-      setGoogleError("Google sign-in is missing the client ID for this app.");
-      return;
-    }
-
-    setLoginError("");
-    setRegError("");
-    setRegSuccess("");
-    setGoogleLoading(true);
-
-    try {
-      await mod.GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const response = await mod.GoogleSignin.signIn();
-      if (mod.isCancelledResponse(response)) {
-        return;
-      }
-
-      if (!mod.isSuccessResponse(response)) {
-        throw new Error("Google sign-in did not complete.");
-      }
-
-      const idToken = response.data?.idToken;
-      if (!idToken) throw new Error("Google sign-in did not return an ID token");
-      await continueWithGoogle(idToken);
-    } catch (error) {
-      setGoogleError(getGoogleErrorMessage(error));
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
- 
   const openRecovery = async () => {
     setRecoveryVisible(true);
     setRecoveryLoading(true);
@@ -288,15 +184,9 @@ export default function LoginScreen() {
   const useRecoveredAccount = (account: StoredAccountRecovery) => {
     setActiveTab("signin");
     setUsername(account.username);
-    if (account.provider === "google") {
-      setPassword("");
-      setShowPassword(false);
-      setLoginError("Tap Sign in with Google to continue with this account.");
-    } else {
-      setPassword(account.password);
-      setShowPassword(true);
-      setLoginError("");
-    }
+    setPassword(account.password);
+    setShowPassword(true);
+    setLoginError("");
     closeRecovery();
   };
  
@@ -458,21 +348,6 @@ export default function LoginScreen() {
                 </>
               )}
  
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>Or continue with</Text>
-                <View style={styles.dividerLine} />
-              </View>
- 
-              <TouchableOpacity
-                style={[styles.googleButton, googleLoading && styles.buttonDisabled]}
-                onPress={() => void handleGoogleAuth()}
-                disabled={googleLoading}
-              >
-                {googleLoading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.googleIcon}>G</Text>}
-                <Text style={styles.googleText}>{isSignIn ? "Sign in with Google" : "Sign up with Google"}</Text>
-              </TouchableOpacity>
- 
               <View style={styles.switchRow}>
                 <Text style={styles.switchText}>
                   {isSignIn ? "Don't have an account?" : "Already have an account?"}
@@ -558,52 +433,41 @@ export default function LoginScreen() {
                                   <Text style={styles.recoveryUsername}>{account.username}</Text>
                                   <Text style={styles.recoveryMeta}>
                                     {account.email || "No Gmail saved"} | {account.role.replace(/_/g, " ")}
-                                    {account.provider === "google" ? " | google" : ""}
                                   </Text>
                                 </View>
                                 <TouchableOpacity
                                   style={styles.recoveryUseButton}
                                   onPress={() => useRecoveredAccount(account)}
                                 >
-                                  <Text style={styles.recoveryUseButtonText}>
-                                    {account.provider === "google" ? "Google" : "Use"}
+                                  <Text style={styles.recoveryUseButtonText}>Use</Text>
+                                </TouchableOpacity>
+                              </View>
+
+                              <View style={styles.recoveryActionRow}>
+                                <TouchableOpacity
+                                  style={styles.recoveryRevealButton}
+                                  onPress={() =>
+                                    setRevealedPasswordFor(showSavedPassword ? null : account.username)
+                                  }
+                                >
+                                  <Text style={styles.recoveryRevealText}>
+                                    {showSavedPassword ? `Password: ${account.password}` : "Show saved password"}
+                                  </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                  style={styles.recoverySecondaryButton}
+                                  onPress={() =>
+                                    showResetForm ? setResettingPasswordFor(null) : startResetPassword(account.username)
+                                  }
+                                >
+                                  <Text style={styles.recoverySecondaryButtonText}>
+                                    {showResetForm ? "Cancel reset" : "Reset saved password"}
                                   </Text>
                                 </TouchableOpacity>
                               </View>
- 
-                              {account.provider === "google" ? (
-                                <View style={styles.googleRecoveryCard}>
-                                  <Text style={styles.googleRecoveryText}>
-                                    This saved account signs in with Google. Use the Google button on the main form.
-                                  </Text>
-                                </View>
-                              ) : (
-                                <View style={styles.recoveryActionRow}>
-                                  <TouchableOpacity
-                                    style={styles.recoveryRevealButton}
-                                    onPress={() =>
-                                      setRevealedPasswordFor(showSavedPassword ? null : account.username)
-                                    }
-                                  >
-                                    <Text style={styles.recoveryRevealText}>
-                                      {showSavedPassword ? `Password: ${account.password}` : "Show saved password"}
-                                    </Text>
-                                  </TouchableOpacity>
- 
-                                  <TouchableOpacity
-                                    style={styles.recoverySecondaryButton}
-                                    onPress={() =>
-                                      showResetForm ? setResettingPasswordFor(null) : startResetPassword(account.username)
-                                    }
-                                  >
-                                    <Text style={styles.recoverySecondaryButtonText}>
-                                      {showResetForm ? "Cancel reset" : "Reset saved password"}
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              )}
- 
-                              {showResetForm && account.provider !== "google" ? (
+
+                              {showResetForm ? (
                                 <View style={styles.resetCard}>
                                   <Text style={styles.resetTitle}>Update saved password on this phone</Text>
                                   <View style={styles.resetInputShell}>
@@ -784,42 +648,6 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.65,
   },
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginVertical: 22,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#e2e8f0",
-  },
-  dividerText: {
-    color: "#64748b",
-    fontSize: 12,
-  },
-  googleButton: {
-    minHeight: 56,
-    borderRadius: 18,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-  },
-  googleIcon: {
-    color: referenceColors.primary,
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  googleText: {
-    color: referenceColors.textSoft,
-    fontSize: 14,
-    fontWeight: "600",
-  },
   switchRow: {
     flexDirection: "row",
     justifyContent: "center",
@@ -957,20 +785,6 @@ const styles = StyleSheet.create({
   },
   recoveryActionRow: {
     gap: 10,
-  },
-  googleRecoveryCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#dbeafe",
-    backgroundColor: "#eff6ff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  googleRecoveryText: {
-    color: referenceColors.textSoft,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "600",
   },
   recoveryRevealButton: {
     borderRadius: 12,

@@ -16,11 +16,16 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.iris.mobile",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "IRIS discovers your Raspberry Pi on the local Wi-Fi to stream the camera feed with lower latency."
       }
     },
     "android": {
       "package": "com.iris.mobile",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -35,14 +40,6 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "@react-native-google-signin/google-signin",
-        {
-          "iosUrlScheme": "com.googleusercontent.apps.261281750852-j4bprb92a2o24dn6rqgt3r24rmk16bad"
-        }
-      ]
-    ],
     "extra": {
       "eas": {
         "projectId": "a48f43c1-ae6d-4740-98cc-ee9bf0748fe4"

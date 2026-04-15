@@ -7,7 +7,6 @@ import {
 } from "../lib/pi";
 import {
   authenticateAccount,
-  authenticateGoogleAccount,
   clearStoredSession,
   getStoredSession,
   persistSession,
@@ -23,7 +22,6 @@ interface AuthContextType {
   hasPi: boolean;
   activeDevice: PiDevice | null;
   login: (username: string, password: string) => Promise<void>;
-  continueWithGoogle: (idToken: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -84,14 +82,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshDeviceState(nextSession.username);
   };
 
-  const continueWithGoogle = async (idToken: string): Promise<void> => {
-    const nextSession = await authenticateGoogleAccount(idToken, session?.username);
-    await transferDevices(undefined, nextSession.username);
-    setSession(nextSession);
-    await persistSession(nextSession);
-    await refreshDeviceState(nextSession.username);
-  };
-
   const register = async (username: string, email: string, password: string) => {
     const nextSession = await registerAccount(username, email, password);
     await transferDevices(undefined, nextSession.username);
@@ -121,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, bootstrapping, hasPi, activeDevice, login, continueWithGoogle, register, logout, refreshSession, selectDevice }}>
+    <AuthContext.Provider value={{ session, bootstrapping, hasPi, activeDevice, login, register, logout, refreshSession, selectDevice }}>
       {children}
     </AuthContext.Provider>
   );

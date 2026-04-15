@@ -1,17 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { AuthSession } from "../types/iris";
-import {
-  deriveGoogleSyncPassword,
-  makeGoogleUsernameBase,
-  parseGoogleIdentityFromIdToken,
-  verifyGoogleIdentityToken,
-} from "./google";
-import { hasDevices, loginDeviceAccount, loginDeviceWithGoogle, registerDeviceAccount } from "./pi";
+import { hasDevices, loginDeviceAccount, registerDeviceAccount } from "./pi";
 
 const ACCOUNTS_KEY = "securewatch_accounts_v1";
 const SESSION_KEY = "securewatch_account_session_v1";
-
-type StoredAccountProvider = "local" | "google";
 
 interface StoredAccount {
   username: string;
@@ -19,8 +11,6 @@ interface StoredAccount {
   password: string;
   role: string;
   createdAt: string;
-  provider?: StoredAccountProvider;
-  googleSubject?: string;
 }
 
 export interface StoredAccountRecovery {
@@ -29,7 +19,6 @@ export interface StoredAccountRecovery {
   password: string;
   role: string;
   createdAt: string;
-  provider?: StoredAccountProvider;
 }
 
 function normalizeUsername(username: string) {
@@ -50,19 +39,6 @@ function validateAccountInput(username: string, email: string, password: string)
   if (password.length < 6) {
     throw new Error("Password must be at least 6 characters");
   }
-}
-
-function findGoogleAccount(accounts: StoredAccount[], googleSubject: string, email: string): StoredAccount | null {
-  const normalizedSubject = googleSubject.trim();
-  const normalizedEmail = normalizeEmail(email);
-
-  return (
-    accounts.find(
-      (account) =>
-        account.googleSubject === normalizedSubject ||
-        (account.provider === "google" && normalizeEmail(account.email) === normalizedEmail),
-    ) ?? null
-  );
 }
 
 async function getAccounts(): Promise<StoredAccount[]> {
@@ -92,9 +68,7 @@ async function upsertAccount(nextAccount: StoredAccount): Promise<StoredAccount>
   const accounts = await getAccounts();
   const normalizedUsername = normalizeUsername(nextAccount.username);
   const index = accounts.findIndex(
-    (account) =>
-      (nextAccount.googleSubject && account.googleSubject === nextAccount.googleSubject) ||
-      normalizeUsername(account.username) === normalizedUsername,
+    (account) => normalizeUsername(account.username) === normalizedUsername,
   );
 
   if (index >= 0) {
@@ -115,21 +89,6 @@ async function getAccountByUsername(username: string): Promise<StoredAccount | n
   const accounts = await getAccounts();
   const normalizedUsername = normalizeUsername(username);
   return accounts.find((account) => normalizeUsername(account.username) === normalizedUsername) ?? null;
-}
-
-async function buildUniqueGoogleUsername(email: string, googleSubject: string): Promise<string> {
-  const accounts = await getAccounts();
-  const base = makeGoogleUsernameBase(email, googleSubject);
-  let candidate = base;
-  let suffix = 2;
-
-  while (accounts.some((account) => normalizeUsername(account.username) === normalizeUsername(candidate))) {
-    const suffixText = `_${suffix}`;
-    candidate = `${base.slice(0, Math.max(3, 64 - suffixText.length))}${suffixText}`;
-    suffix += 1;
-  }
-
-  return candidate;
 }
 
 async function hasAnyConfiguredDevice(accountId?: string): Promise<boolean> {
@@ -164,7 +123,6 @@ export async function registerAccount(username: string, email: string, password:
       password,
       role: "homeowner_primary",
       createdAt: new Date().toISOString(),
-      provider: "local",
     });
 
     return makeSession(account, "");
@@ -179,7 +137,6 @@ export async function registerAccount(username: string, email: string, password:
     password,
     role: login.user.role,
     createdAt: new Date().toISOString(),
-    provider: "local",
   });
 
   return makeSession(account, login.accessToken);
@@ -208,49 +165,6 @@ export async function authenticateAccount(
     password,
     role: login.user.role,
     createdAt: cachedAccount?.createdAt ?? new Date().toISOString(),
-    provider: cachedAccount?.provider ?? "local",
-    googleSubject: cachedAccount?.googleSubject,
-  });
-
-  return makeSession(account, login.accessToken);
-}
-
-export async function authenticateGoogleAccount(idToken: string, preferredAccountId?: string): Promise<AuthSession> {
-  const deviceConfigured = await hasAnyConfiguredDevice(preferredAccountId);
-
-  if (!deviceConfigured) {
-    const identity = await verifyGoogleIdentityToken(idToken);
-    const accounts = await getAccounts();
-    const existing = findGoogleAccount(accounts, identity.sub, identity.email);
-    const password = await deriveGoogleSyncPassword(identity.sub);
-    const username = existing?.username ?? (await buildUniqueGoogleUsername(identity.email, identity.sub));
-
-    const account = await upsertAccount({
-      username,
-      email: identity.email,
-      password,
-      role: existing?.role ?? "homeowner_primary",
-      createdAt: existing?.createdAt ?? new Date().toISOString(),
-      provider: "google",
-      googleSubject: identity.sub,
-    });
-
-    return makeSession(account, "");
-  }
-
-  const identity = parseGoogleIdentityFromIdToken(idToken);
-  const password = await deriveGoogleSyncPassword(identity.sub);
-  const login = await loginDeviceWithGoogle(idToken, preferredAccountId);
-  const existingAccount = findGoogleAccount(await getAccounts(), identity.sub, login.email);
-
-  const account = await upsertAccount({
-    username: login.username,
-    email: login.email,
-    password,
-    role: login.role,
-    createdAt: existingAccount?.createdAt ?? new Date().toISOString(),
-    provider: "google",
-    googleSubject: identity.sub,
   });
 
   return makeSession(account, login.accessToken);
@@ -262,10 +176,6 @@ export async function syncStoredAccountToDevice(username: string): Promise<AuthS
 
   const deviceConfigured = await hasAnyConfiguredDevice(account.username);
   if (!deviceConfigured) {
-    return makeSession(account, "");
-  }
-
-  if (account.provider === "google") {
     return makeSession(account, "");
   }
 
@@ -289,8 +199,6 @@ export async function syncStoredAccountToDevice(username: string): Promise<AuthS
     ...account,
     username: login.user.username,
     role: login.user.role,
-    provider: account.provider ?? "local",
-    googleSubject: account.googleSubject,
   });
 
   return makeSession(syncedAccount, login.accessToken);
@@ -313,7 +221,6 @@ export async function listStoredAccounts(): Promise<StoredAccountRecovery[]> {
       password: account.password,
       role: account.role,
       createdAt: account.createdAt,
-      provider: account.provider ?? "local",
     }));
 }
 
@@ -330,10 +237,6 @@ export async function updateStoredAccountPassword(
     throw new Error("Saved account not found on this phone");
   }
 
-  if (account.provider === "google") {
-    throw new Error("Google accounts must use Google sign-in");
-  }
-
   const updated = await upsertAccount({
     ...account,
     password,
@@ -345,7 +248,6 @@ export async function updateStoredAccountPassword(
     password: updated.password,
     role: updated.role,
     createdAt: updated.createdAt,
-    provider: updated.provider ?? "local",
   };
 }
 

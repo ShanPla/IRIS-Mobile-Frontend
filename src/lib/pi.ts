@@ -1,5 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PermissionSet, UserResponse } from "../types/iris";
+import { resolveBaseUrl } from "./resolveBaseUrl";
+
+// Resolve the best reachable base URL for a device. LAN-direct if reachable,
+// ngrok otherwise. Cached per device; invalidate via `invalidateBaseUrlCache`
+// on AppState foreground (see App.tsx).
+async function deviceBaseUrl(device: PiDevice): Promise<string> {
+  return resolveBaseUrl(device);
+}
 
 const LEGACY_DEVICES_KEY = "securewatch_devices_v1";
 const LEGACY_ACTIVE_KEY = "securewatch_active_device_id_v1";
@@ -72,23 +80,6 @@ export interface PairResponse {
 interface DeviceAuthResult {
   accessToken: string;
   user: UserResponse;
-  device: PiDevice;
-  accountId?: string;
-}
-
-interface GoogleDeviceAuthResponse {
-  access_token: string;
-  token_type: string;
-  username: string;
-  email: string;
-  role: string;
-}
-
-interface GoogleDeviceAuthResult {
-  accessToken: string;
-  username: string;
-  email: string;
-  role: string;
   device: PiDevice;
   accountId?: string;
 }
@@ -426,7 +417,8 @@ export async function piGet<T>(path: string, accountId?: string): Promise<T> {
   const doGet = async (): Promise<Response> => {
     const device = await getActiveDevice(accountId);
     if (!device) throw new Error("No active Pi device");
-    return fetch(`${device.url}${path}`, { headers: authHeaders(device.token) });
+    const base = await deviceBaseUrl(device);
+    return fetch(`${base}${path}`, { headers: authHeaders(device.token) });
   };
 
   let res = await doGet();
@@ -444,7 +436,8 @@ export async function piPost<T>(path: string, body?: unknown, accountId?: string
   const attempt = async (): Promise<Response> => {
     const device = await getActiveDevice(accountId);
     if (!device) throw new Error("No active Pi device");
-    return fetch(`${device.url}${path}`, {
+    const base = await deviceBaseUrl(device);
+    return fetch(`${base}${path}`, {
       method: "POST",
       headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -500,7 +493,8 @@ export async function registerDeviceAccount(
 
   for (const candidate of candidates) {
     try {
-      const res = await fetch(`${candidate.device.url}/api/auth/register`, {
+      const base = await deviceBaseUrl(candidate.device);
+      const res = await fetch(`${base}/api/auth/register`, {
         method: "POST",
         headers: {
           ...NGROK_HEADERS,
@@ -537,7 +531,8 @@ export async function loginDeviceAccount(
 
   for (const candidate of candidates) {
     try {
-      const loginRes = await fetch(`${candidate.device.url}/api/auth/login`, {
+      const base = await deviceBaseUrl(candidate.device);
+      const loginRes = await fetch(`${base}/api/auth/login`, {
         method: "POST",
         headers: {
           ...NGROK_HEADERS,
@@ -557,7 +552,7 @@ export async function loginDeviceAccount(
       const data = (await loginRes.json()) as { access_token: string };
       await updateDeviceToken(candidate.device.deviceId, data.access_token, candidate.accountId);
 
-      const meRes = await fetch(`${candidate.device.url}/api/auth/me`, {
+      const meRes = await fetch(`${base}/api/auth/me`, {
         headers: authHeaders(data.access_token),
       });
       if (!meRes.ok) {
@@ -569,52 +564,6 @@ export async function loginDeviceAccount(
       return {
         accessToken: data.access_token,
         user,
-        device: candidate.device,
-        accountId: candidate.accountId,
-      };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : lastError;
-    }
-  }
-
-  throw new Error(lastError);
-}
-
-export async function loginDeviceWithGoogle(
-  idToken: string,
-  preferredAccountId?: string,
-): Promise<GoogleDeviceAuthResult> {
-  const candidates = await getCandidateDevices(preferredAccountId, undefined);
-  if (candidates.length === 0) {
-    throw new Error("Add a device on the Setup screen before using Google sign in.");
-  }
-
-  let lastError = "Google sign-in failed";
-
-  for (const candidate of candidates) {
-    try {
-      const response = await fetch(`${candidate.device.url}/api/auth/google`, {
-        method: "POST",
-        headers: {
-          ...NGROK_HEADERS,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id_token: idToken.trim() }),
-      });
-
-      if (!response.ok) {
-        lastError = await parseErrorMessage(response, `Google sign-in failed (${response.status}).`);
-        continue;
-      }
-
-      const data = (await response.json()) as GoogleDeviceAuthResponse;
-      await updateDeviceToken(candidate.device.deviceId, data.access_token, candidate.accountId);
-
-      return {
-        accessToken: data.access_token,
-        username: data.username,
-        email: data.email,
-        role: data.role,
         device: candidate.device,
         accountId: candidate.accountId,
       };
@@ -656,7 +605,8 @@ export async function ensureDeviceAuth(username: string, password: string, accou
   if (!device) throw new Error("No active Pi device");
   if (device.token) return;
 
-  const res = await fetch(`${device.url}/api/auth/login`, {
+  const base = await deviceBaseUrl(device);
+  const res = await fetch(`${base}/api/auth/login`, {
     method: "POST",
     headers: {
       ...NGROK_HEADERS,
@@ -674,7 +624,8 @@ export async function ensureDeviceAuth(username: string, password: string, accou
 }
 
 export async function piPostToDevice<T>(device: PiDevice, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${device.url}${path}`, {
+  const base = await deviceBaseUrl(device);
+  const res = await fetch(`${base}${path}`, {
     method: "POST",
     headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -690,7 +641,8 @@ export async function piPostForm<T>(path: string, formData: FormData, accountId?
   const attempt = async (): Promise<Response> => {
     const device = await getActiveDevice(accountId);
     if (!device) throw new Error("No active Pi device");
-    return fetch(`${device.url}${path}`, {
+    const base = await deviceBaseUrl(device);
+    return fetch(`${base}${path}`, {
       method: "POST",
       headers: authHeaders(device.token),
       body: formData,
@@ -712,7 +664,8 @@ export async function piPut<T>(path: string, body?: unknown, accountId?: string)
   const attempt = async (): Promise<Response> => {
     const device = await getActiveDevice(accountId);
     if (!device) throw new Error("No active Pi device");
-    return fetch(`${device.url}${path}`, {
+    const base = await deviceBaseUrl(device);
+    return fetch(`${base}${path}`, {
       method: "PUT",
       headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
       body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -734,7 +687,8 @@ export async function piDelete<T>(path: string, accountId?: string): Promise<T |
   const attempt = async (): Promise<Response> => {
     const device = await getActiveDevice(accountId);
     if (!device) throw new Error("No active Pi device");
-    return fetch(`${device.url}${path}`, {
+    const base = await deviceBaseUrl(device);
+    return fetch(`${base}${path}`, {
       method: "DELETE",
       headers: authHeaders(device.token),
     });
@@ -758,8 +712,9 @@ export async function buildPiUrl(path: string, accountId?: string): Promise<stri
   if (!device.token && (await recoverActiveDeviceToken(accountId))) {
     device = (await getActiveDevice(accountId)) ?? device;
   }
+  const base = await deviceBaseUrl(device);
   const sep = path.includes("?") ? "&" : "?";
-  return device.token ? `${device.url}${path}${sep}token=${device.token}` : `${device.url}${path}`;
+  return device.token ? `${base}${path}${sep}token=${device.token}` : `${base}${path}`;
 }
 
 export async function hasDevices(accountId?: string): Promise<boolean> {
