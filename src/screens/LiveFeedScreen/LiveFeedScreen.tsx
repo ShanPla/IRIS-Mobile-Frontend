@@ -5,7 +5,6 @@ import {
   AppState,
   Image,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -211,7 +210,8 @@ export default function LiveFeedScreen() {
           {/* Image must always mount when a URI is set, otherwise onLoad/onError
               never fires and the polling loop stalls. Spinners/errors overlay on top. */}
           {frameUri ? (
-            <Pressable
+            <TouchableOpacity
+              activeOpacity={0.9}
               style={StyleSheet.absoluteFill}
               onPress={() => setFullscreenOpen(true)}
               disabled={!!error || reconnecting}
@@ -223,7 +223,7 @@ export default function LiveFeedScreen() {
                 onLoad={onImageLoad}
                 onError={onImageError}
               />
-            </Pressable>
+            </TouchableOpacity>
           ) : (
             <Image source={{ uri: referenceLiveImage }} style={styles.feedFallback} resizeMode="cover" />
           )}
