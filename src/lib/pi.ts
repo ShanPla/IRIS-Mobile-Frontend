@@ -3,7 +3,7 @@ import type { PermissionSet, UserResponse } from "../types/iris";
 import { resolveBaseUrl } from "./resolveBaseUrl";
 
 // Resolve the best reachable base URL for a device. LAN-direct if reachable,
-// ngrok otherwise. Cached per device; invalidate via `invalidateBaseUrlCache`
+// tunnel otherwise. Cached per device; invalidate via `invalidateBaseUrlCache`
 // on AppState foreground (see App.tsx).
 async function deviceBaseUrl(device: PiDevice): Promise<string> {
   return resolveBaseUrl(device);
