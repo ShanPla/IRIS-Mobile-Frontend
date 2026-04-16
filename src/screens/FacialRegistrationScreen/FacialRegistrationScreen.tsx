@@ -17,10 +17,10 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation } from "@react-navigation/native";
 import { useFocusEffect } from "@react-navigation/native";
-import { ArrowLeft, Camera, ScanFace, Trash2, Upload, User, Video } from "lucide-react-native";
+import { ArrowLeft, Camera, ScanFace, Trash2, Upload, User } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { piDelete, piGet, piPost, piPostForm } from "../../lib/pi";
+import { piDelete, piGet, piPostForm } from "../../lib/pi";
 import type { FaceProfile } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
@@ -36,7 +36,7 @@ const PHONE_ANGLES = [
   { key: "down", label: "Look Down", instruction: "Tilt your head slightly downward" },
 ] as const;
 
-type Mode = "phone" | "upload" | "pi";
+type Mode = "phone" | "upload";
 
 export default function FacialRegistrationScreen() {
   const navigation = useNavigation();
@@ -61,7 +61,6 @@ export default function FacialRegistrationScreen() {
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [piEnrolling, setPiEnrolling] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -300,36 +299,6 @@ export default function FacialRegistrationScreen() {
     }
   };
 
-  const handlePiEnroll = async () => {
-    if (!name.trim()) {
-      setError("Name is required");
-      return;
-    }
-    setPiEnrolling(true);
-    setError("");
-    setSuccess("");
-    try {
-      const result = await piPost<{
-        ok: boolean;
-        total_captured: number;
-        total_attempted: number;
-        message: string;
-      }>(`/api/faces/auto-enroll?name=${encodeURIComponent(name.trim())}&interval=2`, undefined, session?.username);
-
-      if (result.ok) {
-        setSuccess(`Enrolled from Pi camera! ${result.total_captured}/${result.total_attempted} angles captured.`);
-        setName("");
-        void loadFaces();
-      } else {
-        setError("Pi camera enrollment failed — no frames captured.");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Pi enrollment failed");
-    } finally {
-      setPiEnrolling(false);
-    }
-  };
-
   if (phoneCameraActive) {
     if (!permission?.granted) {
       return (
@@ -488,7 +457,7 @@ export default function FacialRegistrationScreen() {
                   </View>
                   <View style={styles.summaryCopy}>
                     <Text style={styles.summaryTitle}>Add New Face</Text>
-                    <Text style={styles.summaryText}>Enroll from the Pi camera for best accuracy, or use your phone camera / upload a photo.</Text>
+                    <Text style={styles.summaryText}>Capture 5 guided angles or upload a single portrait image.</Text>
                   </View>
                 </View>
 
@@ -504,9 +473,8 @@ export default function FacialRegistrationScreen() {
 
                   <View style={styles.modeRow}>
                     {([
-                      { key: "phone" as Mode, label: "Phone", icon: Camera },
-                      { key: "pi" as Mode, label: "Pi Camera", icon: Video },
-                      { key: "upload" as Mode, label: "Upload", icon: Upload },
+                      { key: "phone" as Mode, label: "Phone Camera", icon: Camera },
+                      { key: "upload" as Mode, label: "Upload Photo", icon: Upload },
                     ]).map((item) => {
                       const Icon = item.icon;
                       const active = mode === item.key;
@@ -542,32 +510,6 @@ export default function FacialRegistrationScreen() {
                       <TouchableOpacity style={styles.primaryButtonWrap} onPress={startPhoneEnroll}>
                         <View style={styles.primaryButton}>
                           <Text style={styles.primaryButtonText}>Start Face Enrollment</Text>
-                        </View>
-                      </TouchableOpacity>
-                    </>
-                  ) : mode === "pi" ? (
-                    <>
-                      <View style={styles.captureCard}>
-                        <Text style={styles.captureTitle}>Pi Camera Enrollment</Text>
-                        <Text style={styles.captureInstruction}>
-                          Stand in front of the Pi camera and slowly turn your head. The Pi will automatically capture 5 angles over ~10 seconds. This gives the best recognition accuracy.
-                        </Text>
-                      </View>
-
-                      <TouchableOpacity
-                        style={[styles.primaryButtonWrap, piEnrolling && styles.buttonDisabled]}
-                        onPress={() => void handlePiEnroll()}
-                        disabled={piEnrolling}
-                      >
-                        <View style={styles.primaryButton}>
-                          {piEnrolling ? (
-                            <>
-                              <ActivityIndicator color="#ffffff" style={{ marginRight: 8 }} />
-                              <Text style={styles.primaryButtonText}>Capturing from Pi...</Text>
-                            </>
-                          ) : (
-                            <Text style={styles.primaryButtonText}>Start Pi Enrollment</Text>
-                          )}
                         </View>
                       </TouchableOpacity>
                     </>
