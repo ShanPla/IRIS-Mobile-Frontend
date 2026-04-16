@@ -160,10 +160,10 @@ export default function SetupScreen() {
 
             <View style={styles.card}>
               <SetupField
-                label="Ngrok URL"
+                label="Tunnel URL"
                 value={url}
                 onChangeText={setUrl}
-                placeholder="https://xyz.ngrok-free.dev"
+                placeholder="https://iris-xxxx.cfargotunnel.com"
                 icon="url"
               />
               <SetupField

@@ -111,15 +111,10 @@ interface RedeemDeviceInviteResult {
   access_role: "secondary";
 }
 
-const NGROK_HEADERS: HeadersInit = {
-  "ngrok-skip-browser-warning": "true",
-};
-
 const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function authHeaders(token: string, extra?: HeadersInit): HeadersInit {
   return {
-    ...NGROK_HEADERS,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(extra ?? {}),
   };
@@ -292,9 +287,7 @@ export async function addDevice(
 
   let info: DeviceInfo | null = null;
   try {
-    const infoRes = await fetch(`${normalizedUrl}/api/device/info`, {
-      headers: NGROK_HEADERS,
-    });
+    const infoRes = await fetch(`${normalizedUrl}/api/device/info`);
     if (infoRes.ok) {
       info = (await infoRes.json()) as DeviceInfo;
     }
@@ -380,7 +373,6 @@ export async function redeemTrustedUserInvite(
   const response = await fetch(`${decoded.device_url}/api/auth/device-invites/redeem`, {
     method: "POST",
     headers: {
-      ...NGROK_HEADERS,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -497,7 +489,6 @@ export async function registerDeviceAccount(
       const res = await fetch(`${base}/api/auth/register`, {
         method: "POST",
         headers: {
-          ...NGROK_HEADERS,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ username, password }),
@@ -535,7 +526,6 @@ export async function loginDeviceAccount(
       const loginRes = await fetch(`${base}/api/auth/login`, {
         method: "POST",
         headers: {
-          ...NGROK_HEADERS,
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({ username, password }).toString(),
@@ -609,7 +599,6 @@ export async function ensureDeviceAuth(username: string, password: string, accou
   const res = await fetch(`${base}/api/auth/login`, {
     method: "POST",
     headers: {
-      ...NGROK_HEADERS,
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({ username, password }).toString(),

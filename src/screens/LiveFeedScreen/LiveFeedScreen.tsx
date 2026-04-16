@@ -41,7 +41,7 @@ export default function LiveFeedScreen() {
   const [savingSnapshot, setSavingSnapshot] = useState(false);
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const [transport, setTransport] = useState<"lan" | "ngrok" | "unknown">("unknown");
+  const [transport, setTransport] = useState<"lan" | "tunnel" | "unknown">("unknown");
   const [measuredFps, setMeasuredFps] = useState(0);
   const [lastFrameMs, setLastFrameMs] = useState<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,7 +91,7 @@ export default function LiveFeedScreen() {
         const device = await getActiveDevice(session?.username);
         if (device) {
           const res = getCachedResolution(device.deviceId);
-          setTransport(res?.isLan ? "lan" : res ? "ngrok" : "unknown");
+          setTransport(res?.isLan ? "lan" : res ? "tunnel" : "unknown");
         }
         frameStartRef.current = Date.now();
         setFrameUri(url);
@@ -295,8 +295,8 @@ export default function LiveFeedScreen() {
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Transport</Text>
-            <Text style={[styles.infoValue, transport === "lan" ? styles.goodText : transport === "ngrok" ? styles.warnText : null]}>
-              {transport === "lan" ? "LAN direct" : transport === "ngrok" ? "ngrok tunnel" : "—"}
+            <Text style={[styles.infoValue, transport === "lan" ? styles.goodText : transport === "tunnel" ? styles.warnText : null]}>
+              {transport === "lan" ? "LAN direct" : transport === "tunnel" ? "Cloudflare tunnel" : "—"}
             </Text>
           </View>
           <View style={styles.infoRow}>
