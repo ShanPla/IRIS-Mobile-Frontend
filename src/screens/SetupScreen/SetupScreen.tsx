@@ -78,7 +78,7 @@ export default function SetupScreen() {
 
   const handleAddDevice = async () => {
     if (!url.trim() || !deviceIp.trim()) {
-      setError("Ngrok URL and Device IP are required");
+      setError("Tunnel URL and Device IP are required");
       return;
     }
 
