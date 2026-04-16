@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,7 +10,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -119,7 +117,6 @@ export default function SettingsScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
           <ReferenceBackdrop />
           <ScrollView
@@ -361,7 +358,6 @@ export default function SettingsScreen() {
             </View>
           </ScrollView>
         </View>
-      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,16 +11,16 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation } from "@react-navigation/native";
-import { ArrowLeft, Camera, ScanFace, Upload } from "lucide-react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { ArrowLeft, Camera, ScanFace, Trash2, Upload, User } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { piPostForm } from "../../lib/pi";
+import { piDelete, piGet, piPostForm } from "../../lib/pi";
 import type { FaceProfile } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
@@ -63,6 +63,64 @@ export default function FacialRegistrationScreen() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Registered faces list
+  const [faces, setFaces] = useState<FaceProfile[]>([]);
+  const [facesLoading, setFacesLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const loadFaces = useCallback(async () => {
+    try {
+      const data = await piGet<FaceProfile[]>("/api/faces/", session?.username);
+      setFaces(data);
+    } catch {
+      // silently fail — list is supplementary
+    } finally {
+      setFacesLoading(false);
+    }
+  }, [session?.username]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setFacesLoading(true);
+      void loadFaces();
+    }, [loadFaces])
+  );
+
+  const handleDeleteFace = (face: FaceProfile) => {
+    Alert.alert(
+      "Delete Face",
+      `Remove "${face.name}"? This will delete all their enrolled photos and the Pi will no longer recognize them.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeletingId(face.id);
+            try {
+              await piDelete(`/api/faces/${face.id}`, session?.username);
+              setFaces((prev) => prev.filter((f) => f.id !== face.id));
+            } catch (e) {
+              Alert.alert("Delete Failed", e instanceof Error ? e.message : "Could not delete face profile");
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // Group faces by name to show unique people with photo counts
+  const groupedFaces = faces.reduce<Record<string, { profiles: FaceProfile[]; latestId: number }>>((acc, face) => {
+    if (!acc[face.name]) {
+      acc[face.name] = { profiles: [], latestId: face.id };
+    }
+    acc[face.name].profiles.push(face);
+    if (face.id > acc[face.name].latestId) acc[face.name].latestId = face.id;
+    return acc;
+  }, {});
 
   useEffect(() => {
     phoneStepRef.current = phoneStep;
@@ -169,9 +227,11 @@ export default function FacialRegistrationScreen() {
         uploaded += 1;
       }
       setSuccess(`Face registered! ${uploaded}/${photos.length} angles uploaded.`);
+      void loadFaces();
     } catch (e) {
       if (uploaded > 0) {
         setSuccess(`Partial upload: ${uploaded}/${photos.length} angles.`);
+        void loadFaces();
       }
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -231,6 +291,7 @@ export default function FacialRegistrationScreen() {
       setSuccess("Face registered successfully!");
       setImageUri(null);
       setName("");
+      void loadFaces();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -341,7 +402,6 @@ export default function FacialRegistrationScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
           <ReferenceBackdrop />
           <ScrollView
@@ -471,9 +531,50 @@ export default function FacialRegistrationScreen() {
                 </View>
               </>
             )}
+
+            <View style={styles.registeredSection}>
+              <Text style={styles.registeredTitle}>Registered Faces</Text>
+              <Text style={styles.registeredSubtitle}>
+                {faces.length} photo{faces.length !== 1 ? "s" : ""} across {Object.keys(groupedFaces).length} person{Object.keys(groupedFaces).length !== 1 ? "s" : ""}
+              </Text>
+
+              {facesLoading ? (
+                <ActivityIndicator color={referenceColors.primary} style={{ marginTop: 16 }} />
+              ) : Object.keys(groupedFaces).length === 0 ? (
+                <View style={styles.emptyFacesCard}>
+                  <Text style={styles.emptyFacesText}>No faces registered yet. Enroll someone above.</Text>
+                </View>
+              ) : (
+                Object.entries(groupedFaces).map(([personName, { profiles }]) => (
+                  <View key={personName} style={styles.faceCard}>
+                    <View style={styles.faceCardRow}>
+                      <View style={styles.faceAvatar}>
+                        <User size={20} color={referenceColors.primary} strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.faceCardCopy}>
+                        <Text style={styles.faceCardName}>{personName}</Text>
+                        <Text style={styles.faceCardMeta}>
+                          {profiles.length} photo{profiles.length !== 1 ? "s" : ""} registered
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.faceDeleteButton}
+                        onPress={() => handleDeleteFace(profiles[0])}
+                        disabled={deletingId != null}
+                      >
+                        {deletingId === profiles[0].id ? (
+                          <ActivityIndicator size="small" color={referenceColors.danger} />
+                        ) : (
+                          <Trash2 size={16} color={referenceColors.danger} strokeWidth={2.2} />
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
           </ScrollView>
         </View>
-      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
@@ -919,5 +1020,78 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: "center",
     marginTop: 6,
+  },
+  registeredSection: {
+    marginTop: 28,
+  },
+  registeredTitle: {
+    color: referenceColors.text,
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  registeredSubtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+    marginBottom: 14,
+  },
+  emptyFacesCard: {
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 28,
+    alignItems: "center" as const,
+    ...cardShadow,
+  },
+  emptyFacesText: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    textAlign: "center" as const,
+  },
+  faceCard: {
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 16,
+    marginBottom: 10,
+    ...cardShadow,
+  },
+  faceCardRow: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 14,
+  },
+  faceAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  faceCardCopy: {
+    flex: 1,
+  },
+  faceCardName: {
+    color: referenceColors.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  faceCardMeta: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  faceDeleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "rgba(254,226,226,0.7)",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
   },
 });

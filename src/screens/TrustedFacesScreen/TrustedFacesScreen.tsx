@@ -2,16 +2,14 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -143,10 +141,14 @@ export default function TrustedFacesScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
           <ReferenceBackdrop />
-          <View style={styles.content}>
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
             <View style={styles.header}>
               <View>
                 <Text style={styles.title}>Trusted Users</Text>
@@ -234,15 +236,10 @@ export default function TrustedFacesScreen() {
               </View>
             ) : (
               <>
-                <FlatList
-                  data={users}
-                  keyExtractor={(item) => String(item.id)}
-                  style={styles.userList}
-                  contentContainerStyle={styles.userListContent}
-                  keyboardShouldPersistTaps="handled"
-                  keyboardDismissMode="on-drag"
-                  renderItem={({ item }) => (
+                <View style={styles.userListContent}>
+                  {users.map((item) => (
                     <TouchableOpacity
+                      key={String(item.id)}
                       style={[styles.userCard, selected?.id === item.id && styles.userCardSelected]}
                       onPress={() => setSelected(item)}
                     >
@@ -257,8 +254,8 @@ export default function TrustedFacesScreen() {
                         </View>
                       </View>
                     </TouchableOpacity>
-                  )}
-                />
+                  ))}
+                </View>
 
                 <View style={styles.permissionsCard}>
                   {selected && selected.permissions ? (
@@ -286,9 +283,8 @@ export default function TrustedFacesScreen() {
                 </View>
               </>
             )}
-          </View>
+          </ScrollView>
         </View>
-      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
@@ -474,9 +470,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     textAlign: "center",
-  },
-  userList: {
-    maxHeight: 300,
   },
   userListContent: {
     paddingBottom: 8,
