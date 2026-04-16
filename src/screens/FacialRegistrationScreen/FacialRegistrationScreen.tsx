@@ -67,14 +67,16 @@ export default function FacialRegistrationScreen() {
   // Registered faces list
   const [faces, setFaces] = useState<FaceProfile[]>([]);
   const [facesLoading, setFacesLoading] = useState(true);
+  const [facesError, setFacesError] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const loadFaces = useCallback(async () => {
+    setFacesError("");
     try {
       const data = await piGet<FaceProfile[]>("/api/faces/", session?.username);
       setFaces(data);
-    } catch {
-      // silently fail — list is supplementary
+    } catch (e) {
+      setFacesError(e instanceof Error ? e.message : "Could not load faces");
     } finally {
       setFacesLoading(false);
     }
@@ -540,6 +542,13 @@ export default function FacialRegistrationScreen() {
 
               {facesLoading ? (
                 <ActivityIndicator color={referenceColors.primary} style={{ marginTop: 16 }} />
+              ) : facesError ? (
+                <View style={styles.emptyFacesCard}>
+                  <Text style={styles.error}>{facesError}</Text>
+                  <TouchableOpacity style={styles.secondaryButton} onPress={() => { setFacesLoading(true); void loadFaces(); }}>
+                    <Text style={styles.secondaryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
               ) : Object.keys(groupedFaces).length === 0 ? (
                 <View style={styles.emptyFacesCard}>
                   <Text style={styles.emptyFacesText}>No faces registered yet. Enroll someone above.</Text>
