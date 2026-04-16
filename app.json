@@ -3,6 +3,9 @@
     "name": "IRIS-Mobile-Frontend",
     "slug": "IRIS-Mobile-Frontend",
     "version": "1.0.0",
+    "updates": {
+      "enabled": false
+    },
     "orientation": "portrait",
     "scheme": "irismobile",
     "icon": "./assets/icon.png",
