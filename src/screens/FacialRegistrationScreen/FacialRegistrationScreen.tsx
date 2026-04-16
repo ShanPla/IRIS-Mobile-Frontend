@@ -19,6 +19,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useNavigation } from "@react-navigation/native";
 import { ArrowLeft, Camera, ScanFace, Upload } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
+import { useAuth } from "../../context/AuthContext";
 import { piPostForm } from "../../lib/pi";
 import type { FaceProfile } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
@@ -39,6 +40,7 @@ type Mode = "phone" | "upload";
 
 export default function FacialRegistrationScreen() {
   const navigation = useNavigation();
+  const { session } = useAuth();
   const [name, setName] = useState("");
   const [mode, setMode] = useState<Mode>("phone");
 
@@ -163,7 +165,7 @@ export default function FacialRegistrationScreen() {
           name: `${photo.angle}.jpg`,
         } as unknown as Blob);
 
-        await piPostForm<FaceProfile>("/api/faces/", formData);
+        await piPostForm<FaceProfile>("/api/faces/", formData, session?.username);
         uploaded += 1;
       }
       setSuccess(`Face registered! ${uploaded}/${photos.length} angles uploaded.`);
@@ -225,7 +227,7 @@ export default function FacialRegistrationScreen() {
         name: "face.jpg",
       } as unknown as Blob);
 
-      await piPostForm<FaceProfile>("/api/faces/", formData);
+      await piPostForm<FaceProfile>("/api/faces/", formData, session?.username);
       setSuccess("Face registered successfully!");
       setImageUri(null);
       setName("");
