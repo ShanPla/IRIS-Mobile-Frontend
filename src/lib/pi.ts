@@ -60,7 +60,7 @@ export interface PiDevice {
   addedAt: string;
   accessRole?: "primary" | "secondary";
   location?: string;
-  deviceIp?: string;
+  deviceIp?: string | null;
   primaryEmail?: string;
 }
 
@@ -563,6 +563,64 @@ export async function loginDeviceAccount(
   }
 
   throw new Error(lastError);
+}
+
+export async function updateDeviceAccountPassword(
+  username: string,
+  currentPassword: string,
+  newPassword: string,
+  preferredAccountId?: string,
+): Promise<void> {
+  const candidates = await getCandidateDevices(preferredAccountId, username, undefined);
+  if (candidates.length === 0) return;
+
+  const failures: string[] = [];
+
+  for (const candidate of candidates) {
+    try {
+      const base = await deviceBaseUrl(candidate.device);
+      const loginRes = await fetch(`${base}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ username, password: currentPassword }).toString(),
+      });
+
+      if (!loginRes.ok) {
+        throw new Error(await parseErrorMessage(loginRes, `Device login failed (${loginRes.status}).`));
+      }
+
+      const data = (await loginRes.json()) as { access_token: string };
+      await updateDeviceToken(candidate.device.deviceId, data.access_token, candidate.accountId);
+
+      const changeRes = await fetch(`${base}/api/auth/me/password`, {
+        method: "PUT",
+        headers: authHeaders(data.access_token, {
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      });
+
+      if (!changeRes.ok) {
+        throw new Error(await parseErrorMessage(changeRes, `Device password change failed (${changeRes.status}).`));
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Unknown device password update error";
+      failures.push(`${candidate.device.name}: ${reason}`);
+    }
+  }
+
+  if (failures.length === candidates.length) {
+    throw new Error(`Could not update password on any configured device. ${failures[0]}`);
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`Password updated in the account registry, but some devices still need re-sync. ${failures.join(" | ")}`);
+  }
 }
 
 export async function transferDevices(fromAccountId: string | undefined, toAccountId: string | undefined): Promise<void> {

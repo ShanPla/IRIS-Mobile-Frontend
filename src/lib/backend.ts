@@ -1,0 +1,123 @@
+import type { AuthSession, UserResponse } from "../types/iris";
+
+const FALLBACK_BACKEND_URL = "https://iris-back-end.onrender.com";
+const ENV_BACKEND_URL = (
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.EXPO_PUBLIC_API_URL ?? ""
+).trim();
+
+function normalizeBackendUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(withProtocol);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return "";
+  }
+}
+
+export const CENTRAL_BACKEND_URL = normalizeBackendUrl(ENV_BACKEND_URL) || FALLBACK_BACKEND_URL;
+
+async function parseBackendError(res: Response, fallback: string): Promise<string> {
+  try {
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === "string" && data.detail.trim()) return data.detail;
+    }
+
+    const text = (await res.text()).trim();
+    if (text) return text;
+  } catch {
+    // Ignore parsing failures and use the fallback.
+  }
+
+  return fallback;
+}
+
+async function backendFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${CENTRAL_BACKEND_URL}${path}`, init);
+}
+
+export async function registerCentralAccount(username: string, password: string): Promise<UserResponse> {
+  const response = await backendFetch("/api/auth/register", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseBackendError(response, `Registration failed (${response.status}).`));
+  }
+
+  return (await response.json()) as UserResponse;
+}
+
+export async function getCentralCurrentUser(token: string): Promise<UserResponse> {
+  const response = await backendFetch("/api/auth/me", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseBackendError(response, `Failed to load account details (${response.status}).`));
+  }
+
+  return (await response.json()) as UserResponse;
+}
+
+export async function loginCentralAccount(
+  username: string,
+  password: string,
+  email = "",
+): Promise<AuthSession> {
+  const response = await backendFetch("/api/auth/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({ username, password }).toString(),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseBackendError(response, `Login failed (${response.status}).`));
+  }
+
+  const tokenData = (await response.json()) as { access_token: string };
+  const user = await getCentralCurrentUser(tokenData.access_token);
+
+  return {
+    token: tokenData.access_token,
+    username: user.username,
+    email,
+    role: user.role,
+  };
+}
+
+export async function changeCentralPassword(
+  username: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const session = await loginCentralAccount(username, currentPassword);
+  const response = await backendFetch("/api/auth/me/password", {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${session.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseBackendError(response, `Password change failed (${response.status}).`));
+  }
+}

@@ -25,7 +25,7 @@ import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { updateStoredAccountPassword } from "../../lib/accounts";
-import { getDevices, piPut } from "../../lib/pi";
+import { getDevices } from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
@@ -73,13 +73,8 @@ export default function ProfileScreen() {
     setChangingPassword(true);
     setPasswordSuccess("");
     try {
-      await piPut<{ ok: boolean; message?: string }>(
-        "/api/auth/me/password",
-        { current_password: currentPassword, new_password: newPassword },
-        session?.username,
-      );
       if (session?.username) {
-        await updateStoredAccountPassword(session.username, newPassword);
+        await updateStoredAccountPassword(session.username, currentPassword, newPassword);
       }
       setCurrentPassword("");
       setNewPassword("");

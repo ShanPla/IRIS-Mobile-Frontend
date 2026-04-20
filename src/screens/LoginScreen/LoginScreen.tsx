@@ -210,7 +210,7 @@ export default function LoginScreen() {
     }
  
     try {
-      const updatedAccount = await updateStoredAccountPassword(account.username, newRecoveryPassword);
+      const updatedAccount = await updateStoredAccountPassword(account.username, account.password, newRecoveryPassword);
       setRecoveryAccounts((current) =>
         current.map((item) => (item.username === account.username ? updatedAccount : item)),
       );

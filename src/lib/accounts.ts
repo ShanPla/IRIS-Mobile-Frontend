@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { AuthSession } from "../types/iris";
-import { hasDevices, loginDeviceAccount, registerDeviceAccount } from "./pi";
+import { changeCentralPassword, loginCentralAccount, registerCentralAccount } from "./backend";
+import { hasDevices, loginDeviceAccount, registerDeviceAccount, updateDeviceAccountPassword } from "./pi";
 
 const ACCOUNTS_KEY = "securewatch_accounts_v1";
 const SESSION_KEY = "securewatch_account_session_v1";
@@ -41,6 +42,16 @@ function validateAccountInput(username: string, email: string, password: string)
   }
 }
 
+function looksLikeExistingUserError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("already") ||
+    normalized.includes("taken") ||
+    normalized.includes("exists") ||
+    normalized.includes("409")
+  );
+}
+
 async function getAccounts(): Promise<StoredAccount[]> {
   const raw = await AsyncStorage.getItem(ACCOUNTS_KEY);
   if (!raw) return [];
@@ -53,15 +64,6 @@ async function getAccounts(): Promise<StoredAccount[]> {
 
 async function saveAccounts(accounts: StoredAccount[]) {
   await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-}
-
-function makeSession(account: StoredAccount, token: string): AuthSession {
-  return {
-    token,
-    username: account.username,
-    email: account.email,
-    role: account.role,
-  };
 }
 
 async function upsertAccount(nextAccount: StoredAccount): Promise<StoredAccount> {
@@ -97,49 +99,69 @@ async function hasAnyConfiguredDevice(accountId?: string): Promise<boolean> {
   return hasDevices();
 }
 
+async function syncAccountToDevices(account: StoredAccount, previousPassword?: string): Promise<void> {
+  const deviceConfigured = await hasAnyConfiguredDevice(account.username);
+  if (!deviceConfigured) return;
+
+  try {
+    await loginDeviceAccount(account.username, account.password, account.username);
+    return;
+  } catch {
+    // Fall through to repair/register flows below.
+  }
+
+  if (previousPassword && previousPassword !== account.password) {
+    try {
+      await updateDeviceAccountPassword(account.username, previousPassword, account.password, account.username);
+      await loginDeviceAccount(account.username, account.password, account.username);
+      return;
+    } catch {
+      // Continue to register/login fallback below.
+    }
+  }
+
+  try {
+    await registerDeviceAccount(account.username, account.password, account.username);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!looksLikeExistingUserError(message)) {
+      throw error;
+    }
+  }
+
+  await loginDeviceAccount(account.username, account.password, account.username);
+}
+
+async function trySyncAccountToDevices(account: StoredAccount, previousPassword?: string): Promise<void> {
+  try {
+    await syncAccountToDevices(account, previousPassword);
+  } catch (error) {
+    console.warn("[IRIS Mobile] Device sync failed after central auth:", error);
+  }
+}
+
 export async function registerAccount(username: string, email: string, password: string): Promise<AuthSession> {
   validateAccountInput(username, email, password);
 
-  const accounts = await getAccounts();
-  const normalizedUsername = normalizeUsername(username);
-  const normalizedEmail = normalizeEmail(email);
-  const duplicate = accounts.find(
-    (account) =>
-      normalizeUsername(account.username) === normalizedUsername ||
-      normalizeEmail(account.email) === normalizedEmail,
-  );
-
-  if (duplicate) {
-    throw new Error("That username or email is already registered");
-  }
-
   const trimmedUsername = username.trim();
-  const deviceConfigured = await hasAnyConfiguredDevice(trimmedUsername);
+  const normalizedEmail = normalizeEmail(email);
 
-  if (!deviceConfigured) {
-    const account = await upsertAccount({
-      username: trimmedUsername,
-      email: normalizedEmail,
-      password,
-      role: "homeowner_primary",
-      createdAt: new Date().toISOString(),
-    });
-
-    return makeSession(account, "");
-  }
-
-  await registerDeviceAccount(trimmedUsername, password, trimmedUsername);
-  const login = await loginDeviceAccount(trimmedUsername, password, trimmedUsername);
+  await registerCentralAccount(trimmedUsername, password);
+  const session = await loginCentralAccount(trimmedUsername, password, normalizedEmail);
 
   const account = await upsertAccount({
-    username: login.user.username,
+    username: session.username,
     email: normalizedEmail,
     password,
-    role: login.user.role,
+    role: session.role,
     createdAt: new Date().toISOString(),
   });
 
-  return makeSession(account, login.accessToken);
+  await trySyncAccountToDevices(account);
+  return {
+    ...session,
+    email: account.email,
+  };
 }
 
 export async function authenticateAccount(
@@ -148,60 +170,42 @@ export async function authenticateAccount(
 ): Promise<AuthSession> {
   const cachedAccount = await getAccountByUsername(username);
   const trimmedUsername = username.trim();
-  const deviceConfigured = await hasAnyConfiguredDevice(trimmedUsername);
+  const cachedEmail = cachedAccount?.email ?? "";
+  const previousPassword = cachedAccount?.password;
 
-  if (!deviceConfigured) {
-    if (!cachedAccount || cachedAccount.password !== password) {
-      throw new Error("Invalid username or password");
-    }
-    return makeSession(cachedAccount, "");
-  }
-
-  const login = await loginDeviceAccount(trimmedUsername, password, trimmedUsername);
+  const session = await loginCentralAccount(trimmedUsername, password, cachedEmail);
 
   const account = await upsertAccount({
-    username: login.user.username,
-    email: cachedAccount?.email ?? "",
+    username: session.username,
+    email: cachedEmail,
     password,
-    role: login.user.role,
+    role: session.role,
     createdAt: cachedAccount?.createdAt ?? new Date().toISOString(),
   });
 
-  return makeSession(account, login.accessToken);
+  await trySyncAccountToDevices(account, previousPassword);
+  return {
+    ...session,
+    email: account.email,
+  };
 }
 
 export async function syncStoredAccountToDevice(username: string): Promise<AuthSession | null> {
   const account = await getAccountByUsername(username);
   if (!account) return null;
 
-  const deviceConfigured = await hasAnyConfiguredDevice(account.username);
-  if (!deviceConfigured) {
-    return makeSession(account, "");
-  }
-
-  try {
-    await registerDeviceAccount(account.username, account.password, account.username);
-  } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : "";
-    const looksLikeExistingUser =
-      message.includes("already") ||
-      message.includes("taken") ||
-      message.includes("exists") ||
-      message.includes("409");
-
-    if (!looksLikeExistingUser) {
-      throw error;
-    }
-  }
-
-  const login = await loginDeviceAccount(account.username, account.password, account.username);
+  const session = await loginCentralAccount(account.username, account.password, account.email);
   const syncedAccount = await upsertAccount({
     ...account,
-    username: login.user.username,
-    role: login.user.role,
+    username: session.username,
+    role: session.role,
   });
 
-  return makeSession(syncedAccount, login.accessToken);
+  await trySyncAccountToDevices(syncedAccount);
+  return {
+    ...session,
+    email: syncedAccount.email,
+  };
 }
 
 export async function getAccountPassword(username: string): Promise<string | null> {
@@ -226,6 +230,7 @@ export async function listStoredAccounts(): Promise<StoredAccountRecovery[]> {
 
 export async function updateStoredAccountPassword(
   username: string,
+  currentPassword: string,
   password: string,
 ): Promise<StoredAccountRecovery> {
   if (password.length < 6) {
@@ -235,6 +240,14 @@ export async function updateStoredAccountPassword(
   const account = await getAccountByUsername(username);
   if (!account) {
     throw new Error("Saved account not found on this phone");
+  }
+
+  await changeCentralPassword(account.username, currentPassword, password);
+
+  try {
+    await updateDeviceAccountPassword(account.username, currentPassword, password, account.username);
+  } catch (error) {
+    console.warn("[IRIS Mobile] Device password sync failed after central password change:", error);
   }
 
   const updated = await upsertAccount({

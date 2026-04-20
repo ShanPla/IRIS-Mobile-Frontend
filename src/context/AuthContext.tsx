@@ -58,9 +58,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (syncedSession) {
             nextSession = syncedSession;
             await persistSession(syncedSession);
+          } else {
+            nextSession = null;
+            await clearStoredSession();
           }
         } catch {
-          // Keep the local-only session until a device sync succeeds.
+          nextSession = null;
+          await clearStoredSession();
         }
       }
 
