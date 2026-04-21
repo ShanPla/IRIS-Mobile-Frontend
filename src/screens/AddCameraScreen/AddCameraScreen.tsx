@@ -29,9 +29,7 @@ export default function AddCameraScreen() {
           <View style={styles.iconWrap}>
             <Camera size={22} color={referenceColors.primary} strokeWidth={2.2} />
           </View>
-          <Text style={styles.desc}>
-            To add a new Pi camera, go to the Setup screen and enter your Pi&apos;s URL and Device ID.
-          </Text>
+          <Text style={styles.desc}>To add a new Pi camera, go to the Setup screen and enter its device code.</Text>
 
           <TouchableOpacity style={styles.buttonWrap} onPress={() => navigation.navigate("Setup")} activeOpacity={0.9}>
             <View style={styles.button}>

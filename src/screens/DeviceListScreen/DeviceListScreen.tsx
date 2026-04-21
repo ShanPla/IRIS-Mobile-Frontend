@@ -20,8 +20,8 @@ import { ChevronRight, Crown, Plus, Shield, User, Users } from "lucide-react-nat
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { getAccountPassword } from "../../lib/accounts";
-import { getDevices, piPost, redeemTrustedUserInvite, removeDevice } from "../../lib/pi";
+import { listCentralDevices } from "../../lib/backend";
+import { getDevices, loginAllDeviceAccounts, piPost, redeemTrustedUserInvite, removeDevice, syncRegistryDevices } from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
@@ -37,7 +37,7 @@ function resolveAccessRole(device: PiDevice, index: number): DeviceAccess {
 
 export default function DeviceListScreen() {
   const navigation = useNavigation<Nav>();
-  const { session, activeDevice, selectDevice } = useAuth();
+  const { session, sessionPassword, activeDevice, selectDevice } = useAuth();
   const [devices, setDevices] = useState<PiDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,13 +46,36 @@ export default function DeviceListScreen() {
   const [joinInviteCode, setJoinInviteCode] = useState("");
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState("");
+  const [deviceSyncError, setDeviceSyncError] = useState("");
 
   const loadDevices = useCallback(async () => {
-    const storedDevices = await getDevices(session?.username);
-    setDevices(storedDevices);
+    let nextSyncError = "";
+
+    if (session?.token && session.username) {
+      try {
+        const centralDevices = await listCentralDevices(session.token);
+        await syncRegistryDevices(centralDevices, session.username);
+        if (sessionPassword) {
+          await loginAllDeviceAccounts(session.username, sessionPassword, session.username);
+        }
+      } catch (error) {
+        nextSyncError = error instanceof Error ? error.message : "Could not refresh devices from Render.";
+        console.warn("[IRIS Mobile] Device list Render refresh failed:", error);
+      }
+    }
+
+    try {
+      const storedDevices = await getDevices(session?.username);
+      setDevices(storedDevices);
+    } catch (error) {
+      nextSyncError = error instanceof Error ? error.message : "Could not load devices on this phone.";
+      setDevices([]);
+    }
+
+    setDeviceSyncError(nextSyncError);
     setLoading(false);
     setRefreshing(false);
-  }, [session?.username]);
+  }, [session?.token, session?.username, sessionPassword]);
 
   useFocusEffect(
     useCallback(() => {
@@ -165,9 +188,8 @@ export default function DeviceListScreen() {
       return;
     }
 
-    const password = await getAccountPassword(session.username);
-    if (!password) {
-      setJoinError("Saved password not found on this phone. Sign in again and try once more.");
+    if (!sessionPassword) {
+      setJoinError("Sign in again before joining a shared device.");
       return;
     }
 
@@ -178,7 +200,7 @@ export default function DeviceListScreen() {
         joinDeviceCode.trim(),
         joinInviteCode.trim(),
         session.username,
-        password,
+        sessionPassword,
         session.username,
       );
       await loadDevices();
@@ -285,6 +307,13 @@ export default function DeviceListScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {deviceSyncError ? (
+              <View style={styles.syncErrorCard}>
+                <Text style={styles.syncErrorTitle}>Render refresh failed</Text>
+                <Text style={styles.syncErrorText}>{deviceSyncError}</Text>
+              </View>
+            ) : null}
 
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -435,6 +464,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+  },
+  syncErrorCard: {
+    backgroundColor: "#fff1f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 18,
+  },
+  syncErrorTitle: {
+    color: referenceColors.danger,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  syncErrorText: {
+    color: referenceColors.textSoft,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
   },
   profileButton: {
     minHeight: 52,

@@ -3,27 +3,18 @@ import type { AuthSession } from "../types/iris";
 import { changeCentralPassword, loginCentralAccount, registerCentralAccount } from "./backend";
 import { hasDevices, loginDeviceAccount, registerDeviceAccount, updateDeviceAccountPassword } from "./pi";
 
-const ACCOUNTS_KEY = "securewatch_accounts_v1";
-const SESSION_KEY = "securewatch_account_session_v1";
-
-interface StoredAccount {
+interface RuntimeAccount {
   username: string;
   email: string;
   password: string;
   role: string;
-  createdAt: string;
 }
 
-export interface StoredAccountRecovery {
-  username: string;
-  email: string;
-  password: string;
-  role: string;
-  createdAt: string;
-}
+const LEGACY_ACCOUNTS_KEY = "securewatch_accounts_v1";
+const LEGACY_SESSION_KEY = "securewatch_account_session_v1";
 
-function normalizeUsername(username: string) {
-  return username.trim().toLowerCase();
+export async function purgeStoredAuthData(): Promise<void> {
+  await AsyncStorage.multiRemove([LEGACY_ACCOUNTS_KEY, LEGACY_SESSION_KEY]);
 }
 
 function normalizeEmail(email: string) {
@@ -52,54 +43,13 @@ function looksLikeExistingUserError(message: string): boolean {
   );
 }
 
-async function getAccounts(): Promise<StoredAccount[]> {
-  const raw = await AsyncStorage.getItem(ACCOUNTS_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as StoredAccount[];
-  } catch {
-    return [];
-  }
-}
-
-async function saveAccounts(accounts: StoredAccount[]) {
-  await AsyncStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-}
-
-async function upsertAccount(nextAccount: StoredAccount): Promise<StoredAccount> {
-  const accounts = await getAccounts();
-  const normalizedUsername = normalizeUsername(nextAccount.username);
-  const index = accounts.findIndex(
-    (account) => normalizeUsername(account.username) === normalizedUsername,
-  );
-
-  if (index >= 0) {
-    accounts[index] = {
-      ...accounts[index],
-      ...nextAccount,
-      createdAt: accounts[index].createdAt,
-    };
-  } else {
-    accounts.push(nextAccount);
-  }
-
-  await saveAccounts(accounts);
-  return index >= 0 ? accounts[index] : nextAccount;
-}
-
-async function getAccountByUsername(username: string): Promise<StoredAccount | null> {
-  const accounts = await getAccounts();
-  const normalizedUsername = normalizeUsername(username);
-  return accounts.find((account) => normalizeUsername(account.username) === normalizedUsername) ?? null;
-}
-
 async function hasAnyConfiguredDevice(accountId?: string): Promise<boolean> {
   const scoped = await hasDevices(accountId);
   if (scoped) return true;
   return hasDevices();
 }
 
-async function syncAccountToDevices(account: StoredAccount, previousPassword?: string): Promise<void> {
+async function syncAccountToDevices(account: RuntimeAccount, previousPassword?: string): Promise<void> {
   const deviceConfigured = await hasAnyConfiguredDevice(account.username);
   if (!deviceConfigured) return;
 
@@ -132,7 +82,7 @@ async function syncAccountToDevices(account: StoredAccount, previousPassword?: s
   await loginDeviceAccount(account.username, account.password, account.username);
 }
 
-async function trySyncAccountToDevices(account: StoredAccount, previousPassword?: string): Promise<void> {
+async function trySyncAccountToDevices(account: RuntimeAccount, previousPassword?: string): Promise<void> {
   try {
     await syncAccountToDevices(account, previousPassword);
   } catch (error) {
@@ -149,18 +99,16 @@ export async function registerAccount(username: string, email: string, password:
   await registerCentralAccount(trimmedUsername, password);
   const session = await loginCentralAccount(trimmedUsername, password, normalizedEmail);
 
-  const account = await upsertAccount({
+  await trySyncAccountToDevices({
     username: session.username,
     email: normalizedEmail,
     password,
     role: session.role,
-    createdAt: new Date().toISOString(),
   });
 
-  await trySyncAccountToDevices(account);
   return {
     ...session,
-    email: account.email,
+    email: normalizedEmail,
   };
 }
 
@@ -168,116 +116,33 @@ export async function authenticateAccount(
   username: string,
   password: string,
 ): Promise<AuthSession> {
-  const cachedAccount = await getAccountByUsername(username);
   const trimmedUsername = username.trim();
-  const cachedEmail = cachedAccount?.email ?? "";
-  const previousPassword = cachedAccount?.password;
+  const session = await loginCentralAccount(trimmedUsername, password);
 
-  const session = await loginCentralAccount(trimmedUsername, password, cachedEmail);
-
-  const account = await upsertAccount({
+  await trySyncAccountToDevices({
     username: session.username,
-    email: cachedEmail,
+    email: session.email,
     password,
     role: session.role,
-    createdAt: cachedAccount?.createdAt ?? new Date().toISOString(),
   });
 
-  await trySyncAccountToDevices(account, previousPassword);
-  return {
-    ...session,
-    email: account.email,
-  };
+  return session;
 }
 
-export async function syncStoredAccountToDevice(username: string): Promise<AuthSession | null> {
-  const account = await getAccountByUsername(username);
-  if (!account) return null;
-
-  const session = await loginCentralAccount(account.username, account.password, account.email);
-  const syncedAccount = await upsertAccount({
-    ...account,
-    username: session.username,
-    role: session.role,
-  });
-
-  await trySyncAccountToDevices(syncedAccount);
-  return {
-    ...session,
-    email: syncedAccount.email,
-  };
-}
-
-export async function getAccountPassword(username: string): Promise<string | null> {
-  const accounts = await getAccounts();
-  const normalizedUsername = normalizeUsername(username);
-  const account = accounts.find((item) => normalizeUsername(item.username) === normalizedUsername);
-  return account?.password ?? null;
-}
-
-export async function listStoredAccounts(): Promise<StoredAccountRecovery[]> {
-  const accounts = await getAccounts();
-  return [...accounts]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .map((account) => ({
-      username: account.username,
-      email: account.email,
-      password: account.password,
-      role: account.role,
-      createdAt: account.createdAt,
-    }));
-}
-
-export async function updateStoredAccountPassword(
+export async function changeAccountPassword(
   username: string,
   currentPassword: string,
   password: string,
-): Promise<StoredAccountRecovery> {
+): Promise<void> {
   if (password.length < 6) {
     throw new Error("Password must be at least 6 characters");
   }
 
-  const account = await getAccountByUsername(username);
-  if (!account) {
-    throw new Error("Saved account not found on this phone");
-  }
-
-  await changeCentralPassword(account.username, currentPassword, password);
+  await changeCentralPassword(username, currentPassword, password);
 
   try {
-    await updateDeviceAccountPassword(account.username, currentPassword, password, account.username);
+    await updateDeviceAccountPassword(username, currentPassword, password, username);
   } catch (error) {
     console.warn("[IRIS Mobile] Device password sync failed after central password change:", error);
   }
-
-  const updated = await upsertAccount({
-    ...account,
-    password,
-  });
-
-  return {
-    username: updated.username,
-    email: updated.email,
-    password: updated.password,
-    role: updated.role,
-    createdAt: updated.createdAt,
-  };
-}
-
-export async function getStoredSession(): Promise<AuthSession | null> {
-  const raw = await AsyncStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as AuthSession;
-  } catch {
-    return null;
-  }
-}
-
-export async function persistSession(session: AuthSession) {
-  await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(session));
-}
-
-export async function clearStoredSession() {
-  await AsyncStorage.removeItem(SESSION_KEY);
 }

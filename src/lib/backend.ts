@@ -1,5 +1,20 @@
 import type { AuthSession, UserResponse } from "../types/iris";
 
+export interface CentralDevice {
+  device_id: string;
+  device_name: string;
+  device_url: string;
+  device_ip: string | null;
+  status: string;
+  last_heartbeat: string | null;
+  paired_at?: string | null;
+  last_active?: string | null;
+  access_role?: "primary" | "secondary";
+}
+
+export const DEVICE_OFFLINE_MESSAGE = "Device is not online\nCheck that heartbeat is running on the Pi";
+export const DEVICE_TUNNEL_MESSAGE = "Device has not reported tunnel yet\nCheck that heartbeat is running on the Pi";
+
 const FALLBACK_BACKEND_URL = "https://iris-back-end.onrender.com";
 const ENV_BACKEND_URL = (
   (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.EXPO_PUBLIC_API_URL ?? ""
@@ -39,6 +54,24 @@ async function parseBackendError(res: Response, fallback: string): Promise<strin
 
 async function backendFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${CENTRAL_BACKEND_URL}${path}`, init);
+}
+
+function friendlyDeviceLookupError(status: number, message: string): string {
+  const normalized = message.toLowerCase();
+  if (status === 404 || normalized.includes("not found") || normalized.includes("not online")) {
+    return DEVICE_OFFLINE_MESSAGE;
+  }
+  if (normalized.includes("tunnel")) {
+    return DEVICE_TUNNEL_MESSAGE;
+  }
+  return message;
+}
+
+function bearerHeaders(token: string, extra?: HeadersInit): HeadersInit {
+  return {
+    Authorization: `Bearer ${token}`,
+    ...(extra ?? {}),
+  };
 }
 
 export async function registerCentralAccount(username: string, password: string): Promise<UserResponse> {
@@ -120,4 +153,46 @@ export async function changeCentralPassword(
   if (!response.ok) {
     throw new Error(await parseBackendError(response, `Password change failed (${response.status}).`));
   }
+}
+
+export async function resolveCentralDevice(deviceId: string, token: string): Promise<CentralDevice> {
+  const response = await backendFetch(`/api/auth/devices/${encodeURIComponent(deviceId.trim().toUpperCase())}`, {
+    headers: bearerHeaders(token),
+  });
+
+  if (!response.ok) {
+    const message = await parseBackendError(response, `Device lookup failed (${response.status}).`);
+    throw new Error(friendlyDeviceLookupError(response.status, message));
+  }
+
+  return (await response.json()) as CentralDevice;
+}
+
+export async function listCentralDevices(token: string): Promise<CentralDevice[]> {
+  const response = await backendFetch("/api/auth/me/devices", {
+    headers: bearerHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseBackendError(response, `Failed to load paired devices (${response.status}).`));
+  }
+
+  return (await response.json()) as CentralDevice[];
+}
+
+export async function pairCentralDevice(deviceId: string, token: string): Promise<CentralDevice> {
+  const response = await backendFetch("/api/auth/me/devices", {
+    method: "POST",
+    headers: bearerHeaders(token, {
+      "Content-Type": "application/json",
+    }),
+    body: JSON.stringify({ device_id: deviceId.trim().toUpperCase() }),
+  });
+
+  if (!response.ok) {
+    const message = await parseBackendError(response, `Device pairing failed (${response.status}).`);
+    throw new Error(friendlyDeviceLookupError(response.status, message));
+  }
+
+  return (await response.json()) as CentralDevice;
 }

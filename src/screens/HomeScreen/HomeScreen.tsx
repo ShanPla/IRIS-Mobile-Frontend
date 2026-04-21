@@ -36,7 +36,6 @@ import { useAuth } from "../../context/AuthContext";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import { usePiHealth } from "../../hooks/usePiHealth";
 import { buildPiUrl, ensureDeviceAuth, piGet, piPost, piPut } from "../../lib/pi";
-import { getAccountPassword } from "../../lib/accounts";
 import type { EventsResponse, SecurityEvent, SecurityMode, SystemStatus } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors, referenceLiveImage } from "../../theme/reference";
 
@@ -44,7 +43,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
-  const { activeDevice, session } = useAuth();
+  const { activeDevice, session, sessionPassword } = useAuth();
   const { health } = usePiHealth(10000, session?.username);
 
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -83,11 +82,10 @@ export default function HomeScreen() {
 
   const registerPushToken = useCallback(async () => {
     if (!activeDevice || !session?.username) return;
-    const password = await getAccountPassword(session.username);
-    if (!password) return;
+    if (!sessionPassword) return;
 
     try {
-      await ensureDeviceAuth(session.username, password, session.username);
+      await ensureDeviceAuth(session.username, sessionPassword, session.username);
       const { status: permissionStatus } = await Notifications.getPermissionsAsync();
       if (permissionStatus !== "granted") {
         await Notifications.requestPermissionsAsync();
@@ -103,7 +101,7 @@ export default function HomeScreen() {
     } catch {
       // Ignore push registration errors; local alerts still work.
     }
-  }, [activeDevice, session?.username]);
+  }, [activeDevice, session?.username, sessionPassword]);
 
   const wsHandlers = useMemo(
     () => ({

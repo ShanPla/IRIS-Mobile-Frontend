@@ -157,10 +157,7 @@ function RootNavigator() {
     <NavigationContainer key={`${String(hasPi)}-${String(!!session)}`}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!session ? (
-          <>
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Setup" component={SetupScreen} />
-          </>
+          <Stack.Screen name="Login" component={LoginScreen} />
         ) : (
           <>
             <Stack.Screen name="DeviceList" component={DeviceListScreen} />

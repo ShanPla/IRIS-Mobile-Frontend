@@ -24,7 +24,6 @@ import {
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { updateStoredAccountPassword } from "../../lib/accounts";
 import { getDevices } from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
@@ -39,7 +38,7 @@ function isPrimaryDevice(device: PiDevice, index: number) {
 
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
-  const { session, logout } = useAuth();
+  const { session, logout, changePassword } = useAuth();
   const [devices, setDevices] = useState<PiDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -73,9 +72,7 @@ export default function ProfileScreen() {
     setChangingPassword(true);
     setPasswordSuccess("");
     try {
-      if (session?.username) {
-        await updateStoredAccountPassword(session.username, currentPassword, newPassword);
-      }
+      await changePassword(currentPassword, newPassword);
       setCurrentPassword("");
       setNewPassword("");
       setPasswordSuccess("Password updated.");

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PermissionSet, UserResponse } from "../types/iris";
+import { DEVICE_OFFLINE_MESSAGE, DEVICE_TUNNEL_MESSAGE, type CentralDevice } from "./backend";
 import { resolveBaseUrl } from "./resolveBaseUrl";
 
 // Resolve the best reachable base URL for a device. LAN-direct if reachable,
@@ -13,44 +14,7 @@ const LEGACY_DEVICES_KEY = "securewatch_devices_v1";
 const LEGACY_ACTIVE_KEY = "securewatch_active_device_id_v1";
 const DEVICES_KEY_PREFIX = "securewatch_devices_v2_";
 const ACTIVE_KEY_PREFIX = "securewatch_active_device_id_v2_";
-const ACCOUNTS_STORAGE_KEY = "securewatch_accounts_v1";
-
-interface StoredAccountShape {
-  username: string;
-  password: string;
-  provider?: string;
-}
-
-async function recoverActiveDeviceToken(accountId?: string): Promise<boolean> {
-  const normalized = (accountId ?? "").trim().toLowerCase();
-  if (!normalized) return false;
-
-  const raw = await AsyncStorage.getItem(ACCOUNTS_STORAGE_KEY);
-  if (!raw) return false;
-
-  let accounts: StoredAccountShape[] = [];
-  try {
-    accounts = JSON.parse(raw) as StoredAccountShape[];
-  } catch {
-    return false;
-  }
-
-  const account = accounts.find((a) => a.username.trim().toLowerCase() === normalized);
-  if (!account?.password) return false;
-
-  try {
-    await loginDeviceAccount(account.username, account.password, accountId);
-    return true;
-  } catch {
-    try {
-      await registerDeviceAccount(account.username, account.password, accountId);
-      await loginDeviceAccount(account.username, account.password, accountId);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
+const runtimeDeviceTokens = new Map<string, string>();
 
 export interface PiDevice {
   deviceId: string;
@@ -131,6 +95,40 @@ function devicesKey(accountId?: string): string {
 
 function activeKey(accountId?: string): string {
   return `${ACTIVE_KEY_PREFIX}${normalizeAccountId(accountId)}`;
+}
+
+function deviceTokenKey(accountId: string | undefined, deviceId: string): string {
+  return `${normalizeAccountId(accountId)}:${deviceId}`;
+}
+
+function cacheDeviceToken(deviceId: string, token: string, accountId?: string): void {
+  if (!token) return;
+  runtimeDeviceTokens.set(deviceTokenKey(accountId, deviceId), token);
+}
+
+function stripDeviceToken(device: PiDevice): PiDevice {
+  return { ...device, token: "" };
+}
+
+function stripDeviceTokens(devices: PiDevice[]): PiDevice[] {
+  return devices.map(stripDeviceToken);
+}
+
+function withRuntimeToken(device: PiDevice, accountId?: string): PiDevice {
+  return {
+    ...stripDeviceToken(device),
+    token: runtimeDeviceTokens.get(deviceTokenKey(accountId, device.deviceId)) ?? "",
+  };
+}
+
+async function saveDevices(accountId: string | undefined, devices: PiDevice[]): Promise<void> {
+  await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(stripDeviceTokens(devices)));
+}
+
+function normalizeConnectionUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 function decodeBase64Url(value: string): string {
@@ -239,14 +237,17 @@ async function migrateLegacyDevices(accountId?: string): Promise<PiDevice[]> {
   if (!legacyRaw) return [];
   try {
     const legacyDevices = JSON.parse(legacyRaw) as PiDevice[];
-    await AsyncStorage.setItem(devicesKey(accountId), legacyRaw);
+    for (const device of legacyDevices) {
+      cacheDeviceToken(device.deviceId, device.token, accountId);
+    }
+    await saveDevices(accountId, legacyDevices);
     await AsyncStorage.removeItem(LEGACY_DEVICES_KEY);
     const legacyActive = await AsyncStorage.getItem(LEGACY_ACTIVE_KEY);
     if (legacyActive) {
       await AsyncStorage.setItem(activeKey(accountId), legacyActive);
       await AsyncStorage.removeItem(LEGACY_ACTIVE_KEY);
     }
-    return legacyDevices;
+    return legacyDevices.map((device) => withRuntimeToken(device, accountId));
   } catch {
     return [];
   }
@@ -258,7 +259,14 @@ export async function getDevices(accountId?: string): Promise<PiDevice[]> {
     return migrateLegacyDevices(accountId);
   }
   if (!raw) return [];
-  return JSON.parse(raw) as PiDevice[];
+  const devices = JSON.parse(raw) as PiDevice[];
+  if (devices.some((device) => device.token)) {
+    for (const device of devices) {
+      cacheDeviceToken(device.deviceId, device.token, accountId);
+    }
+    await saveDevices(accountId, devices);
+  }
+  return devices.map((device) => withRuntimeToken(device, accountId));
 }
 
 export async function getActiveDevice(accountId?: string): Promise<PiDevice | null> {
@@ -276,55 +284,11 @@ export async function setActiveDevice(deviceId: string, accountId?: string): Pro
   await AsyncStorage.setItem(activeKey(accountId), deviceId);
 }
 
-export async function addDevice(
-  url: string,
-  deviceIp: string,
-  primaryEmail: string,
-  accountId?: string,
-): Promise<PiDevice> {
-  const normalizedUrl = url.trim().replace(/\/$/, "");
-  const trimmedIp = deviceIp.trim();
-
-  let info: DeviceInfo | null = null;
-  try {
-    const infoRes = await fetch(`${normalizedUrl}/api/device/info`);
-    if (infoRes.ok) {
-      info = (await infoRes.json()) as DeviceInfo;
-    }
-  } catch {
-    info = null;
-  }
-
-  if (!info?.device_id) {
-    throw new Error("Couldn't reach the camera at that URL. Check the URL and that the device is online.");
-  }
-
-  const devices = await getDevices(accountId);
-  if (devices.some((d) => d.deviceId === info!.device_id)) {
-    throw new Error("This camera is already added to your account.");
-  }
-
-  const device: PiDevice = {
-    deviceId: info.device_id,
-    name: info.name ?? `Device ${trimmedIp}`,
-    url: normalizedUrl,
-    token: "",
-    addedAt: new Date().toISOString(),
-    accessRole: "primary",
-    deviceIp: trimmedIp,
-    primaryEmail: primaryEmail.trim(),
-  };
-
-  devices.push(device);
-  await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(devices));
-  await setActiveDevice(device.deviceId, accountId);
-  return device;
-}
-
 export async function removeDevice(deviceId: string, accountId?: string): Promise<void> {
   const devices = await getDevices(accountId);
   const filtered = devices.filter((d) => d.deviceId !== deviceId);
-  await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(filtered));
+  runtimeDeviceTokens.delete(deviceTokenKey(accountId, deviceId));
+  await saveDevices(accountId, filtered);
 
   const activeId = await AsyncStorage.getItem(activeKey(accountId));
   if (activeId === deviceId) {
@@ -334,6 +298,67 @@ export async function removeDevice(deviceId: string, accountId?: string): Promis
       await AsyncStorage.removeItem(activeKey(accountId));
     }
   }
+}
+
+export async function upsertRegistryDevice(
+  device: CentralDevice,
+  primaryEmail = "",
+  accountId?: string,
+  options: { verify?: boolean; setActive?: boolean } = {},
+): Promise<PiDevice> {
+  const normalizedUrl = normalizeConnectionUrl(device.device_url);
+  if (!normalizedUrl) {
+    throw new Error(DEVICE_TUNNEL_MESSAGE);
+  }
+
+  if (options.verify) {
+    let info: DeviceInfo | null = null;
+    try {
+      const infoRes = await fetch(`${normalizedUrl}/api/device/info`);
+      if (infoRes.ok) {
+        info = (await infoRes.json()) as DeviceInfo;
+      }
+    } catch {
+      info = null;
+    }
+
+    if (!info?.device_id) {
+      throw new Error(DEVICE_OFFLINE_MESSAGE);
+    }
+    if (info.device_id !== device.device_id) {
+      throw new Error("The reached camera does not match that device code.");
+    }
+  }
+
+  const nextDevice: PiDevice = {
+    deviceId: device.device_id,
+    name: device.device_name || device.device_id,
+    url: normalizedUrl,
+    token: "",
+    addedAt: new Date().toISOString(),
+    accessRole: device.access_role ?? "primary",
+    deviceIp: device.device_ip ?? "",
+    primaryEmail: primaryEmail.trim(),
+  };
+
+  await upsertDevice(nextDevice, accountId);
+  if (options.setActive !== false) {
+    await setActiveDevice(nextDevice.deviceId, accountId);
+  }
+  return nextDevice;
+}
+
+export async function syncRegistryDevices(devices: CentralDevice[], accountId?: string): Promise<PiDevice[]> {
+  const synced: PiDevice[] = [];
+  for (const device of devices) {
+    if (!device.device_url) continue;
+    try {
+      synced.push(await upsertRegistryDevice(device, "", accountId, { setActive: false }));
+    } catch (error) {
+      console.warn("[IRIS Mobile] Paired device sync skipped:", error);
+    }
+  }
+  return synced;
 }
 
 export async function createTrustedUserInvite(
@@ -414,9 +439,6 @@ export async function piGet<T>(path: string, accountId?: string): Promise<T> {
   };
 
   let res = await doGet();
-  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
-    res = await doGet();
-  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi GET ${path} failed (${res.status}): ${err}`);
@@ -437,9 +459,6 @@ export async function piPost<T>(path: string, body?: unknown, accountId?: string
   };
 
   let res = await attempt();
-  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
-    res = await attempt();
-  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi POST ${path} failed (${res.status}): ${err}`);
@@ -448,15 +467,16 @@ export async function piPost<T>(path: string, body?: unknown, accountId?: string
 }
 
 async function updateDeviceToken(deviceId: string, token: string, accountId?: string): Promise<void> {
+  cacheDeviceToken(deviceId, token, accountId);
   const devices = await getDevices(accountId);
   const idx = devices.findIndex((d) => d.deviceId === deviceId);
   if (idx >= 0) {
-    devices[idx] = { ...devices[idx], token };
-    await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(devices));
+    await saveDevices(accountId, devices);
   }
 }
 
 async function upsertDevice(device: PiDevice, accountId?: string): Promise<void> {
+  cacheDeviceToken(device.deviceId, device.token, accountId);
   const devices = await getDevices(accountId);
   const index = devices.findIndex((existing) => existing.deviceId === device.deviceId);
   if (index >= 0) {
@@ -468,7 +488,7 @@ async function upsertDevice(device: PiDevice, accountId?: string): Promise<void>
     devices.push(device);
   }
 
-  await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(devices));
+  await saveDevices(accountId, devices);
 }
 
 export async function registerDeviceAccount(
@@ -554,7 +574,7 @@ export async function loginDeviceAccount(
       return {
         accessToken: data.access_token,
         user,
-        device: candidate.device,
+        device: { ...candidate.device, token: data.access_token },
         accountId: candidate.accountId,
       };
     } catch (error) {
@@ -563,6 +583,55 @@ export async function loginDeviceAccount(
   }
 
   throw new Error(lastError);
+}
+
+export async function loginAllDeviceAccounts(username: string, password: string, accountId?: string): Promise<void> {
+  const devices = await getDevices(accountId);
+  if (devices.length === 0) return;
+
+  const failures: string[] = [];
+  const seen = new Set<string>();
+
+  for (const device of devices) {
+    if (seen.has(device.deviceId)) continue;
+    seen.add(device.deviceId);
+
+    try {
+      const base = await deviceBaseUrl(device);
+      const loginRes = await fetch(`${base}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ username, password }).toString(),
+      });
+
+      if (!loginRes.ok) {
+        throw new Error(await parseErrorMessage(loginRes, `Device login failed (${loginRes.status}).`));
+      }
+
+      const data = (await loginRes.json()) as { access_token?: string };
+      if (!data.access_token) {
+        throw new Error("Device login did not return a token.");
+      }
+
+      const meRes = await fetch(`${base}/api/auth/me`, {
+        headers: authHeaders(data.access_token),
+      });
+      if (!meRes.ok) {
+        throw new Error(await parseErrorMessage(meRes, `Failed to verify device token (${meRes.status}).`));
+      }
+
+      await updateDeviceToken(device.deviceId, data.access_token, accountId);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Unknown device login error";
+      failures.push(`${device.name}: ${reason}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    console.warn("[IRIS Mobile] Some paired devices could not be authenticated:", failures.join(" | "));
+  }
 }
 
 export async function updateDeviceAccountPassword(
@@ -634,10 +703,11 @@ export async function transferDevices(fromAccountId: string | undefined, toAccou
 
   for (const device of sourceDevices) {
     const existing = merged.get(device.deviceId);
+    cacheDeviceToken(device.deviceId, device.token, toAccountId);
     merged.set(device.deviceId, { ...existing, ...device });
   }
 
-  await AsyncStorage.setItem(devicesKey(toAccountId), JSON.stringify([...merged.values()]));
+  await saveDevices(toAccountId, [...merged.values()]);
 
   const sourceActive = await AsyncStorage.getItem(activeKey(fromAccountId));
   if (sourceActive) {
@@ -697,9 +767,6 @@ export async function piPostForm<T>(path: string, formData: FormData, accountId?
   };
 
   let res = await attempt();
-  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
-    res = await attempt();
-  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi POST ${path} failed (${res.status}): ${err}`);
@@ -720,9 +787,6 @@ export async function piPut<T>(path: string, body?: unknown, accountId?: string)
   };
 
   let res = await attempt();
-  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
-    res = await attempt();
-  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi PUT ${path} failed (${res.status}): ${err}`);
@@ -742,9 +806,6 @@ export async function piDelete<T>(path: string, accountId?: string): Promise<T |
   };
 
   let res = await attempt();
-  if (res.status === 401 && (await recoverActiveDeviceToken(accountId))) {
-    res = await attempt();
-  }
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`Pi DELETE ${path} failed (${res.status}): ${err}`);
@@ -754,11 +815,8 @@ export async function piDelete<T>(path: string, accountId?: string): Promise<T |
 }
 
 export async function buildPiUrl(path: string, accountId?: string): Promise<string> {
-  let device = await getActiveDevice(accountId);
+  const device = await getActiveDevice(accountId);
   if (!device) throw new Error("No active Pi device");
-  if (!device.token && (await recoverActiveDeviceToken(accountId))) {
-    device = (await getActiveDevice(accountId)) ?? device;
-  }
   const base = await deviceBaseUrl(device);
   const sep = path.includes("?") ? "&" : "?";
   return device.token ? `${base}${path}${sep}token=${device.token}` : `${base}${path}`;

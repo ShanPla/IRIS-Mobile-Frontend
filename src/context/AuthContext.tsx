@@ -2,27 +2,30 @@ import { createContext, useContext, useEffect, useState } from "react";
 import {
   getActiveDevice,
   getDevices,
+  loginAllDeviceAccounts,
   setActiveDevice as persistActiveDevice,
+  syncRegistryDevices,
   transferDevices,
 } from "../lib/pi";
 import {
   authenticateAccount,
-  clearStoredSession,
-  getStoredSession,
-  persistSession,
+  changeAccountPassword,
+  purgeStoredAuthData,
   registerAccount,
-  syncStoredAccountToDevice,
 } from "../lib/accounts";
+import { listCentralDevices } from "../lib/backend";
 import type { AuthSession } from "../types/iris";
 import type { PiDevice } from "../lib/pi";
 
 interface AuthContextType {
   session: AuthSession | null;
+  sessionPassword: string | null;
   bootstrapping: boolean;
   hasPi: boolean;
   activeDevice: PiDevice | null;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   selectDevice: (deviceId: string) => Promise<void>;
@@ -32,6 +35,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [sessionPassword, setSessionPassword] = useState<string | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [hasPi, setHasPi] = useState(false);
   const [activeDevice, setActiveDevice] = useState<PiDevice | null>(null);
@@ -47,32 +51,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setActiveDevice(device);
   };
 
+  const syncPairedDevicesFromCentral = async (nextSession: AuthSession, password?: string) => {
+    try {
+      const devices = await listCentralDevices(nextSession.token);
+      await syncRegistryDevices(devices, nextSession.username);
+      if (password) {
+        await loginAllDeviceAccounts(nextSession.username, password, nextSession.username);
+      }
+    } catch (error) {
+      console.warn("[IRIS Mobile] Paired device sync failed:", error);
+    }
+  };
+
   const restoreSession = async () => {
     try {
-      const storedSession = await getStoredSession();
-      let nextSession = storedSession;
-
-      if (storedSession && !storedSession.token) {
-        try {
-          const syncedSession = await syncStoredAccountToDevice(storedSession.username);
-          if (syncedSession) {
-            nextSession = syncedSession;
-            await persistSession(syncedSession);
-          } else {
-            nextSession = null;
-            await clearStoredSession();
-          }
-        } catch {
-          nextSession = null;
-          await clearStoredSession();
-        }
-      }
-
-      setSession(nextSession);
-      await refreshDeviceState(nextSession?.username);
+      await purgeStoredAuthData();
+      setSession(null);
+      setSessionPassword(null);
+      await refreshDeviceState();
     } catch {
       // Keep authentication independent from Pi availability.
       setSession(null);
+      setSessionPassword(null);
     } finally {
       setBootstrapping(false);
     }
@@ -81,28 +81,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (username: string, password: string): Promise<void> => {
     const nextSession = await authenticateAccount(username, password);
     await transferDevices(undefined, nextSession.username);
+    await syncPairedDevicesFromCentral(nextSession, password);
     setSession(nextSession);
-    await persistSession(nextSession);
+    setSessionPassword(password);
     await refreshDeviceState(nextSession.username);
   };
 
   const register = async (username: string, email: string, password: string) => {
     const nextSession = await registerAccount(username, email, password);
     await transferDevices(undefined, nextSession.username);
+    await syncPairedDevicesFromCentral(nextSession, password);
     setSession(nextSession);
-    await persistSession(nextSession);
+    setSessionPassword(password);
     await refreshDeviceState(nextSession.username);
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    if (!session?.username) {
+      throw new Error("Sign in again before changing your password.");
+    }
+
+    await changeAccountPassword(session.username, currentPassword, newPassword);
+    setSessionPassword(newPassword);
   };
 
   const logout = async () => {
     setSession(null);
+    setSessionPassword(null);
     setActiveDevice(null);
     setHasPi(false);
-    await clearStoredSession();
   };
 
   const refreshSession = async () => {
-    await restoreSession();
+    await refreshDeviceState(session?.username);
   };
 
   const selectDevice = async (deviceId: string) => {
@@ -115,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, bootstrapping, hasPi, activeDevice, login, register, logout, refreshSession, selectDevice }}>
+    <AuthContext.Provider value={{ session, sessionPassword, bootstrapping, hasPi, activeDevice, login, register, changePassword, logout, refreshSession, selectDevice }}>
       {children}
     </AuthContext.Provider>
   );
