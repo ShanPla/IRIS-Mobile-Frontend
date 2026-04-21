@@ -2,10 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import {
   getActiveDevice,
   getDevices,
-  loginAllDeviceAccounts,
   setActiveDevice as persistActiveDevice,
-  syncRegistryDevices,
-  transferDevices,
 } from "../lib/pi";
 import {
   authenticateAccount,
@@ -13,7 +10,6 @@ import {
   purgeStoredAuthData,
   registerAccount,
 } from "../lib/accounts";
-import { listCentralDevices } from "../lib/backend";
 import type { AuthSession } from "../types/iris";
 import type { PiDevice } from "../lib/pi";
 
@@ -51,18 +47,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setActiveDevice(device);
   };
 
-  const syncPairedDevicesFromCentral = async (nextSession: AuthSession, password?: string) => {
-    try {
-      const devices = await listCentralDevices(nextSession.token);
-      await syncRegistryDevices(devices, nextSession.username);
-      if (password) {
-        await loginAllDeviceAccounts(nextSession.username, password, nextSession.username);
-      }
-    } catch (error) {
-      console.warn("[IRIS Mobile] Paired device sync failed:", error);
-    }
-  };
-
   const restoreSession = async () => {
     try {
       await purgeStoredAuthData();
@@ -80,8 +64,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string): Promise<void> => {
     const nextSession = await authenticateAccount(username, password);
-    await transferDevices(undefined, nextSession.username);
-    await syncPairedDevicesFromCentral(nextSession, password);
     setSession(nextSession);
     setSessionPassword(password);
     await refreshDeviceState(nextSession.username);
@@ -89,8 +71,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (username: string, email: string, password: string) => {
     const nextSession = await registerAccount(username, email, password);
-    await transferDevices(undefined, nextSession.username);
-    await syncPairedDevicesFromCentral(nextSession, password);
     setSession(nextSession);
     setSessionPassword(password);
     await refreshDeviceState(nextSession.username);

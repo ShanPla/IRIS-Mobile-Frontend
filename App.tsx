@@ -160,8 +160,8 @@ function RootNavigator() {
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : (
           <>
-            <Stack.Screen name="DeviceList" component={DeviceListScreen} />
             <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="DeviceList" component={DeviceListScreen} />
             <Stack.Screen name="Logs" component={LogsScreen} />
             <Stack.Screen name="EventDetails" component={EventDetailsScreen} options={{ animation: "slide_from_right" }} />
             <Stack.Screen name="FacialRegistration" component={FacialRegistrationScreen} options={{ animation: "slide_from_right" }} />
