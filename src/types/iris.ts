@@ -66,6 +66,7 @@ export interface AuthSession {
 export interface UserResponse {
   id: number;
   username: string;
+  gmail: string | null;
   role: string;
   fcm_token: string | null;
 }

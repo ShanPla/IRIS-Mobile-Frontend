@@ -20,14 +20,28 @@ import { ChevronRight, Crown, Plus, Shield, User, Users } from "lucide-react-nat
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { listCentralDevices } from "../../lib/backend";
-import { getDevices, loginAllDeviceAccounts, piPost, redeemTrustedUserInvite, removeDevice, syncRegistryDevices } from "../../lib/pi";
+import { listCentralDevices, unpairCentralDevice } from "../../lib/backend";
+import {
+  getDevices,
+  loginAllDeviceAccounts,
+  loginDeviceAccount,
+  piPost,
+  redeemTrustedUserInvite,
+  removeDevice,
+  syncRegistryDevices,
+  verifyDeviceConnection,
+} from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "DeviceList">;
 type DeviceAccess = "primary" | "secondary";
 type SecureAction = "remove" | "factoryReset";
+type DeviceConnectionState = {
+  state: "checking" | "online" | "offline" | "unknown";
+  source?: "lan" | "tunnel" | "none";
+  message?: string;
+};
 
 function resolveAccessRole(device: PiDevice, index: number): DeviceAccess {
   if (device.accessRole === "secondary") return "secondary";
@@ -39,6 +53,8 @@ export default function DeviceListScreen() {
   const navigation = useNavigation<Nav>();
   const { session, sessionPassword, activeDevice, selectDevice } = useAuth();
   const [devices, setDevices] = useState<PiDevice[]>([]);
+  const [connectionById, setConnectionById] = useState<Record<string, DeviceConnectionState>>({});
+  const [connectingDeviceId, setConnectingDeviceId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [joiningInvite, setJoiningInvite] = useState(false);
@@ -48,34 +64,77 @@ export default function DeviceListScreen() {
   const [joinError, setJoinError] = useState("");
   const [deviceSyncError, setDeviceSyncError] = useState("");
 
+  const refreshConnections = useCallback(async (devicesToCheck: PiDevice[]) => {
+    if (devicesToCheck.length === 0) {
+      setConnectionById({});
+      return;
+    }
+
+    setConnectionById(() => {
+      const next: Record<string, DeviceConnectionState> = {};
+      for (const device of devicesToCheck) {
+        next[device.deviceId] = device.url || device.deviceIp
+          ? { state: "checking", message: "Checking current route..." }
+          : { state: "offline", source: "none", message: "Waiting for the Pi to report a tunnel or LAN IP." };
+      }
+      return next;
+    });
+
+    const results = await Promise.all(
+      devicesToCheck.map((device) => verifyDeviceConnection(device, { refresh: true })),
+    );
+
+    setConnectionById(() => {
+      const next: Record<string, DeviceConnectionState> = {};
+      for (const result of results) {
+        next[result.deviceId] = {
+          state: result.online ? "online" : "offline",
+          source: result.source,
+          message: result.message,
+        };
+      }
+      return next;
+    });
+  }, []);
+
   const loadDevices = useCallback(async () => {
     let nextSyncError = "";
+    let nextDevices: PiDevice[] = [];
+    let registryLoaded = false;
+    const accountId = session?.username;
 
-    if (session?.token && session.username) {
+    if (session?.token && accountId) {
       try {
         const centralDevices = await listCentralDevices(session.token);
-        await syncRegistryDevices(centralDevices, session.username);
-        if (sessionPassword) {
-          await loginAllDeviceAccounts(session.username, sessionPassword, session.username);
-        }
+        nextDevices = await syncRegistryDevices(centralDevices, accountId);
+        registryLoaded = true;
       } catch (error) {
-        nextSyncError = error instanceof Error ? error.message : "Could not refresh devices from Render.";
-        console.warn("[IRIS Mobile] Device list Render refresh failed:", error);
+        nextSyncError = error instanceof Error ? error.message : "Could not refresh devices from Neon.";
+        console.warn("[IRIS Mobile] Device list Neon refresh failed:", error);
       }
     }
 
-    try {
-      const storedDevices = await getDevices(session?.username);
-      setDevices(storedDevices);
-    } catch (error) {
-      nextSyncError = error instanceof Error ? error.message : "Could not load devices on this phone.";
-      setDevices([]);
+    if (!registryLoaded) {
+      try {
+        nextDevices = await getDevices(accountId);
+      } catch (error) {
+        nextSyncError = error instanceof Error ? error.message : "Could not load devices on this phone.";
+        nextDevices = [];
+      }
     }
 
+    setDevices(nextDevices);
     setDeviceSyncError(nextSyncError);
     setLoading(false);
     setRefreshing(false);
-  }, [session?.token, session?.username, sessionPassword]);
+    void refreshConnections(nextDevices);
+
+    if (accountId && sessionPassword && nextDevices.some((device) => device.url || device.deviceIp)) {
+      void loginAllDeviceAccounts(accountId, sessionPassword, accountId)
+        .then(async () => setDevices(await getDevices(accountId)))
+        .catch((error) => console.warn("[IRIS Mobile] Background device login failed:", error));
+    }
+  }, [refreshConnections, session?.token, session?.username, sessionPassword]);
 
   useFocusEffect(
     useCallback(() => {
@@ -85,8 +144,28 @@ export default function DeviceListScreen() {
   );
 
   const openDevice = async (device: PiDevice) => {
-    await selectDevice(device.deviceId);
-    navigation.navigate("Main");
+    if (!device.url && !device.deviceIp) {
+      Alert.alert(
+        "Device Not Reachable",
+        "This device is paired in Neon, but the Pi has not reported a tunnel or LAN IP yet.",
+      );
+      return;
+    }
+
+    setConnectingDeviceId(device.deviceId);
+    try {
+      await selectDevice(device.deviceId);
+      if (session?.username && sessionPassword) {
+        await loginDeviceAccount(session.username, sessionPassword, session.username);
+        await selectDevice(device.deviceId);
+      }
+      navigation.navigate("Main");
+    } catch (error) {
+      Alert.alert("Connection Failed", error instanceof Error ? error.message : "Could not connect to this device.");
+      void refreshConnections([device]);
+    } finally {
+      setConnectingDeviceId(null);
+    }
   };
 
   const startSecureAction = (device: PiDevice, action: SecureAction, access: DeviceAccess) => {
@@ -106,6 +185,9 @@ export default function DeviceListScreen() {
             style: "destructive",
             onPress: async () => {
               try {
+                if (session?.token) {
+                  await unpairCentralDevice(device.deviceId, session.token);
+                }
                 await removeDevice(device.deviceId, session?.username);
                 await loadDevices();
               } catch (err) {
@@ -220,17 +302,34 @@ export default function DeviceListScreen() {
   const renderDeviceCard = (device: PiDevice, access: DeviceAccess) => {
     const isActive = activeDevice?.deviceId === device.deviceId;
     const isPrimary = access === "primary";
+    const connection = connectionById[device.deviceId] ?? {
+      state: device.status === "online" ? "unknown" : "offline",
+      source: "none",
+      message: device.status === "online" ? "Waiting for route check." : "Device is offline in Neon.",
+    };
+    const isConnecting = connectingDeviceId === device.deviceId;
+    const routeLabel = connection.source === "lan" ? "LAN" : connection.source === "tunnel" ? "Tunnel" : "";
+    const connectionLabel =
+      connection.state === "checking"
+        ? "Checking"
+        : connection.state === "online"
+          ? routeLabel ? `Online · ${routeLabel}` : "Online"
+          : "Offline";
+    const statusLabel = isConnecting ? "Connecting" : isActive ? `Active · ${connectionLabel}` : connectionLabel;
+    const deviceRoute = device.deviceIp
+      ? `${device.deviceIp}${device.url ? ` · ${device.url}` : ""}`
+      : device.url || "Waiting for heartbeat from Pi";
 
     return (
       <View key={device.deviceId} style={styles.deviceCard}>
-        <TouchableOpacity activeOpacity={0.85} onPress={() => void openDevice(device)}>
+        <TouchableOpacity activeOpacity={0.85} onPress={() => void openDevice(device)} disabled={isConnecting}>
           <View style={styles.deviceRow}>
             <View style={[styles.deviceIconWrap, isPrimary ? styles.deviceIconPrimary : styles.deviceIconSecondary]}>
               <Shield size={20} color={isPrimary ? referenceColors.primary : referenceColors.success} strokeWidth={2.2} />
             </View>
             <View style={styles.deviceCopy}>
               <Text style={styles.deviceName}>{device.name}</Text>
-              <Text style={styles.deviceMeta}>{device.location ?? device.url}</Text>
+              <Text style={styles.deviceMeta}>{device.location ?? deviceRoute}</Text>
             </View>
             <ChevronRight size={18} color="#94a3b8" strokeWidth={2.2} />
           </View>
@@ -241,7 +340,16 @@ export default function DeviceListScreen() {
                 {isPrimary ? "Primary User" : "Secondary Access"}
               </Text>
             </View>
-            <Text style={[styles.statusText, isActive && styles.statusTextActive]}>{isActive ? "Active" : "Ready"}</Text>
+            <Text
+              style={[
+                styles.statusText,
+                connection.state === "online" && styles.statusTextOnline,
+                connection.state === "offline" && styles.statusTextOffline,
+                isActive && styles.statusTextActive,
+              ]}
+            >
+              {statusLabel}
+            </Text>
           </View>
         </TouchableOpacity>
 
@@ -310,7 +418,7 @@ export default function DeviceListScreen() {
 
             {deviceSyncError ? (
               <View style={styles.syncErrorCard}>
-                <Text style={styles.syncErrorTitle}>Render refresh failed</Text>
+                <Text style={styles.syncErrorTitle}>Neon refresh failed</Text>
                 <Text style={styles.syncErrorText}>{deviceSyncError}</Text>
               </View>
             ) : null}
@@ -646,6 +754,12 @@ const styles = StyleSheet.create({
     color: referenceColors.textMuted,
     fontSize: 12,
     fontWeight: "700",
+  },
+  statusTextOnline: {
+    color: referenceColors.success,
+  },
+  statusTextOffline: {
+    color: referenceColors.danger,
   },
   statusTextActive: {
     color: referenceColors.success,

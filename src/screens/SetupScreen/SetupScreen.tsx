@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -19,7 +19,7 @@ import { ArrowLeft, Mail, Plus, QrCode, Router, X } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { DEVICE_OFFLINE_MESSAGE, DEVICE_TUNNEL_MESSAGE, pairCentralDevice, resolveCentralDevice } from "../../lib/backend";
+import { DEVICE_OFFLINE_MESSAGE, DEVICE_TUNNEL_MESSAGE, pairCentralDevice, resolveCentralDevice, type CentralDevice } from "../../lib/backend";
 import { loginDeviceAccount, registerDeviceAccount, removeDevice, upsertRegistryDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 
@@ -32,6 +32,7 @@ type SetupFieldProps = {
   placeholder: string;
   icon: "device" | "mail";
   keyboardType?: "default" | "email-address";
+  editable?: boolean;
   onSubmitEditing?: () => void;
 };
 
@@ -42,6 +43,7 @@ function SetupField({
   placeholder,
   icon,
   keyboardType = "default",
+  editable = true,
   onSubmitEditing,
 }: SetupFieldProps) {
   const Icon = icon === "mail" ? Mail : Router;
@@ -49,14 +51,15 @@ function SetupField({
   return (
     <View style={styles.fieldBlock}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.inputShell}>
+      <View style={[styles.inputShell, !editable && styles.inputShellLocked]}>
         <Icon size={18} color="#94a3b8" strokeWidth={2.2} />
         <TextInput
-          style={styles.input}
+          style={[styles.input, !editable && styles.inputLocked]}
           placeholder={placeholder}
           placeholderTextColor="#94a3b8"
           value={value}
           onChangeText={onChangeText}
+          editable={editable}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType={keyboardType}
@@ -72,12 +75,86 @@ function normalizeDeviceCode(value: string): string {
   return value.trim().toUpperCase();
 }
 
-function normalizeScannedDeviceCode(value: string): string {
+function normalizeDeviceUrl(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  try {
+    const parsed = new URL(withProtocol);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return "";
+  }
+}
+
+function hostFromDeviceUrl(value: string): string | null {
+  const normalizedUrl = normalizeDeviceUrl(value);
+  if (!normalizedUrl) return null;
+  try {
+    return new URL(normalizedUrl).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+function parseScannedDevice(value: string): { deviceCode: string; deviceUrl: string } | null {
   const trimmed = value.trim();
-  if (!trimmed || /^https?:\/\//i.test(trimmed) || /[/?#]/.test(trimmed)) return "";
+  if (!trimmed) return null;
+
+  try {
+    const decoded = JSON.parse(trimmed) as { device_id?: unknown; url?: unknown; device_url?: unknown };
+    const deviceCode = normalizeDeviceCode(String(decoded.device_id ?? ""));
+    const deviceUrl = normalizeDeviceUrl(String(decoded.url ?? decoded.device_url ?? ""));
+    if (deviceCode && deviceUrl) return { deviceCode, deviceUrl };
+  } catch {
+    // Fall through to plain code/url handling.
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      const deviceCode = normalizeDeviceCode(parsed.searchParams.get("device_id") ?? parsed.searchParams.get("device") ?? "");
+      const deviceUrl = normalizeDeviceUrl(trimmed);
+      return deviceCode && deviceUrl ? { deviceCode, deviceUrl } : null;
+    } catch {
+      return null;
+    }
+  }
 
   const normalized = trimmed.toUpperCase();
-  return /^[A-Z0-9._-]{3,64}$/.test(normalized) ? normalized : "";
+  return /^[A-Z0-9._-]{3,64}$/.test(normalized) ? { deviceCode: normalized, deviceUrl: "" } : null;
+}
+
+function normalizeGmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isGmail(value: string): boolean {
+  return /^[^\s@]+@gmail\.com$/i.test(normalizeGmail(value));
+}
+
+async function resolveDirectDevice(deviceCode: string, deviceUrl: string): Promise<CentralDevice> {
+  const normalizedUrl = normalizeDeviceUrl(deviceUrl);
+  if (!normalizedUrl) throw new Error("Device URL is invalid.");
+
+  const response = await fetch(`${normalizedUrl}/api/device/info`);
+  if (!response.ok) throw new Error(DEVICE_OFFLINE_MESSAGE);
+
+  const info = (await response.json()) as { device_id?: string; device_name?: string; name?: string };
+  const resolvedCode = normalizeDeviceCode(info.device_id ?? "");
+  if (!resolvedCode) throw new Error(DEVICE_OFFLINE_MESSAGE);
+  if (resolvedCode !== deviceCode) throw new Error("The reached camera does not match that device code.");
+
+  return {
+    device_id: resolvedCode,
+    device_name: info.device_name || info.name || resolvedCode,
+    device_url: normalizedUrl,
+    device_ip: hostFromDeviceUrl(normalizedUrl),
+    primary_gmail: null,
+    status: "online",
+    last_heartbeat: new Date().toISOString(),
+    access_role: "primary",
+  };
 }
 
 function formatAddDeviceError(error: unknown): string {
@@ -106,10 +183,17 @@ export default function SetupScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [deviceCode, setDeviceCode] = useState("");
   const [primaryEmail, setPrimaryEmail] = useState(session?.email ?? "");
+  const [directDeviceUrl, setDirectDeviceUrl] = useState("");
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scanLocked, setScanLocked] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (session?.email) {
+      setPrimaryEmail(session.email);
+    }
+  }, [session?.email]);
 
   const openScanner = async () => {
     Keyboard.dismiss();
@@ -128,14 +212,15 @@ export default function SetupScreen() {
   const handleQrScanned = (result: BarcodeScanningResult) => {
     if (scanLocked) return;
 
-    const scannedCode = normalizeScannedDeviceCode(result.data);
-    if (!scannedCode) {
-      setError("QR code must contain only the device code.");
+    const scannedDevice = parseScannedDevice(result.data);
+    if (!scannedDevice) {
+      setError("QR code must contain a device code or IRIS device link.");
       return;
     }
 
     setScanLocked(true);
-    setDeviceCode(scannedCode);
+    setDeviceCode(scannedDevice.deviceCode);
+    setDirectDeviceUrl(scannedDevice.deviceUrl);
     setScannerVisible(false);
     setError("");
   };
@@ -153,17 +238,26 @@ export default function SetupScreen() {
       setError("Device code is required");
       return;
     }
+    const accountGmail = normalizeGmail(primaryEmail);
+    if (!isGmail(accountGmail)) {
+      setError("Primary Gmail is required for this device.");
+      return;
+    }
 
     setLoading(true);
     setError("");
     try {
-      const resolvedDevice = await resolveCentralDevice(normalizeDeviceCode(deviceCode), session.token);
-      const newDevice = await upsertRegistryDevice(resolvedDevice, primaryEmail.trim(), session.username, { verify: true });
+      const normalizedDeviceCode = normalizeDeviceCode(deviceCode);
+      const resolvedDevice = directDeviceUrl
+        ? await resolveDirectDevice(normalizedDeviceCode, directDeviceUrl)
+        : await resolveCentralDevice(normalizedDeviceCode, session.token);
+      const deviceWithGmail = { ...resolvedDevice, primary_gmail: accountGmail };
+      const newDevice = await upsertRegistryDevice(deviceWithGmail, accountGmail, session.username, { verify: true });
 
       let userAlreadyOnPi = false;
       try {
         try {
-          await registerDeviceAccount(session.username, sessionPassword, session.username);
+          await registerDeviceAccount(session.username, sessionPassword, accountGmail, session.username);
         } catch (err) {
           const msg = err instanceof Error ? err.message.toLowerCase() : "";
           const looksLikeExistingUser =
@@ -172,7 +266,7 @@ export default function SetupScreen() {
           userAlreadyOnPi = true;
         }
         await loginDeviceAccount(session.username, sessionPassword, session.username);
-        await pairCentralDevice(resolvedDevice.device_id, session.token);
+        await pairCentralDevice(resolvedDevice.device_id, session.token, deviceWithGmail);
       } catch (err) {
         await removeDevice(newDevice.deviceId, session.username);
         const reason = err instanceof Error ? err.message : "Unknown error";
@@ -185,7 +279,11 @@ export default function SetupScreen() {
         throw new Error(`Device added but sign-in failed: ${reason}`);
       }
 
-      await refreshSession();
+      try {
+        await refreshSession();
+      } catch (refreshError) {
+        console.warn("[IRIS Mobile] Device added, but session refresh failed:", refreshError);
+      }
       navigation.navigate("DeviceList");
     } catch (e) {
       setError(formatAddDeviceError(e));
@@ -227,7 +325,10 @@ export default function SetupScreen() {
               <SetupField
                 label="Device Code"
                 value={deviceCode}
-                onChangeText={(value) => setDeviceCode(normalizeDeviceCode(value))}
+                onChangeText={(value) => {
+                  setDeviceCode(normalizeDeviceCode(value));
+                  setDirectDeviceUrl("");
+                }}
                 placeholder="IRIS-A123"
                 icon="device"
               />
@@ -264,19 +365,22 @@ export default function SetupScreen() {
               ) : null}
 
               <SetupField
-                label="Primary Gmail (optional)"
+                label="Primary Gmail"
                 value={primaryEmail}
-                onChangeText={setPrimaryEmail}
+                onChangeText={(value) => setPrimaryEmail(normalizeGmail(value))}
                 placeholder="owner@gmail.com"
                 icon="mail"
                 keyboardType="email-address"
+                editable={!session?.email}
                 onSubmitEditing={() => void handleAddDevice()}
               />
 
               <View style={styles.infoCard}>
-                <Text style={styles.infoTitle}>Found through Render</Text>
+                <Text style={styles.infoTitle}>{directDeviceUrl ? "Found through Pi QR" : "Found through IRIS registry"}</Text>
                 <Text style={styles.infoText}>
-                  The Pi reports its current tunnel and local IP to Render under this device code.
+                  {directDeviceUrl
+                    ? "This phone will verify the camera directly before pairing it to your account."
+                    : "The Pi reports its current tunnel and local IP to Neon under this device code."}
                 </Text>
               </View>
 
@@ -385,11 +489,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  inputShellLocked: {
+    backgroundColor: "rgba(226,232,240,0.58)",
+  },
   input: {
     flex: 1,
     color: referenceColors.text,
     fontSize: 15,
     paddingVertical: 16,
+  },
+  inputLocked: {
+    color: referenceColors.textSoft,
   },
   scanButton: {
     minHeight: 50,

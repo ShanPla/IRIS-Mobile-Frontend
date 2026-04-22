@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PermissionSet, UserResponse } from "../types/iris";
 import { DEVICE_OFFLINE_MESSAGE, DEVICE_TUNNEL_MESSAGE, type CentralDevice } from "./backend";
-import { resolveBaseUrl } from "./resolveBaseUrl";
+import { getCachedResolution, invalidateBaseUrlCache, resolveBaseUrl } from "./resolveBaseUrl";
 
 // Resolve the best reachable base URL for a device. LAN-direct if reachable,
 // tunnel otherwise. Cached per device; invalidate via `invalidateBaseUrlCache`
@@ -23,6 +23,10 @@ export interface PiDevice {
   token: string;
   addedAt: string;
   accessRole?: "primary" | "secondary";
+  status?: string;
+  lastHeartbeat?: string | null;
+  pairedAt?: string | null;
+  lastActive?: string | null;
   location?: string;
   deviceIp?: string | null;
   primaryEmail?: string;
@@ -31,7 +35,16 @@ export interface PiDevice {
 export interface DeviceInfo {
   device_id: string;
   name: string;
+  device_name?: string;
   version: string;
+}
+
+export interface DeviceConnectionResult {
+  deviceId: string;
+  online: boolean;
+  baseUrl: string;
+  source: "lan" | "tunnel" | "none";
+  message: string;
 }
 
 export interface PairResponse {
@@ -123,6 +136,24 @@ function withRuntimeToken(device: PiDevice, accountId?: string): PiDevice {
 
 async function saveDevices(accountId: string | undefined, devices: PiDevice[]): Promise<void> {
   await AsyncStorage.setItem(devicesKey(accountId), JSON.stringify(stripDeviceTokens(devices)));
+}
+
+function fromCentralDevice(device: CentralDevice, existing?: PiDevice): PiDevice {
+  return {
+    deviceId: device.device_id,
+    name: device.device_name || existing?.name || device.device_id,
+    url: normalizeConnectionUrl(device.device_url || existing?.url || ""),
+    token: existing?.token ?? "",
+    addedAt: existing?.addedAt ?? device.paired_at ?? new Date().toISOString(),
+    accessRole: device.access_role ?? existing?.accessRole ?? "primary",
+    status: device.status,
+    lastHeartbeat: device.last_heartbeat ?? null,
+    pairedAt: device.paired_at ?? existing?.pairedAt ?? null,
+    lastActive: device.last_active ?? existing?.lastActive ?? null,
+    location: existing?.location,
+    deviceIp: device.device_ip ?? existing?.deviceIp ?? "",
+    primaryEmail: (device.primary_gmail ?? existing?.primaryEmail ?? "").trim(),
+  };
 }
 
 function normalizeConnectionUrl(raw: string): string {
@@ -306,40 +337,27 @@ export async function upsertRegistryDevice(
   accountId?: string,
   options: { verify?: boolean; setActive?: boolean } = {},
 ): Promise<PiDevice> {
-  const normalizedUrl = normalizeConnectionUrl(device.device_url);
-  if (!normalizedUrl) {
-    throw new Error(DEVICE_TUNNEL_MESSAGE);
-  }
-
-  if (options.verify) {
-    let info: DeviceInfo | null = null;
-    try {
-      const infoRes = await fetch(`${normalizedUrl}/api/device/info`);
-      if (infoRes.ok) {
-        info = (await infoRes.json()) as DeviceInfo;
-      }
-    } catch {
-      info = null;
-    }
-
-    if (!info?.device_id) {
-      throw new Error(DEVICE_OFFLINE_MESSAGE);
-    }
-    if (info.device_id !== device.device_id) {
-      throw new Error("The reached camera does not match that device code.");
-    }
-  }
-
   const nextDevice: PiDevice = {
     deviceId: device.device_id,
     name: device.device_name || device.device_id,
-    url: normalizedUrl,
+    url: normalizeConnectionUrl(device.device_url || ""),
     token: "",
     addedAt: new Date().toISOString(),
     accessRole: device.access_role ?? "primary",
     deviceIp: device.device_ip ?? "",
     primaryEmail: primaryEmail.trim(),
   };
+
+  if (!nextDevice.url && !nextDevice.deviceIp) {
+    throw new Error(DEVICE_TUNNEL_MESSAGE);
+  }
+
+  if (options.verify) {
+    const result = await verifyDeviceConnection(nextDevice, { refresh: true });
+    if (!result.online) {
+      throw new Error(result.message || DEVICE_OFFLINE_MESSAGE);
+    }
+  }
 
   await upsertDevice(nextDevice, accountId);
   if (options.setActive !== false) {
@@ -349,16 +367,87 @@ export async function upsertRegistryDevice(
 }
 
 export async function syncRegistryDevices(devices: CentralDevice[], accountId?: string): Promise<PiDevice[]> {
-  const synced: PiDevice[] = [];
-  for (const device of devices) {
-    if (!device.device_url) continue;
-    try {
-      synced.push(await upsertRegistryDevice(device, "", accountId, { setActive: false }));
-    } catch (error) {
-      console.warn("[IRIS Mobile] Paired device sync skipped:", error);
-    }
+  const existingDevices = await getDevices(accountId);
+  const existingById = new Map(existingDevices.map((device) => [device.deviceId, device]));
+  const synced = devices.map((device) => fromCentralDevice(device, existingById.get(device.device_id)));
+
+  await saveDevices(accountId, synced);
+
+  const activeId = await AsyncStorage.getItem(activeKey(accountId));
+  if (synced.length === 0) {
+    await AsyncStorage.removeItem(activeKey(accountId));
+  } else if (!activeId || !synced.some((device) => device.deviceId === activeId)) {
+    await setActiveDevice(synced[0].deviceId, accountId);
   }
-  return synced;
+
+  return synced.map((device) => withRuntimeToken(device, accountId));
+}
+
+async function fetchDeviceInfo(baseUrl: string, timeoutMs: number = 2200): Promise<DeviceInfo> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${baseUrl}/api/device/info`, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Device info failed (${response.status})`);
+    }
+    return (await response.json()) as DeviceInfo;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function verifyDeviceConnection(
+  device: PiDevice,
+  options: { refresh?: boolean } = {},
+): Promise<DeviceConnectionResult> {
+  if (!device.url && !device.deviceIp) {
+    return {
+      deviceId: device.deviceId,
+      online: false,
+      baseUrl: "",
+      source: "none",
+      message: "No tunnel or LAN address has been reported yet.",
+    };
+  }
+
+  if (options.refresh) {
+    invalidateBaseUrlCache(device.deviceId);
+  }
+
+  try {
+    const baseUrl = await deviceBaseUrl(device);
+    if (!baseUrl) {
+      throw new Error("No reachable device route is available.");
+    }
+    const info = await fetchDeviceInfo(baseUrl);
+    if (info.device_id !== device.deviceId) {
+      return {
+        deviceId: device.deviceId,
+        online: false,
+        baseUrl,
+        source: "none",
+        message: "Reached a different camera for this device code.",
+      };
+    }
+
+    const cached = getCachedResolution(device.deviceId);
+    return {
+      deviceId: device.deviceId,
+      online: true,
+      baseUrl,
+      source: cached?.isLan ? "lan" : "tunnel",
+      message: cached?.isLan ? "Connected on LAN" : "Connected through tunnel",
+    };
+  } catch (error) {
+    return {
+      deviceId: device.deviceId,
+      online: false,
+      baseUrl: normalizeConnectionUrl(device.url),
+      source: "none",
+      message: error instanceof Error ? error.message : "Device is unreachable.",
+    };
+  }
 }
 
 export async function createTrustedUserInvite(
@@ -494,6 +583,7 @@ async function upsertDevice(device: PiDevice, accountId?: string): Promise<void>
 export async function registerDeviceAccount(
   username: string,
   password: string,
+  gmail: string,
   preferredAccountId?: string,
 ): Promise<void> {
   const candidates = await getCandidateDevices(preferredAccountId, username, undefined);
@@ -511,7 +601,7 @@ export async function registerDeviceAccount(
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, gmail, password }),
       });
 
       if (res.ok) return;

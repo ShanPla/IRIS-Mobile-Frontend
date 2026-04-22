@@ -5,6 +5,7 @@ export interface CentralDevice {
   device_name: string;
   device_url: string;
   device_ip: string | null;
+  primary_gmail?: string | null;
   status: string;
   last_heartbeat: string | null;
   paired_at?: string | null;
@@ -13,7 +14,7 @@ export interface CentralDevice {
 }
 
 export const DEVICE_OFFLINE_MESSAGE = "Device is not online\nCheck that heartbeat is running on the Pi";
-export const DEVICE_TUNNEL_MESSAGE = "Device has not reported tunnel yet\nCheck that heartbeat is running on the Pi";
+export const DEVICE_TUNNEL_MESSAGE = "Device has not reported tunnel or LAN IP yet\nCheck that heartbeat is running on the Pi";
 
 const FALLBACK_BACKEND_URL = "https://iris-back-end.onrender.com";
 const ENV_BACKEND_URL = (
@@ -74,13 +75,13 @@ function bearerHeaders(token: string, extra?: HeadersInit): HeadersInit {
   };
 }
 
-export async function registerCentralAccount(username: string, password: string): Promise<UserResponse> {
+export async function registerCentralAccount(username: string, gmail: string, password: string): Promise<UserResponse> {
   const response = await backendFetch("/api/auth/register", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, gmail, password }),
   });
 
   if (!response.ok) {
@@ -107,7 +108,6 @@ export async function getCentralCurrentUser(token: string): Promise<UserResponse
 export async function loginCentralAccount(
   username: string,
   password: string,
-  email = "",
 ): Promise<AuthSession> {
   const response = await backendFetch("/api/auth/login", {
     method: "POST",
@@ -127,7 +127,7 @@ export async function loginCentralAccount(
   return {
     token: tokenData.access_token,
     username: user.username,
-    email,
+    email: user.gmail ?? "",
     role: user.role,
   };
 }
@@ -180,13 +180,23 @@ export async function listCentralDevices(token: string): Promise<CentralDevice[]
   return (await response.json()) as CentralDevice[];
 }
 
-export async function pairCentralDevice(deviceId: string, token: string): Promise<CentralDevice> {
+export async function pairCentralDevice(
+  deviceId: string,
+  token: string,
+  connection?: Partial<Pick<CentralDevice, "device_name" | "device_url" | "device_ip" | "primary_gmail">>,
+): Promise<CentralDevice> {
   const response = await backendFetch("/api/auth/me/devices", {
     method: "POST",
     headers: bearerHeaders(token, {
       "Content-Type": "application/json",
     }),
-    body: JSON.stringify({ device_id: deviceId.trim().toUpperCase() }),
+    body: JSON.stringify({
+      device_id: deviceId.trim().toUpperCase(),
+      device_name: connection?.device_name,
+      device_url: connection?.device_url,
+      device_ip: connection?.device_ip,
+      primary_gmail: connection?.primary_gmail,
+    }),
   });
 
   if (!response.ok) {
@@ -195,4 +205,15 @@ export async function pairCentralDevice(deviceId: string, token: string): Promis
   }
 
   return (await response.json()) as CentralDevice;
+}
+
+export async function unpairCentralDevice(deviceId: string, token: string): Promise<void> {
+  const response = await backendFetch(`/api/auth/me/devices/${encodeURIComponent(deviceId.trim().toUpperCase())}`, {
+    method: "DELETE",
+    headers: bearerHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseBackendError(response, `Device removal failed (${response.status}).`));
+  }
 }

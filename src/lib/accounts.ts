@@ -32,12 +32,12 @@ export async function registerAccount(username: string, email: string, password:
   const trimmedUsername = username.trim();
   const normalizedEmail = normalizeEmail(email);
 
-  await registerCentralAccount(trimmedUsername, password);
-  const session = await loginCentralAccount(trimmedUsername, password, normalizedEmail);
+  await registerCentralAccount(trimmedUsername, normalizedEmail, password);
+  const session = await loginCentralAccount(trimmedUsername, password);
 
   return {
     ...session,
-    email: normalizedEmail,
+    email: session.email || normalizedEmail,
   };
 }
 

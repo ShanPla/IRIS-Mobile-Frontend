@@ -155,13 +155,13 @@ function RootNavigator() {
 
   return (
     <NavigationContainer key={`${String(hasPi)}-${String(!!session)}`}>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={session ? "DeviceList" : "Login"}>
         {!session ? (
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : (
           <>
-            <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="DeviceList" component={DeviceListScreen} />
+            <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="Logs" component={LogsScreen} />
             <Stack.Screen name="EventDetails" component={EventDetailsScreen} options={{ animation: "slide_from_right" }} />
             <Stack.Screen name="FacialRegistration" component={FacialRegistrationScreen} options={{ animation: "slide_from_right" }} />
