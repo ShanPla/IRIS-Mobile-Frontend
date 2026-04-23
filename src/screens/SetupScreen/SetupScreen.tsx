@@ -22,6 +22,7 @@ import { useAuth } from "../../context/AuthContext";
 import { DEVICE_OFFLINE_MESSAGE, DEVICE_TUNNEL_MESSAGE, pairCentralDevice, resolveCentralDevice, type CentralDevice } from "../../lib/backend";
 import { loginDeviceAccount, registerDeviceAccount, removeDevice, upsertRegistryDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Setup">;
 
@@ -180,6 +181,7 @@ function formatAddDeviceError(error: unknown): string {
 export default function SetupScreen() {
   const navigation = useNavigation<Nav>();
   const { refreshSession, session, sessionPassword } = useAuth();
+  const layout = useScreenLayout({ bottom: "stack", centered: true });
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [deviceCode, setDeviceCode] = useState("");
   const [primaryEmail, setPrimaryEmail] = useState(session?.email ?? "");
@@ -291,6 +293,7 @@ export default function SetupScreen() {
       setLoading(false);
     }
   };
+  const scannerHeight = getResponsiveMediaHeight(layout.width, { min: 190, max: 240, ratio: 0.54 });
 
   return (
     <KeyboardAvoidingView
@@ -303,7 +306,7 @@ export default function SetupScreen() {
           <ReferenceBackdrop />
           <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
@@ -343,7 +346,7 @@ export default function SetupScreen() {
               </TouchableOpacity>
 
               {scannerVisible ? (
-                <View style={styles.scannerCard}>
+                <View style={[styles.scannerCard, { height: scannerHeight }]}>
                   <CameraView
                     style={styles.scannerCamera}
                     facing="back"
@@ -523,7 +526,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   scannerCard: {
-    height: 220,
     borderRadius: 20,
     overflow: "hidden",
     backgroundColor: "#0f172a",

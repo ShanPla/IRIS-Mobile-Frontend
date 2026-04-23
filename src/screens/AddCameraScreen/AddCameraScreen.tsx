@@ -1,20 +1,26 @@
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ArrowLeft, Camera, ChevronRight } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { useScreenLayout } from "../../theme/layout";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function AddCameraScreen() {
   const navigation = useNavigation<Nav>();
+  const layout = useScreenLayout({ bottom: "stack", centered: true });
 
   return (
     <View style={styles.container}>
       <ReferenceBackdrop />
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, layout.contentStyle]}
+        showsVerticalScrollIndicator={false}
+      >
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
           <Text style={styles.backText}>Back</Text>
@@ -38,7 +44,7 @@ export default function AddCameraScreen() {
             </View>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -49,7 +55,7 @@ const styles = StyleSheet.create({
     backgroundColor: referenceColors.background,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     paddingHorizontal: 20,
   },

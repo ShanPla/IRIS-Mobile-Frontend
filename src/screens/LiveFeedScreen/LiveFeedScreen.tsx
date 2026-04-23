@@ -26,6 +26,7 @@ import { buildPiUrl, getActiveDevice } from "../../lib/pi";
 import { getCachedResolution, invalidateBaseUrlCache } from "../../lib/resolveBaseUrl";
 import { saveRemoteImageToLibrary } from "../../lib/saveImage";
 import { cardShadow, referenceColors, referenceLiveImage } from "../../theme/reference";
+import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 
 const POLL_INTERVAL_MS = 100;          // between successful loads — tight loop, actual cadence bounded by server+network
 const POLL_RETRY_INTERVAL_MS = 500;    // after consecutive failures, back off
@@ -34,6 +35,7 @@ const RECONNECT_THRESHOLD = 5;          // fails before showing "Reconnecting" U
 export default function LiveFeedScreen() {
   const navigation = useNavigation();
   const { session } = useAuth();
+  const layout = useScreenLayout({ bottom: "tab" });
   const [frameUri, setFrameUri] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -190,11 +192,12 @@ export default function LiveFeedScreen() {
       setSavingSnapshot(false);
     }
   };
+  const feedHeight = getResponsiveMediaHeight(layout.width, { min: 260, max: 420, ratio: 0.9 });
 
   return (
     <View style={styles.container}>
       <ReferenceBackdrop />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.container} contentContainerStyle={[styles.content, layout.contentStyle]}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
@@ -206,7 +209,7 @@ export default function LiveFeedScreen() {
           </View>
         </View>
 
-        <View style={styles.feedCard}>
+        <View style={[styles.feedCard, { height: feedHeight }]}>
           {/* Image must always mount when a URI is set, otherwise onLoad/onError
               never fires and the polling loop stalls. Spinners/errors overlay on top. */}
           {frameUri ? (
@@ -358,7 +361,7 @@ export default function LiveFeedScreen() {
             />
           ) : null}
           <TouchableOpacity
-            style={styles.fullscreenClose}
+            style={[styles.fullscreenClose, { top: layout.insets.top + 12 }]}
             onPress={() => setFullscreenOpen(false)}
           >
             <X size={20} color="#ffffff" strokeWidth={2.4} />
@@ -413,7 +416,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   feedCard: {
-    height: 380,
     borderRadius: 28,
     overflow: "hidden",
     backgroundColor: "#0f172a",
@@ -578,11 +580,15 @@ const styles = StyleSheet.create({
   infoLabel: {
     color: referenceColors.textMuted,
     fontSize: 13,
+    flex: 1,
+    minWidth: 0,
   },
   infoValue: {
     color: referenceColors.text,
     fontSize: 13,
     fontWeight: "700",
+    flexShrink: 1,
+    textAlign: "right",
   },
   warnText: {
     color: referenceColors.danger,

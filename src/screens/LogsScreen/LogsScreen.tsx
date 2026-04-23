@@ -23,6 +23,7 @@ import { useAuth } from "../../context/AuthContext";
 import { buildPiUrl, piGet } from "../../lib/pi";
 import type { EventType, EventsResponse, SecurityEvent } from "../../types/iris";
 import { cardShadow, referenceColors } from "../../theme/reference";
+import { useScreenLayout } from "../../theme/layout";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -38,6 +39,7 @@ const PAGE_SIZE = 20;
 export default function LogsScreen() {
   const navigation = useNavigation<Nav>();
   const { session } = useAuth();
+  const layout = useScreenLayout({ bottom: "tab" });
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState<EventType | null>(null);
@@ -203,13 +205,14 @@ export default function LogsScreen() {
 
   const renderEvent = ({ item }: { item: SecurityEvent }) => {
     const badgeColor = getBadgeColor(item.event_type);
+    const thumbnailSize = layout.compact ? 58 : 70;
 
     return (
       <TouchableOpacity style={[styles.eventCard, item.alarm_triggered && styles.eventCardAlert]} onPress={() => navigation.navigate("EventDetails", { event: item })}>
         {thumbnails[item.id] ? (
-          <Image source={{ uri: thumbnails[item.id] }} style={styles.thumbnail} />
+          <Image source={{ uri: thumbnails[item.id] }} style={[styles.thumbnail, { width: thumbnailSize, height: thumbnailSize }]} />
         ) : (
-          <View style={[styles.thumbnailPlaceholder, { borderColor: `${badgeColor}4D` }]}>
+          <View style={[styles.thumbnailPlaceholder, { width: thumbnailSize, height: thumbnailSize, borderColor: `${badgeColor}4D` }]}>
             {item.event_type === "authorized" ? (
               <CheckCircle2 size={22} color={badgeColor} strokeWidth={2.2} />
             ) : (
@@ -255,7 +258,7 @@ export default function LogsScreen() {
             keyExtractor={(item) => String(item.id)}
             renderItem={renderEvent}
             ListHeaderComponent={renderHeader}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={[styles.list, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={referenceColors.primary} />}
@@ -433,14 +436,10 @@ const styles = StyleSheet.create({
     borderColor: "#fecaca",
   },
   thumbnail: {
-    width: 70,
-    height: 70,
     borderRadius: 18,
     backgroundColor: "#cbd5e1",
   },
   thumbnailPlaceholder: {
-    width: 70,
-    height: 70,
     borderRadius: 18,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
@@ -449,6 +448,7 @@ const styles = StyleSheet.create({
   },
   eventCopy: {
     flex: 1,
+    minWidth: 0,
   },
   eventTitle: {
     color: referenceColors.text,

@@ -33,6 +33,7 @@ import {
 } from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { useScreenLayout } from "../../theme/layout";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "DeviceList">;
 type DeviceAccess = "primary" | "secondary";
@@ -52,6 +53,7 @@ function resolveAccessRole(device: PiDevice, index: number): DeviceAccess {
 export default function DeviceListScreen() {
   const navigation = useNavigation<Nav>();
   const { session, sessionPassword, activeDevice, selectDevice } = useAuth();
+  const layout = useScreenLayout({ bottom: "stack" });
   const [devices, setDevices] = useState<PiDevice[]>([]);
   const [connectionById, setConnectionById] = useState<Record<string, DeviceConnectionState>>({});
   const [connectingDeviceId, setConnectingDeviceId] = useState<string | null>(null);
@@ -389,7 +391,7 @@ export default function DeviceListScreen() {
           <ReferenceBackdrop />
           <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             refreshControl={
@@ -404,7 +406,7 @@ export default function DeviceListScreen() {
             }
           >
             <View style={styles.header}>
-              <View>
+              <View style={styles.headerCopy}>
                 <Text style={styles.title}>My Devices</Text>
                 <Text style={styles.subtitle}>Select a device to monitor</Text>
               </View>
@@ -556,7 +558,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
     marginBottom: 24,
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   title: {
     color: referenceColors.text,
@@ -622,6 +629,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     flex: 1,
+    minWidth: 0,
   },
   sectionIconPrimary: {
     width: 44,
@@ -652,6 +660,7 @@ const styles = StyleSheet.create({
     color: referenceColors.textMuted,
     fontSize: 13,
     marginTop: 3,
+    flexShrink: 1,
   },
   sectionCount: {
     color: referenceColors.textMuted,
@@ -709,6 +718,7 @@ const styles = StyleSheet.create({
   },
   deviceCopy: {
     flex: 1,
+    minWidth: 0,
   },
   deviceName: {
     color: referenceColors.text,
@@ -719,11 +729,14 @@ const styles = StyleSheet.create({
     color: referenceColors.textMuted,
     fontSize: 12,
     marginTop: 4,
+    flexShrink: 1,
   },
   deviceFooter: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
     marginTop: 14,
   },
   roleBadge: {

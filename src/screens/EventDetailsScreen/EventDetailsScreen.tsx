@@ -19,6 +19,7 @@ import { buildPiUrl } from "../../lib/pi";
 import { saveRemoteImageToLibrary } from "../../lib/saveImage";
 import type { SecurityEvent } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 
 type Route = RouteProp<RootStackParamList, "EventDetails">;
 
@@ -26,6 +27,7 @@ export default function EventDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute<Route>();
   const { session } = useAuth();
+  const layout = useScreenLayout({ bottom: "stack" });
   const event: SecurityEvent = route.params.event;
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -76,11 +78,12 @@ export default function EventDetailsScreen() {
   };
 
   const badgeColor = getBadgeColor(event.event_type);
+  const snapshotHeight = getResponsiveMediaHeight(layout.width, { min: 220, max: 340, ratio: 0.75 });
 
   return (
     <View style={styles.container}>
       <ReferenceBackdrop />
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.container} contentContainerStyle={[styles.content, layout.contentStyle]}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
           <Text style={styles.backText}>Back</Text>
@@ -93,7 +96,7 @@ export default function EventDetailsScreen() {
 
         {snapshotUrl ? (
           <>
-            <Image source={{ uri: snapshotUrl }} style={styles.snapshot} resizeMode="cover" />
+            <Image source={{ uri: snapshotUrl }} style={[styles.snapshot, { height: snapshotHeight }]} resizeMode="cover" />
             <TouchableOpacity
               style={[styles.saveButton, saving && styles.saveButtonDisabled]}
               onPress={() => void handleSaveSnapshot()}
@@ -110,7 +113,7 @@ export default function EventDetailsScreen() {
             </TouchableOpacity>
           </>
         ) : (
-          <View style={styles.snapshotPlaceholder}>
+          <View style={[styles.snapshotPlaceholder, { height: Math.max(200, snapshotHeight - 60) }]}>
             <Text style={styles.placeholderText}>No snapshot</Text>
           </View>
         )}
@@ -198,7 +201,6 @@ const styles = StyleSheet.create({
   },
   snapshot: {
     width: "100%",
-    height: 300,
     borderRadius: 28,
     backgroundColor: "#0f172a",
   },
@@ -223,7 +225,6 @@ const styles = StyleSheet.create({
   },
   snapshotPlaceholder: {
     width: "100%",
-    height: 240,
     borderRadius: 28,
     backgroundColor: "#e2e8f0",
     alignItems: "center",
@@ -292,6 +293,7 @@ const styles = StyleSheet.create({
     color: referenceColors.textMuted,
     fontSize: 14,
     flex: 1,
+    minWidth: 0,
   },
   detailValue: {
     color: referenceColors.text,
@@ -299,5 +301,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     flex: 1,
     textAlign: "right",
+    flexShrink: 1,
   },
 });

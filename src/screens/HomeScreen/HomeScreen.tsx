@@ -38,6 +38,7 @@ import { usePiHealth } from "../../hooks/usePiHealth";
 import { buildPiUrl, ensureDeviceAuth, piGet, piPost, piPut } from "../../lib/pi";
 import type { EventsResponse, SecurityEvent, SecurityMode, SystemStatus } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors, referenceLiveImage } from "../../theme/reference";
+import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -45,6 +46,7 @@ export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const { activeDevice, session, sessionPassword } = useAuth();
   const { health } = usePiHealth(10000, session?.username);
+  const layout = useScreenLayout({ bottom: "tab" });
 
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [recentEvents, setRecentEvents] = useState<SecurityEvent[]>([]);
@@ -266,6 +268,7 @@ export default function HomeScreen() {
   ];
 
   const statusBorderColor = status?.alarm_active ? "#fecaca" : "#bbf7d0";
+  const liveImageHeight = getResponsiveMediaHeight(layout.width, { min: 180, max: 250, ratio: 0.56 });
 
   if (loading) {
     return (
@@ -281,7 +284,7 @@ export default function HomeScreen() {
       <ReferenceBackdrop />
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, layout.contentStyle]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -368,7 +371,7 @@ export default function HomeScreen() {
         </View>
 
         <TouchableOpacity style={styles.liveCard} onPress={() => navigation.navigate("LiveFeed")} activeOpacity={0.92}>
-          <Image source={{ uri: frameUri || referenceLiveImage }} style={styles.liveImage} resizeMode="cover" />
+          <Image source={{ uri: frameUri || referenceLiveImage }} style={[styles.liveImage, { height: liveImageHeight }]} resizeMode="cover" />
 
           <View style={styles.liveBadge}>
             <View style={styles.liveDot} />
@@ -554,6 +557,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     flex: 1,
+    minWidth: 0,
   },
   statusIconWrap: {
     width: 46,
@@ -650,6 +654,7 @@ const styles = StyleSheet.create({
     color: referenceColors.textSoft,
     fontSize: 12,
     fontWeight: "600",
+    flexShrink: 1,
   },
   liveCard: {
     borderRadius: 28,
@@ -662,7 +667,6 @@ const styles = StyleSheet.create({
   },
   liveImage: {
     width: "100%",
-    height: 220,
   },
   liveBadge: {
     position: "absolute",
@@ -826,6 +830,7 @@ const styles = StyleSheet.create({
   },
   eventCopy: {
     flex: 1,
+    minWidth: 0,
   },
   eventName: {
     color: referenceColors.text,
@@ -843,11 +848,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 6,
+    maxWidth: "42%",
   },
   eventBadgeText: {
     fontSize: 11,
     fontWeight: "700",
     textTransform: "capitalize",
+    textAlign: "center",
   },
   quickGrid: {
     flexDirection: "row",

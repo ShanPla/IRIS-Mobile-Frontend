@@ -16,6 +16,7 @@ import { Eye, EyeOff, Lock, Mail, Shield, User } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { useScreenLayout } from "../../theme/layout";
 
 type InputRowProps = {
   label: string;
@@ -72,6 +73,7 @@ function InputRow({
 
 export default function LoginScreen() {
   const { login, register } = useAuth();
+  const layout = useScreenLayout({ bottom: "stack", centered: true });
   const [activeTab, setActiveTab] = useState<"signin" | "signup">("signin");
 
   const [username, setUsername] = useState("");
@@ -145,7 +147,7 @@ export default function LoginScreen() {
           <ReferenceBackdrop />
           <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}

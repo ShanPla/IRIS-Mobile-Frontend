@@ -13,6 +13,7 @@ import { AlertTriangle, Shield, Users } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { piGet, piPost } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { useScreenLayout } from "../../theme/layout";
 
 interface PairedUser {
   id: number;
@@ -44,6 +45,7 @@ interface ResetResult {
 }
 
 export default function AdminScreen() {
+  const layout = useScreenLayout({ bottom: "stack" });
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [pairedUsers, setPairedUsers] = useState<PairedUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,7 +164,7 @@ export default function AdminScreen() {
       <ReferenceBackdrop />
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, layout.contentStyle]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={referenceColors.primary} />}
       >
         <View style={styles.header}>
@@ -333,11 +335,16 @@ const styles = StyleSheet.create({
   label: {
     color: referenceColors.textSoft,
     fontSize: 13,
+    flex: 1,
+    minWidth: 0,
   },
   value: {
     color: referenceColors.text,
     fontSize: 13,
     fontWeight: "700",
+    flex: 1,
+    textAlign: "right",
+    flexShrink: 1,
   },
   statsGrid: {
     flexDirection: "row",
@@ -385,6 +392,7 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     flex: 1,
+    minWidth: 0,
   },
   userNameRow: {
     flexDirection: "row",
@@ -437,6 +445,7 @@ const styles = StyleSheet.create({
   },
   dangerCopy: {
     flex: 1,
+    minWidth: 0,
   },
   dangerText: {
     color: referenceColors.textSoft,

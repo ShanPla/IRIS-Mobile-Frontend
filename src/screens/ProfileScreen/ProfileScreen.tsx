@@ -27,6 +27,7 @@ import { useAuth } from "../../context/AuthContext";
 import { getDevices } from "../../lib/pi";
 import type { PiDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { useScreenLayout } from "../../theme/layout";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "Profile">;
 
@@ -39,6 +40,7 @@ function isPrimaryDevice(device: PiDevice, index: number) {
 export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { session, logout, changePassword } = useAuth();
+  const layout = useScreenLayout({ bottom: "stack" });
   const [devices, setDevices] = useState<PiDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -112,7 +114,7 @@ export default function ProfileScreen() {
           <ReferenceBackdrop />
           <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
@@ -282,6 +284,7 @@ const styles = StyleSheet.create({
   },
   profileInfo: {
     flex: 1,
+    minWidth: 0,
   },
   username: {
     color: referenceColors.text,
@@ -311,11 +314,13 @@ const styles = StyleSheet.create({
   },
   metricsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginTop: 18,
   },
   metricCard: {
     flex: 1,
+    minWidth: 88,
     alignItems: "center",
     borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.82)",

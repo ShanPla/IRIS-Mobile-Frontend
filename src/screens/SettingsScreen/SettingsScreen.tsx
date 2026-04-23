@@ -32,6 +32,7 @@ import { useAuth } from "../../context/AuthContext";
 import { piGet, piPut } from "../../lib/pi";
 import type { SystemConfig, SystemStatus } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { useScreenLayout } from "../../theme/layout";
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "Settings">,
@@ -41,6 +42,7 @@ type Nav = CompositeNavigationProp<
 export default function SettingsScreen() {
   const navigation = useNavigation<Nav>();
   const { logout, session, activeDevice } = useAuth();
+  const layout = useScreenLayout({ bottom: "tab" });
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,7 +123,7 @@ export default function SettingsScreen() {
           <ReferenceBackdrop />
           <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
@@ -420,6 +422,7 @@ const styles = StyleSheet.create({
   },
   profileText: {
     flex: 1,
+    minWidth: 0,
   },
   profileName: {
     color: referenceColors.text,
@@ -458,6 +461,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "wrap",
     gap: 12,
   },
   rowLast: {
@@ -468,9 +472,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    minWidth: 0,
   },
   settingCopy: {
     flex: 1,
+    minWidth: 0,
   },
   settingIcon: {
     width: 42,
@@ -501,11 +507,13 @@ const styles = StyleSheet.create({
     color: referenceColors.text,
     fontSize: 15,
     fontWeight: "800",
+    flexShrink: 1,
   },
   settingDesc: {
     color: referenceColors.textMuted,
     fontSize: 12,
     marginTop: 4,
+    flexShrink: 1,
   },
   numInput: {
     minWidth: 82,

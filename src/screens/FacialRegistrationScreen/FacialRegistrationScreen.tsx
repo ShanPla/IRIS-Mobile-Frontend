@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -23,10 +22,7 @@ import { useAuth } from "../../context/AuthContext";
 import { piDelete, piGet, piPostForm } from "../../lib/pi";
 import type { FaceProfile } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const OVAL_W = SCREEN_WIDTH * 0.55;
-const OVAL_H = SCREEN_WIDTH * 0.75;
+import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 
 const PHONE_ANGLES = [
   { key: "front", label: "Look Straight", instruction: "Face the camera directly" },
@@ -41,6 +37,7 @@ type Mode = "phone" | "upload";
 export default function FacialRegistrationScreen() {
   const navigation = useNavigation();
   const { session } = useAuth();
+  const layout = useScreenLayout({ bottom: "tab" });
   const [name, setName] = useState("");
   const [mode, setMode] = useState<Mode>("phone");
 
@@ -123,6 +120,12 @@ export default function FacialRegistrationScreen() {
     if (face.id > acc[face.name].latestId) acc[face.name].latestId = face.id;
     return acc;
   }, {});
+  const ovalWidth = Math.round(Math.min(260, Math.max(170, layout.width * 0.55)));
+  const ovalHeight = Math.round(Math.min(360, Math.max(230, layout.width * 0.75)));
+  const previewHeight = getResponsiveMediaHeight(layout.width, { min: 220, max: 300, ratio: 0.68 });
+  const completionThumbnailSize = Math.floor(
+    Math.max(72, Math.min(150, (layout.contentWidth - 20) / 3)),
+  );
 
   useEffect(() => {
     phoneStepRef.current = phoneStep;
@@ -330,10 +333,16 @@ export default function FacialRegistrationScreen() {
 
         <View style={styles.overlayContainer} pointerEvents="box-none">
           <View style={styles.overlayTop} />
-          <View style={styles.overlayMiddle}>
+          <View style={[styles.overlayMiddle, { height: ovalHeight }]}>
             <View style={styles.overlaySide} />
-            <View style={styles.ovalCutout}>
-              <View style={[styles.ovalBorder, countdown !== null && countdown <= 1 && styles.ovalBorderReady]} />
+            <View style={[styles.ovalCutout, { width: ovalWidth, height: ovalHeight }]}>
+              <View
+                style={[
+                  styles.ovalBorder,
+                  { width: ovalWidth, height: ovalHeight, borderRadius: ovalWidth / 2 },
+                  countdown !== null && countdown <= 1 && styles.ovalBorderReady,
+                ]}
+              />
             </View>
             <View style={styles.overlaySide} />
           </View>
@@ -342,7 +351,7 @@ export default function FacialRegistrationScreen() {
 
         {captureFlash ? <View style={styles.flashOverlay} /> : null}
 
-        <View style={styles.cameraTopBar}>
+        <View style={[styles.cameraTopBar, { top: layout.insets.top + 12 }]}>
           <TouchableOpacity onPress={cancelPhoneEnroll}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
@@ -350,7 +359,7 @@ export default function FacialRegistrationScreen() {
           <View style={{ width: 60 }} />
         </View>
 
-        <View style={styles.cameraProgressRow}>
+        <View style={[styles.cameraProgressRow, { top: layout.insets.top + 54 }]}>
           {PHONE_ANGLES.map((angle, index) => (
             <View
               key={angle.key}
@@ -376,7 +385,7 @@ export default function FacialRegistrationScreen() {
           </View>
         ) : null}
 
-        <View style={styles.cameraBottomBar}>
+        <View style={[styles.cameraBottomBar, { bottom: Math.max(layout.insets.bottom, 20) + 24 }]}>
           <Text style={styles.cameraAngleLabel}>{currentPrompt.label}</Text>
           <Text style={styles.cameraInstruction}>{currentPrompt.instruction}</Text>
           <Text style={styles.autoHint}>{countdown !== null ? "Hold still..." : "Position your face in the oval"}</Text>
@@ -408,7 +417,7 @@ export default function FacialRegistrationScreen() {
           <ReferenceBackdrop />
           <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
@@ -432,7 +441,10 @@ export default function FacialRegistrationScreen() {
                 <View style={styles.completionGrid}>
                   {phoneCaptured.map((photo) => (
                     <View key={photo.angle} style={styles.completionItem}>
-                      <Image source={{ uri: photo.uri }} style={styles.completionThumbnail} />
+                      <Image
+                        source={{ uri: photo.uri }}
+                        style={[styles.completionThumbnail, { width: completionThumbnailSize, height: completionThumbnailSize }]}
+                      />
                       <Text style={styles.completionAngle}>{photo.angle}</Text>
                     </View>
                   ))}
@@ -517,7 +529,7 @@ export default function FacialRegistrationScreen() {
                     </>
                   ) : (
                     <>
-                      {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" /> : null}
+                      {imageUri ? <Image source={{ uri: imageUri }} style={[styles.previewImage, { height: previewHeight }]} resizeMode="cover" /> : null}
 
                       <TouchableOpacity style={styles.secondaryButton} onPress={pickImage}>
                         <Text style={styles.secondaryButtonText}>{imageUri ? "Change Image" : "Select Image"}</Text>
@@ -675,6 +687,7 @@ const styles = StyleSheet.create({
   },
   summaryCopy: {
     flex: 1,
+    minWidth: 0,
   },
   summaryTitle: {
     color: referenceColors.text,
@@ -764,7 +777,6 @@ const styles = StyleSheet.create({
   },
   previewImage: {
     width: "100%",
-    height: 260,
     borderRadius: 20,
     marginBottom: 12,
   },
@@ -861,8 +873,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   completionThumbnail: {
-    width: (SCREEN_WIDTH - 88) / 3,
-    height: (SCREEN_WIDTH - 88) / 3,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: referenceColors.success,
@@ -903,22 +913,16 @@ const styles = StyleSheet.create({
   },
   overlayMiddle: {
     flexDirection: "row",
-    height: OVAL_H,
   },
   overlaySide: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",
   },
   ovalCutout: {
-    width: OVAL_W,
-    height: OVAL_H,
     justifyContent: "center",
     alignItems: "center",
   },
   ovalBorder: {
-    width: OVAL_W,
-    height: OVAL_H,
-    borderRadius: OVAL_W / 2,
     borderWidth: 3,
     borderColor: referenceColors.primary,
     borderStyle: "dashed",
@@ -934,7 +938,6 @@ const styles = StyleSheet.create({
   },
   cameraTopBar: {
     position: "absolute",
-    top: 60,
     left: 0,
     right: 0,
     flexDirection: "row",
@@ -954,7 +957,6 @@ const styles = StyleSheet.create({
   },
   cameraProgressRow: {
     position: "absolute",
-    top: 100,
     left: 0,
     right: 0,
     flexDirection: "row",
@@ -996,7 +998,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 48,
     alignItems: "center",
     paddingHorizontal: 20,
   },

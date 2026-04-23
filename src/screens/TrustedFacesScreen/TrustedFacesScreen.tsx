@@ -20,6 +20,7 @@ import { createTrustedUserInvite, piGet, piPut } from "../../lib/pi";
 import type { DeviceInviteResult } from "../../lib/pi";
 import type { InvitedUser, PermissionSet } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { useScreenLayout } from "../../theme/layout";
 
 const PERMISSION_LABELS: Array<{ key: keyof PermissionSet; label: string }> = [
   { key: "can_view_events", label: "View Events" },
@@ -30,6 +31,7 @@ const PERMISSION_LABELS: Array<{ key: keyof PermissionSet; label: string }> = [
 
 export default function TrustedFacesScreen() {
   const { session } = useAuth();
+  const layout = useScreenLayout({ bottom: "tab" });
   const [users, setUsers] = useState<InvitedUser[]>([]);
   const [selected, setSelected] = useState<InvitedUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -145,7 +147,7 @@ export default function TrustedFacesScreen() {
           <ReferenceBackdrop />
           <ScrollView
             style={styles.container}
-            contentContainerStyle={styles.content}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
@@ -295,7 +297,7 @@ const styles = StyleSheet.create({
     backgroundColor: referenceColors.background,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: 20,
     paddingTop: 56,
     paddingBottom: 118,
@@ -419,6 +421,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     fontWeight: "700",
+    flexShrink: 1,
   },
   generatedCodeHint: {
     color: referenceColors.textSoft,
@@ -505,6 +508,7 @@ const styles = StyleSheet.create({
   },
   userCopy: {
     flex: 1,
+    minWidth: 0,
   },
   userName: {
     color: referenceColors.text,
@@ -530,7 +534,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   permissionsCard: {
-    flex: 1,
     borderRadius: 24,
     backgroundColor: "rgba(255,255,255,0.82)",
     borderWidth: 1,
@@ -550,6 +553,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
   },
@@ -557,6 +561,8 @@ const styles = StyleSheet.create({
     color: referenceColors.text,
     fontSize: 14,
     fontWeight: "600",
+    flex: 1,
+    minWidth: 0,
   },
   saveButton: {
     minHeight: 54,

@@ -1,4 +1,4 @@
-import { View, Text, LogBox, StyleSheet } from "react-native";
+import { Platform, View, Text, LogBox, StyleSheet, useWindowDimensions } from "react-native";
 
 LogBox.ignoreLogs(["The action 'GO_BACK' was not handled"]);
 import { NavigationContainer } from "@react-navigation/native";
@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import * as NavigationBar from "expo-navigation-bar";
 import * as Notifications from "expo-notifications";
 import { Activity, Home, ScanFace, Settings, Users, Video } from "lucide-react-native";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import SetupScreen from "./src/screens/SetupScreen/SetupScreen";
 import LoginScreen from "./src/screens/LoginScreen/LoginScreen";
@@ -24,6 +25,7 @@ import AddCameraScreen from "./src/screens/AddCameraScreen/AddCameraScreen";
 import LiveFeedScreen from "./src/screens/LiveFeedScreen/LiveFeedScreen";
 import AdminScreen from "./src/screens/AdminScreen/AdminScreen";
 import { referenceColors } from "./src/theme/reference";
+import { getFloatingTabBarMetrics } from "./src/theme/layout";
 
 export type RootStackParamList = {
   Setup: undefined;
@@ -52,9 +54,14 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const tabBar = getFloatingTabBarMetrics(insets, width);
+  const showLabels = !tabBar.compact;
+
   const renderTabIcon = (Icon: typeof Home) => ({ color, focused }: { color: string; focused: boolean }) => (
-    <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
-      <Icon size={18} color={color} strokeWidth={2.2} />
+    <View style={[styles.tabIcon, tabBar.compact && styles.tabIconCompact, focused && styles.tabIconActive]}>
+      <Icon size={showLabels ? 18 : 20} color={color} strokeWidth={2.2} />
     </View>
   );
 
@@ -64,15 +71,15 @@ function MainTabs() {
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          left: 16,
-          right: 16,
-          bottom: 16,
-          height: 76,
-          paddingTop: 10,
-          paddingBottom: 10,
+          left: tabBar.side,
+          right: tabBar.side,
+          bottom: tabBar.bottom,
+          height: tabBar.height,
+          paddingTop: showLabels ? 10 : 8,
+          paddingBottom: Math.max(insets.bottom, 8),
           backgroundColor: "rgba(255,255,255,0.82)",
           borderTopWidth: 0,
-          borderRadius: 26,
+          borderRadius: tabBar.compact ? 22 : 26,
           borderWidth: 1,
           borderColor: "rgba(226,232,240,0.7)",
           elevation: 10,
@@ -88,7 +95,7 @@ function MainTabs() {
         tabBarActiveTintColor: referenceColors.primary,
         tabBarInactiveTintColor: referenceColors.textMuted,
         tabBarLabelStyle: { fontSize: 10, marginTop: 2, fontWeight: "600" },
-        tabBarShowLabel: true,
+        tabBarShowLabel: showLabels,
       }}
     >
       <Tab.Screen
@@ -129,9 +136,11 @@ function RootNavigator() {
   const { session, bootstrapping, hasPi } = useAuth();
 
   useEffect(() => {
-    void NavigationBar.setVisibilityAsync("hidden");
-    void NavigationBar.setBehaviorAsync("overlay-swipe");
-    void NavigationBar.setBackgroundColorAsync("#f8fafc");
+    if (Platform.OS === "android") {
+      void NavigationBar.setVisibilityAsync("hidden");
+      void NavigationBar.setBehaviorAsync("overlay-swipe");
+      void NavigationBar.setBackgroundColorAsync("#f8fafc");
+    }
 
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
@@ -179,9 +188,11 @@ function RootNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <RootNavigator />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -195,5 +206,10 @@ const styles = StyleSheet.create({
   },
   tabIconActive: {
     backgroundColor: "rgba(219,234,254,0.82)",
+  },
+  tabIconCompact: {
+    width: 38,
+    height: 36,
+    borderRadius: 12,
   },
 });
