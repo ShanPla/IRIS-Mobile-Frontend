@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
   Image,
   Modal,
@@ -365,7 +366,7 @@ export default function LiveFeedScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       <Modal
         visible={fullscreenOpen}

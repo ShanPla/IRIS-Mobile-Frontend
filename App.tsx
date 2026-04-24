@@ -1,4 +1,11 @@
-import { Platform, View, Text, LogBox, StyleSheet, useWindowDimensions } from "react-native";
+import {
+  Platform,
+  View,
+  Text,
+  LogBox,
+  StyleSheet,
+  useWindowDimensions,
+} from "react-native";
 
 LogBox.ignoreLogs(["The action 'GO_BACK' was not handled"]);
 import { NavigationContainer } from "@react-navigation/native";
@@ -8,8 +15,18 @@ import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import { useEffect } from "react";
 import * as NavigationBar from "expo-navigation-bar";
 import * as Notifications from "expo-notifications";
-import { Activity, Home, ScanFace, Settings, Shield, Users, Video } from "lucide-react-native";
-import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Activity,
+  Home,
+  ScanFace,
+  Settings,
+  Shield,
+  Video,
+} from "lucide-react-native";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import SetupScreen from "./src/screens/SetupScreen/SetupScreen";
 import LoginScreen from "./src/screens/LoginScreen/LoginScreen";
@@ -40,6 +57,7 @@ export type RootStackParamList = {
   LiveFeed: undefined;
   Profile: undefined;
   Admin: undefined;
+  Users: undefined;
 };
 
 export type MainTabParamList = {
@@ -48,7 +66,7 @@ export type MainTabParamList = {
   Live: undefined;
   Faces: undefined;
   Settings: undefined;
-  SharedUsers: undefined;
+  // SharedUsers removed — Users management is now accessed from Settings
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -59,7 +77,8 @@ function NoAccessScreen() {
     <View style={styles.emptyState}>
       <Text style={styles.emptyStateTitle}>No shared access yet</Text>
       <Text style={styles.emptyStateText}>
-        Ask the primary user to enable permissions for this device. The app will only show pages you are allowed to use.
+        Ask the primary user to enable permissions for this device. The app will
+        only show pages you are allowed to use.
       </Text>
     </View>
   );
@@ -72,20 +91,31 @@ function MainTabs() {
   const { width } = useWindowDimensions();
   const tabBar = getFloatingTabBarMetrics(insets, width);
   const showLabels = !tabBar.compact;
-  const initialRouteName: keyof MainTabParamList =
-    access.canOpenHome ? "Home"
-    : access.canOpenEvents ? "Events"
-    : access.canOpenLive ? "Live"
-    : access.canOpenFaces ? "Faces"
-    : access.canOpenSettings ? "Settings"
-    : access.canOpenSharedUsers ? "SharedUsers"
-    : "Home";
+  const initialRouteName: keyof MainTabParamList = access.canOpenHome
+    ? "Home"
+    : access.canOpenEvents
+      ? "Events"
+      : access.canOpenLive
+        ? "Live"
+        : access.canOpenFaces
+          ? "Faces"
+          : access.canOpenSettings
+            ? "Settings"
+            : "Home";
 
-  const renderTabIcon = (Icon: typeof Home) => ({ color, focused }: { color: string; focused: boolean }) => (
-    <View style={[styles.tabIcon, tabBar.compact && styles.tabIconCompact, focused && styles.tabIconActive]}>
-      <Icon size={showLabels ? 18 : 20} color={color} strokeWidth={2.2} />
-    </View>
-  );
+  const renderTabIcon =
+    (Icon: typeof Home) =>
+    ({ color, focused }: { color: string; focused: boolean }) => (
+      <View
+        style={[
+          styles.tabIcon,
+          tabBar.compact && styles.tabIconCompact,
+          focused && styles.tabIconActive,
+        ]}
+      >
+        <Icon size={showLabels ? 18 : 20} color={color} strokeWidth={2.2} />
+      </View>
+    );
 
   return (
     <Tab.Navigator
@@ -134,35 +164,40 @@ function MainTabs() {
             <Tab.Screen
               name="Events"
               component={LogsScreen}
-              options={{ tabBarLabel: "Events", tabBarIcon: renderTabIcon(Activity) }}
+              options={{
+                tabBarLabel: "Events",
+                tabBarIcon: renderTabIcon(Activity),
+              }}
             />
           ) : null}
           {access.canOpenLive ? (
             <Tab.Screen
               name="Live"
               component={LiveFeedScreen}
-              options={{ tabBarLabel: "Live", tabBarIcon: renderTabIcon(Video) }}
+              options={{
+                tabBarLabel: "Live",
+                tabBarIcon: renderTabIcon(Video),
+              }}
             />
           ) : null}
           {access.canOpenFaces ? (
             <Tab.Screen
               name="Faces"
               component={FacialRegistrationScreen}
-              options={{ tabBarLabel: "Faces", tabBarIcon: renderTabIcon(ScanFace) }}
+              options={{
+                tabBarLabel: "Faces",
+                tabBarIcon: renderTabIcon(ScanFace),
+              }}
             />
           ) : null}
           {access.canOpenSettings ? (
             <Tab.Screen
               name="Settings"
               component={SettingsScreen}
-              options={{ tabBarLabel: "Settings", tabBarIcon: renderTabIcon(Settings) }}
-            />
-          ) : null}
-          {access.canOpenSharedUsers ? (
-            <Tab.Screen
-              name="SharedUsers"
-              component={TrustedFacesScreen}
-              options={{ tabBarLabel: "Users", tabBarIcon: renderTabIcon(Users) }}
+              options={{
+                tabBarLabel: "Settings",
+                tabBarIcon: renderTabIcon(Settings),
+              }}
             />
           ) : null}
         </>
@@ -204,44 +239,101 @@ function RootNavigator() {
       }),
     });
   }, []);
-  
+
   if (bootstrapping) {
     return (
-      <View style={{ flex: 1, backgroundColor: referenceColors.background, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ color: referenceColors.primary, fontSize: 22, fontWeight: "800" }}>I.R.I.S</Text>
-        <Text style={{ color: referenceColors.textMuted, marginTop: 8 }}>Loading...</Text>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: referenceColors.background,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Text
+          style={{
+            color: referenceColors.primary,
+            fontSize: 22,
+            fontWeight: "800",
+          }}
+        >
+          I.R.I.S
+        </Text>
+        <Text style={{ color: referenceColors.textMuted, marginTop: 8 }}>
+          Loading...
+        </Text>
       </View>
     );
   }
 
   return (
     <NavigationContainer key={sessionKey}>
-      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={session ? "DeviceList" : "Login"}>
+      <Stack.Navigator
+        screenOptions={{ headerShown: false }}
+        initialRouteName={session ? "DeviceList" : "Login"}
+      >
         {!session ? (
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : (
           <>
             <Stack.Screen name="DeviceList" component={DeviceListScreen} />
             <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="Profile" component={ProfileScreen} options={{ animation: "slide_from_right" }} />
-            {access.canOpenEvents ? <Stack.Screen name="Logs" component={LogsScreen} /> : null}
+            <Stack.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{ animation: "slide_from_right" }}
+            />
             {access.canOpenEvents ? (
-              <Stack.Screen name="EventDetails" component={EventDetailsScreen} options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="Logs" component={LogsScreen} />
+            ) : null}
+            {access.canOpenEvents ? (
+              <Stack.Screen
+                name="EventDetails"
+                component={EventDetailsScreen}
+                options={{ animation: "slide_from_right" }}
+              />
             ) : null}
             {access.canOpenFaces ? (
-              <Stack.Screen name="FacialRegistration" component={FacialRegistrationScreen} options={{ animation: "slide_from_right" }} />
+              <Stack.Screen
+                name="FacialRegistration"
+                component={FacialRegistrationScreen}
+                options={{ animation: "slide_from_right" }}
+              />
             ) : null}
             {access.canAddDevice ? (
-              <Stack.Screen name="AddCamera" component={AddCameraScreen} options={{ animation: "slide_from_right" }} />
+              <Stack.Screen
+                name="AddCamera"
+                component={AddCameraScreen}
+                options={{ animation: "slide_from_right" }}
+              />
             ) : null}
             {access.canOpenLive ? (
-              <Stack.Screen name="LiveFeed" component={LiveFeedScreen} options={{ animation: "slide_from_right" }} />
+              <Stack.Screen
+                name="LiveFeed"
+                component={LiveFeedScreen}
+                options={{ animation: "slide_from_right" }}
+              />
             ) : null}
             {access.canAddDevice ? (
-              <Stack.Screen name="Setup" component={SetupScreen} options={{ animation: "slide_from_right" }} />
+              <Stack.Screen
+                name="Setup"
+                component={SetupScreen}
+                options={{ animation: "slide_from_right" }}
+              />
             ) : null}
             {access.canOpenAdmin ? (
-              <Stack.Screen name="Admin" component={AdminScreen} options={{ animation: "slide_from_right" }} />
+              <Stack.Screen
+                name="Admin"
+                component={AdminScreen}
+                options={{ animation: "slide_from_right" }}
+              />
+            ) : null}
+            {access.canOpenSharedUsers ? (
+              <Stack.Screen
+                name="Users"
+                component={TrustedFacesScreen}
+                options={{ animation: "slide_from_right" }}
+              />
             ) : null}
           </>
         )}

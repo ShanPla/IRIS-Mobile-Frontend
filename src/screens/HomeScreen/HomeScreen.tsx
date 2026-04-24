@@ -37,9 +37,25 @@ import { useAuth } from "../../context/AuthContext";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import { usePiHealth } from "../../hooks/usePiHealth";
 import { getSessionAccess } from "../../lib/access";
-import { buildPiUrl, ensureDeviceAuth, piGet, piPost, piPut } from "../../lib/pi";
-import type { EventsResponse, SecurityEvent, SecurityMode, SystemStatus } from "../../types/iris";
-import { buttonShadow, cardShadow, referenceColors, referenceLiveImage } from "../../theme/reference";
+import {
+  buildPiUrl,
+  ensureDeviceAuth,
+  piGet,
+  piPost,
+  piPut,
+} from "../../lib/pi";
+import type {
+  EventsResponse,
+  SecurityEvent,
+  SecurityMode,
+  SystemStatus,
+} from "../../types/iris";
+import {
+  buttonShadow,
+  cardShadow,
+  referenceColors,
+  referenceLiveImage,
+} from "../../theme/reference";
 import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -58,7 +74,9 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const lastNotifiedRef = useRef<number | null>(null);
-  const lastPushTokenRef = useRef<{ deviceId: string; token: string } | null>(null);
+  const lastPushTokenRef = useRef<{ deviceId: string; token: string } | null>(
+    null,
+  );
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -79,14 +97,20 @@ export default function HomeScreen() {
   }, []);
 
   const requestNotificationPermission = useCallback(async () => {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    const { status: existingStatus } =
+      await Notifications.getPermissionsAsync();
     if (existingStatus !== "granted") {
       await Notifications.requestPermissionsAsync();
     }
   }, []);
 
   const notifyEvent = useCallback(
-    async (_eventType: string, _mode: SecurityMode | null, message: string, vibrate: boolean) => {
+    async (
+      _eventType: string,
+      _mode: SecurityMode | null,
+      message: string,
+      vibrate: boolean,
+    ) => {
       await requestNotificationPermission();
       await Notifications.scheduleNotificationAsync({
         content: {
@@ -100,7 +124,7 @@ export default function HomeScreen() {
         Vibration.vibrate([0, 500, 200, 500, 200, 500]);
       }
     },
-    [requestNotificationPermission]
+    [requestNotificationPermission],
   );
 
   const registerPushToken = useCallback(async () => {
@@ -108,18 +132,30 @@ export default function HomeScreen() {
     if (!sessionPassword) return;
 
     try {
-      await ensureDeviceAuth(session.username, sessionPassword, session.username);
-      const { status: permissionStatus } = await Notifications.getPermissionsAsync();
+      await ensureDeviceAuth(
+        session.username,
+        sessionPassword,
+        session.username,
+      );
+      const { status: permissionStatus } =
+        await Notifications.getPermissionsAsync();
       if (permissionStatus !== "granted") {
         await Notifications.requestPermissionsAsync();
       }
       const deviceToken = await Notifications.getDevicePushTokenAsync();
       const token = deviceToken.data;
       if (!token) return;
-      if (lastPushTokenRef.current?.deviceId === activeDevice.deviceId && lastPushTokenRef.current?.token === token) {
+      if (
+        lastPushTokenRef.current?.deviceId === activeDevice.deviceId &&
+        lastPushTokenRef.current?.token === token
+      ) {
         return;
       }
-      await piPost("/api/auth/me/fcm-token", { fcm_token: token }, session.username);
+      await piPost(
+        "/api/auth/me/fcm-token",
+        { fcm_token: token },
+        session.username,
+      );
       lastPushTokenRef.current = { deviceId: activeDevice.deviceId, token };
     } catch {
       // Ignore push registration errors; local alerts still work.
@@ -141,22 +177,40 @@ export default function HomeScreen() {
         if (!d.event_type || !d.timestamp) return;
 
         const eventId = d.id ?? Date.now();
-        const currentMode = d.mode === "home" || d.mode === "away" ? (d.mode as SecurityMode) : status?.mode ?? null;
+        const currentMode =
+          d.mode === "home" || d.mode === "away"
+            ? (d.mode as SecurityMode)
+            : (status?.mode ?? null);
         const isIntruder = d.event_type === "unknown";
         const isUncertain = d.event_type === "possible_threat";
         const isAuthorized = d.event_type === "authorized";
 
         if (lastNotifiedRef.current !== eventId) {
           if (currentMode === "home" && (isIntruder || isUncertain)) {
-            void notifyEvent(d.event_type, currentMode, "Intruder or uncertain activity detected while in Home mode.", true);
+            void notifyEvent(
+              d.event_type,
+              currentMode,
+              "Intruder or uncertain activity detected while in Home mode.",
+              true,
+            );
             lastNotifiedRef.current = eventId;
           }
           if (currentMode === "away" && (isIntruder || isUncertain)) {
-            void notifyEvent(d.event_type, currentMode, "Intruder or uncertain activity detected while in Away mode.", true);
+            void notifyEvent(
+              d.event_type,
+              currentMode,
+              "Intruder or uncertain activity detected while in Away mode.",
+              true,
+            );
             lastNotifiedRef.current = eventId;
           }
           if (currentMode === "away" && isAuthorized) {
-            void notifyEvent(d.event_type, currentMode, "Authorized person detected while in Away mode.", false);
+            void notifyEvent(
+              d.event_type,
+              currentMode,
+              "Authorized person detected while in Away mode.",
+              false,
+            );
             lastNotifiedRef.current = eventId;
           }
         }
@@ -166,9 +220,12 @@ export default function HomeScreen() {
             "INTRUDER ALERT",
             "An unrecognized person was confirmed after monitoring. Check the live feed immediately.",
             [
-              { text: "View Live Feed", onPress: () => navigation.navigate("LiveFeed") },
+              {
+                text: "View Live Feed",
+                onPress: () => navigation.navigate("LiveFeed"),
+              },
               { text: "Dismiss", style: "cancel" },
-            ]
+            ],
           );
         }
 
@@ -192,23 +249,35 @@ export default function HomeScreen() {
       onModeChange: (msg: unknown) => {
         const d = msg as { mode?: string };
         if (d.mode === "home" || d.mode === "away") {
-          setStatus((prev) => (prev ? { ...prev, mode: d.mode as SecurityMode } : prev));
+          setStatus((prev) =>
+            prev ? { ...prev, mode: d.mode as SecurityMode } : prev,
+          );
         }
       },
       onAlarmChange: (msg: unknown) => {
         const d = msg as { active?: boolean };
         if (typeof d.active === "boolean") {
-          setStatus((prev) => (prev ? { ...prev, alarm_active: d.active ?? prev.alarm_active } : prev));
+          setStatus((prev) =>
+            prev
+              ? { ...prev, alarm_active: d.active ?? prev.alarm_active }
+              : prev,
+          );
         }
       },
       onThreatCleared: (msg: unknown) => {
         const d = msg as { id?: number };
         if (d.id) {
-          setRecentEvents((prev) => prev.map((event) => (event.id === d.id ? { ...event, event_type: "authorized" } : event)));
+          setRecentEvents((prev) =>
+            prev.map((event) =>
+              event.id === d.id
+                ? { ...event, event_type: "authorized" }
+                : event,
+            ),
+          );
         }
       },
     }),
-    [navigation, notifyEvent, status]
+    [navigation, notifyEvent, status],
   );
 
   useWebSocket(wsHandlers, session?.username);
@@ -224,7 +293,10 @@ export default function HomeScreen() {
       setStatus(statusData);
       setRecentEvents(eventsData.items);
 
-      const url = await buildPiUrl(`/api/camera/frame?v=${Date.now()}`, session?.username);
+      const url = await buildPiUrl(
+        `/api/camera/frame?v=${Date.now()}`,
+        session?.username,
+      );
       setFrameUri(url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data");
@@ -238,7 +310,7 @@ export default function HomeScreen() {
     useCallback(() => {
       void fetchData();
       void registerPushToken();
-    }, [fetchData, registerPushToken])
+    }, [fetchData, registerPushToken]),
   );
 
   const toggleMode = async () => {
@@ -278,10 +350,14 @@ export default function HomeScreen() {
     }
   };
 
-  const knownFaces = health?.known_faces ?? recentEvents.filter((event) => event.matched_name).length;
+  const knownFaces =
+    health?.known_faces ??
+    recentEvents.filter((event) => event.matched_name).length;
   const cameraReady = health?.camera_ready ?? Boolean(frameUri);
   const engineRunning = health?.engine_running ?? !error;
-  const highRiskEvents = recentEvents.filter((event) => event.event_type === "unknown" || event.alarm_triggered).length;
+  const highRiskEvents = recentEvents.filter(
+    (event) => event.event_type === "unknown" || event.alarm_triggered,
+  ).length;
   const metrics = [
     { label: "CPU", value: cameraReady ? "45%" : "--", icon: Cpu },
     { label: "RAM", value: engineRunning ? "62%" : "--", icon: Activity },
@@ -289,7 +365,11 @@ export default function HomeScreen() {
   ];
 
   const statusBorderColor = status?.alarm_active ? "#fecaca" : "#bbf7d0";
-  const liveImageHeight = getResponsiveMediaHeight(layout.width, { min: 180, max: 250, ratio: 0.56 });
+  const liveImageHeight = getResponsiveMediaHeight(layout.width, {
+    min: 180,
+    max: 250,
+    ratio: 0.56,
+  });
 
   if (loading) {
     return (
@@ -304,7 +384,10 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <ReferenceBackdrop />
       <Animated.ScrollView
-        style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        style={[
+          styles.container,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
         contentContainerStyle={[styles.content, layout.contentStyle]}
         refreshControl={
           <RefreshControl
@@ -320,12 +403,24 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.headerTitle}>I.R.I.S</Text>
-            <Text style={styles.headerSubtitle}>{activeDevice ? "Your property is protected" : "Connect a Pi to start monitoring"}</Text>
+            <Text style={styles.headerSubtitle}>
+              {activeDevice
+                ? "Your property is protected"
+                : "Connect a Pi to start monitoring"}
+            </Text>
           </View>
           {access.canAddDevice ? (
-            <TouchableOpacity style={styles.addButtonWrap} onPress={() => navigation.navigate("AddCamera")} activeOpacity={0.9}>
+            <TouchableOpacity
+              style={styles.addButtonWrap}
+              onPress={() => navigation.navigate("AddCamera")}
+              activeOpacity={0.9}
+            >
               <View style={styles.addButton}>
-                <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
+                <Plus
+                  size={18}
+                  color={referenceColors.primary}
+                  strokeWidth={2.6}
+                />
               </View>
             </TouchableOpacity>
           ) : null}
@@ -337,29 +432,58 @@ export default function HomeScreen() {
           style={[
             styles.statusCard,
             { borderColor: statusBorderColor },
-            status?.alarm_active ? styles.statusCardAlert : styles.statusCardSafe,
+            status?.alarm_active
+              ? styles.statusCardAlert
+              : styles.statusCardSafe,
           ]}
         >
           <View style={styles.statusHeader}>
             <View style={styles.statusLead}>
-              <View style={[styles.statusIconWrap, { borderColor: statusBorderColor }]}>
+              <View
+                style={[
+                  styles.statusIconWrap,
+                  { borderColor: statusBorderColor },
+                ]}
+              >
                 {status?.alarm_active ? (
-                  <AlertTriangle size={20} color={referenceColors.danger} strokeWidth={2.2} />
+                  <AlertTriangle
+                    size={20}
+                    color={referenceColors.danger}
+                    strokeWidth={2.2}
+                  />
                 ) : (
-                  <CheckCircle2 size={20} color={referenceColors.success} strokeWidth={2.2} />
+                  <CheckCircle2
+                    size={20}
+                    color={referenceColors.success}
+                    strokeWidth={2.2}
+                  />
                 )}
               </View>
               <View>
                 <Text style={styles.statusEyebrow}>System Status</Text>
-                <Text style={[styles.statusValue, status?.alarm_active && styles.statusValueAlert]}>
+                <Text
+                  style={[
+                    styles.statusValue,
+                    status?.alarm_active && styles.statusValueAlert,
+                  ]}
+                >
                   {status?.alarm_active ? "warning" : "online"}
                 </Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.detailsButton} onPress={() => navigation.navigate("LiveFeed")}>
-              <Text style={styles.detailsButtonText}>Details</Text>
-              <ChevronRight size={14} color={referenceColors.textSoft} strokeWidth={2.2} />
-            </TouchableOpacity>
+            {access.canOpenLive ? (
+              <TouchableOpacity
+                style={styles.detailsButton}
+                onPress={() => navigation.navigate("LiveFeed")}
+              >
+                <Text style={styles.detailsButtonText}>Details</Text>
+                <ChevronRight
+                  size={14}
+                  color={referenceColors.textSoft}
+                  strokeWidth={2.2}
+                />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           <View style={styles.metricRow}>
@@ -368,7 +492,11 @@ export default function HomeScreen() {
               return (
                 <View key={item.label} style={styles.metricCard}>
                   <View style={styles.metricHeader}>
-                    <Icon size={14} color={referenceColors.textMuted} strokeWidth={2.2} />
+                    <Icon
+                      size={14}
+                      color={referenceColors.textMuted}
+                      strokeWidth={2.2}
+                    />
                     <Text style={styles.metricLabel}>{item.label}</Text>
                   </View>
                   <Text style={styles.metricValue}>{item.value}</Text>
@@ -379,120 +507,252 @@ export default function HomeScreen() {
 
           <View style={styles.connectionRow}>
             <View style={[styles.connectionPill, styles.connectionSuccess]}>
-              <Wifi size={14} color={referenceColors.success} strokeWidth={2.2} />
-              <Text style={styles.connectionText}>{cameraReady ? "Connected" : "Disconnected"}</Text>
+              <Wifi
+                size={14}
+                color={referenceColors.success}
+                strokeWidth={2.2}
+              />
+              <Text style={styles.connectionText}>
+                {cameraReady ? "Connected" : "Disconnected"}
+              </Text>
             </View>
             <View style={[styles.connectionPill, styles.connectionInfo]}>
-              <Camera size={14} color={referenceColors.primary} strokeWidth={2.2} />
-              <Text style={styles.connectionText}>{cameraReady ? "Camera Active" : "Camera Offline"}</Text>
+              <Camera
+                size={14}
+                color={referenceColors.primary}
+                strokeWidth={2.2}
+              />
+              <Text style={styles.connectionText}>
+                {cameraReady ? "Camera Active" : "Camera Offline"}
+              </Text>
             </View>
             <View style={styles.connectionPill}>
-              <Bell size={14} color={referenceColors.textSoft} strokeWidth={2.2} />
-              <Text style={styles.connectionText}>{status?.alarm_active ? "Alarm Triggered" : "Alerts On"}</Text>
+              <Bell
+                size={14}
+                color={referenceColors.textSoft}
+                strokeWidth={2.2}
+              />
+              <Text style={styles.connectionText}>
+                {status?.alarm_active ? "Alarm Triggered" : "Alerts On"}
+              </Text>
             </View>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.liveCard} onPress={() => navigation.navigate("LiveFeed")} activeOpacity={0.92}>
-          <Image source={{ uri: frameUri || referenceLiveImage }} style={[styles.liveImage, { height: liveImageHeight }]} resizeMode="cover" />
+        {access.canOpenLive ? (
+          <TouchableOpacity
+            style={styles.liveCard}
+            onPress={() => navigation.navigate("LiveFeed")}
+            activeOpacity={0.92}
+          >
+            <Image
+              source={{ uri: frameUri || referenceLiveImage }}
+              style={[styles.liveImage, { height: liveImageHeight }]}
+              resizeMode="cover"
+            />
 
-          <View style={styles.liveBadge}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveBadgeText}>LIVE</Text>
-          </View>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>LIVE</Text>
+            </View>
 
-          <View style={styles.liveTime}>
-            <Text style={styles.liveTimeText}>{new Date().toLocaleTimeString()}</Text>
-          </View>
+            <View style={styles.liveTime}>
+              <Text style={styles.liveTimeText}>
+                {new Date().toLocaleTimeString()}
+              </Text>
+            </View>
 
-          <View style={styles.liveOverlay}>
-            <Video size={18} color="#ffffff" strokeWidth={2.2} />
-            <Text style={styles.liveOverlayTitle}>View Full Screen</Text>
-            <ChevronRight size={18} color="#ffffff" strokeWidth={2.2} />
-          </View>
-        </TouchableOpacity>
+            <View style={styles.liveOverlay}>
+              <Video size={18} color="#ffffff" strokeWidth={2.2} />
+              <Text style={styles.liveOverlayTitle}>View Full Screen</Text>
+              <ChevronRight size={18} color="#ffffff" strokeWidth={2.2} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
         <View style={styles.controlGrid}>
-          <TouchableOpacity style={styles.controlCard} onPress={() => void toggleMode()}>
+          <TouchableOpacity
+            style={styles.controlCard}
+            onPress={() => void toggleMode()}
+          >
             {status?.mode === "away" ? (
-              <ShieldAlert size={22} color={referenceColors.warning} strokeWidth={2.2} />
+              <ShieldAlert
+                size={22}
+                color={referenceColors.warning}
+                strokeWidth={2.2}
+              />
             ) : (
-              <Shield size={22} color={referenceColors.primary} strokeWidth={2.2} />
+              <Shield
+                size={22}
+                color={referenceColors.primary}
+                strokeWidth={2.2}
+              />
             )}
             <Text style={styles.controlLabel}>Mode</Text>
-            <Text style={styles.controlValue}>{status?.mode === "away" ? "Away" : "Home"}</Text>
+            <Text style={styles.controlValue}>
+              {status?.mode === "away" ? "Away" : "Home"}
+            </Text>
             <Text style={styles.controlAction}>Switch</Text>
           </TouchableOpacity>
 
-          <View style={[styles.controlCard, status?.alarm_active ? styles.controlAlert : styles.controlSafe]}>
-            <Shield size={22} color={status?.alarm_active ? referenceColors.danger : referenceColors.success} strokeWidth={2.2} />
+          <View
+            style={[
+              styles.controlCard,
+              status?.alarm_active ? styles.controlAlert : styles.controlSafe,
+            ]}
+          >
+            <Shield
+              size={22}
+              color={
+                status?.alarm_active
+                  ? referenceColors.danger
+                  : referenceColors.success
+              }
+              strokeWidth={2.2}
+            />
             <Text style={styles.controlLabel}>Security</Text>
-            <Text style={[styles.controlValue, status?.alarm_active && styles.controlValueAlert]}>
+            <Text
+              style={[
+                styles.controlValue,
+                status?.alarm_active && styles.controlValueAlert,
+              ]}
+            >
               {status?.alarm_active ? "Triggered" : "Armed"}
             </Text>
-            <Text style={styles.controlActionMuted}>{highRiskEvents} high risk</Text>
+            <Text style={styles.controlActionMuted}>
+              {highRiskEvents} high risk
+            </Text>
           </View>
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <TouchableOpacity style={styles.sectionLink} onPress={() => navigation.navigate("Logs")}>
-            <Text style={styles.sectionLinkText}>View All</Text>
-            <ChevronRight size={14} color={referenceColors.primary} strokeWidth={2.2} />
-          </TouchableOpacity>
-        </View>
-
-        {recentEvents.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No events yet</Text>
-          </View>
-        ) : (
-          recentEvents.map((event) => {
-            const badgeColor = getEventBadgeColor(event.event_type);
-            return (
-              <TouchableOpacity key={event.id} style={styles.eventCard} onPress={() => navigation.navigate("EventDetails", { event })}>
-                <View style={[styles.eventIconWrap, { backgroundColor: `${badgeColor}1A`, borderColor: `${badgeColor}4D` }]}>
-                  {event.event_type === "authorized" ? (
-                    <CheckCircle2 size={18} color={badgeColor} strokeWidth={2.2} />
-                  ) : (
-                    <AlertTriangle size={18} color={badgeColor} strokeWidth={2.2} />
-                  )}
-                </View>
-
-                <View style={styles.eventCopy}>
-                  <Text style={styles.eventName}>{event.matched_name ?? getEventLabel(event.event_type)}</Text>
-                  <Text style={styles.eventMeta}>{new Date(event.timestamp).toLocaleString()}</Text>
-                </View>
-
-                <View style={[styles.eventBadge, { backgroundColor: `${badgeColor}16`, borderColor: `${badgeColor}3A` }]}>
-                  <Text style={[styles.eventBadgeText, { color: badgeColor }]}>{getEventLabel(event.event_type)}</Text>
-                </View>
+        {access.canOpenEvents ? (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Recent Activity</Text>
+              <TouchableOpacity
+                style={styles.sectionLink}
+                onPress={() => navigation.navigate("Logs")}
+              >
+                <Text style={styles.sectionLinkText}>View All</Text>
+                <ChevronRight
+                  size={14}
+                  color={referenceColors.primary}
+                  strokeWidth={2.2}
+                />
               </TouchableOpacity>
-            );
-          })
-        )}
+            </View>
+
+            {recentEvents.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>No events yet</Text>
+              </View>
+            ) : (
+              recentEvents.map((event) => {
+                const badgeColor = getEventBadgeColor(event.event_type);
+                return (
+                  <TouchableOpacity
+                    key={event.id}
+                    style={styles.eventCard}
+                    onPress={() =>
+                      navigation.navigate("EventDetails", { event })
+                    }
+                  >
+                    <View
+                      style={[
+                        styles.eventIconWrap,
+                        {
+                          backgroundColor: `${badgeColor}1A`,
+                          borderColor: `${badgeColor}4D`,
+                        },
+                      ]}
+                    >
+                      {event.event_type === "authorized" ? (
+                        <CheckCircle2
+                          size={18}
+                          color={badgeColor}
+                          strokeWidth={2.2}
+                        />
+                      ) : (
+                        <AlertTriangle
+                          size={18}
+                          color={badgeColor}
+                          strokeWidth={2.2}
+                        />
+                      )}
+                    </View>
+
+                    <View style={styles.eventCopy}>
+                      <Text style={styles.eventName}>
+                        {event.matched_name ?? getEventLabel(event.event_type)}
+                      </Text>
+                      <Text style={styles.eventMeta}>
+                        {new Date(event.timestamp).toLocaleString()}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.eventBadge,
+                        {
+                          backgroundColor: `${badgeColor}16`,
+                          borderColor: `${badgeColor}3A`,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.eventBadgeText, { color: badgeColor }]}
+                      >
+                        {getEventLabel(event.event_type)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </>
+        ) : null}
 
         <View style={styles.quickGrid}>
           {access.canOpenFaces ? (
-            <TouchableOpacity style={styles.quickCard} onPress={() => navigation.navigate("FacialRegistration")}>
-              <ScanFace size={22} color={referenceColors.primary} strokeWidth={2.2} />
+            <TouchableOpacity
+              style={styles.quickCard}
+              onPress={() => navigation.navigate("FacialRegistration")}
+            >
+              <ScanFace
+                size={22}
+                color={referenceColors.primary}
+                strokeWidth={2.2}
+              />
               <Text style={styles.quickTitle}>Faces</Text>
               <Text style={styles.quickMeta}>{knownFaces}</Text>
             </TouchableOpacity>
           ) : null}
 
-          <TouchableOpacity style={styles.quickCard} onPress={() => navigation.navigate("Logs")}>
-            <Activity size={22} color={referenceColors.textSoft} strokeWidth={2.2} />
-            <Text style={styles.quickTitle}>Events</Text>
-            <Text style={styles.quickMeta}>{recentEvents.length}</Text>
-          </TouchableOpacity>
+          {access.canOpenEvents ? (
+            <TouchableOpacity
+              style={styles.quickCard}
+              onPress={() => navigation.navigate("Logs")}
+            >
+              <Activity
+                size={22}
+                color={referenceColors.textSoft}
+                strokeWidth={2.2}
+              />
+              <Text style={styles.quickTitle}>Events</Text>
+              <Text style={styles.quickMeta}>{recentEvents.length}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {access.canOpenSharedUsers ? (
             <TouchableOpacity
               style={styles.quickCard}
-              onPress={() => navigation.getParent()?.navigate("SharedUsers" as never)}
+              onPress={() => navigation.navigate("Users" as never)}
             >
-              <Users size={22} color={referenceColors.textSoft} strokeWidth={2.2} />
+              <Users
+                size={22}
+                color={referenceColors.textSoft}
+                strokeWidth={2.2}
+              />
               <Text style={styles.quickTitle}>Users</Text>
               <Text style={styles.quickMeta}>{knownFaces}</Text>
             </TouchableOpacity>

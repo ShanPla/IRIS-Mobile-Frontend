@@ -28,7 +28,9 @@ export interface SessionAccess {
   hasAnyMainAccess: boolean;
 }
 
-export function getEffectivePermissions(session: AuthSession | null | undefined): PermissionSet {
+export function getEffectivePermissions(
+  session: AuthSession | null | undefined,
+): PermissionSet {
   const role = session?.role ?? "";
   if (role === "admin" || role === "homeowner_primary") {
     return {
@@ -42,7 +44,9 @@ export function getEffectivePermissions(session: AuthSession | null | undefined)
   return session?.permissions ?? NO_PERMISSIONS;
 }
 
-export function getSessionAccess(session: AuthSession | null | undefined): SessionAccess {
+export function getSessionAccess(
+  session: AuthSession | null | undefined,
+): SessionAccess {
   const role = session?.role ?? "";
   const permissions = getEffectivePermissions(session);
   const isAdmin = role === "admin";
@@ -52,9 +56,14 @@ export function getSessionAccess(session: AuthSession | null | undefined): Sessi
   const canSilenceAlarm = permissions.can_silence_alarm;
   const canChangeMode = permissions.can_change_mode;
   const canManageProfiles = permissions.can_manage_profiles;
-  const canOpenSettings = isAdmin || isPrimary || canChangeMode || canSilenceAlarm;
-  const canOpenSharedUsers = isPrimary;
+  const canOpenSettings =
+    isAdmin || isPrimary || canChangeMode || canSilenceAlarm;
+  const canOpenSharedUsers = isAdmin || isPrimary;
   const canAddDevice = isAdmin || isPrimary;
+  // Home is accessible whenever the user has at least one usable feature
+  const hasAnyFeatureAccess =
+    canViewEvents || canManageProfiles || canChangeMode || canSilenceAlarm;
+  const canOpenHome = isAdmin || isPrimary || hasAnyFeatureAccess;
 
   return {
     isAdmin,
@@ -65,7 +74,7 @@ export function getSessionAccess(session: AuthSession | null | undefined): Sessi
     canSilenceAlarm,
     canChangeMode,
     canManageProfiles,
-    canOpenHome: canViewEvents,
+    canOpenHome,
     canOpenEvents: canViewEvents,
     canOpenLive: canViewEvents,
     canOpenFaces: canManageProfiles,
@@ -74,6 +83,6 @@ export function getSessionAccess(session: AuthSession | null | undefined): Sessi
     canAddDevice,
     canJoinSharedDevices: true,
     canOpenAdmin: isAdmin,
-    hasAnyMainAccess: canViewEvents || canManageProfiles || canOpenSettings || canOpenSharedUsers,
+    hasAnyMainAccess: canOpenHome,
   };
 }

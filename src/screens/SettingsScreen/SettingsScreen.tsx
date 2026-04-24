@@ -27,6 +27,7 @@ import {
   Shield,
   Siren,
   User,
+  Users,
 } from "lucide-react-native";
 import type { MainTabParamList, RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
@@ -35,7 +36,11 @@ import { getSessionAccess } from "../../lib/access";
 import { unpairCentralDevice } from "../../lib/backend";
 import { piGet, piPost, piPut, removeDevice } from "../../lib/pi";
 import type { SystemConfig, SystemStatus } from "../../types/iris";
-import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import {
+  buttonShadow,
+  cardShadow,
+  referenceColors,
+} from "../../theme/reference";
 import { useScreenLayout } from "../../theme/layout";
 
 type Nav = CompositeNavigationProp<
@@ -93,12 +98,18 @@ export default function SettingsScreen() {
         setConfig(configData);
         setStatus(statusData);
       } else {
-        const statusData = await piGet<SystemStatus>("/api/system/status", session?.username);
+        const statusData = await piGet<SystemStatus>(
+          "/api/system/status",
+          session?.username,
+        );
         setConfig(null);
         setStatus(statusData);
       }
     } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed to load settings");
+      Alert.alert(
+        "Error",
+        e instanceof Error ? e.message : "Failed to load settings",
+      );
     } finally {
       setLoading(false);
     }
@@ -108,10 +119,13 @@ export default function SettingsScreen() {
     useCallback(() => {
       setLoading(true);
       void fetchConfig();
-    }, [fetchConfig])
+    }, [fetchConfig]),
   );
 
-  const updateField = <K extends keyof SystemConfig>(key: K, value: SystemConfig[K]) => {
+  const updateField = <K extends keyof SystemConfig>(
+    key: K,
+    value: SystemConfig[K],
+  ) => {
     if (!config) return;
     setConfig({ ...config, [key]: value });
     setDirty(true);
@@ -132,22 +146,42 @@ export default function SettingsScreen() {
   };
 
   const handleModeChange = async (newMode: "home" | "away") => {
-    if (!status || status.mode === newMode || !(canViewFullSettings || access.canChangeMode)) return;
+    if (
+      !status ||
+      status.mode === newMode ||
+      !(canViewFullSettings || access.canChangeMode)
+    )
+      return;
     try {
       await piPut("/api/system/mode", { mode: newMode }, session?.username);
       setStatus({ ...status, mode: newMode });
     } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed to change mode");
+      Alert.alert(
+        "Error",
+        e instanceof Error ? e.message : "Failed to change mode",
+      );
     }
   };
 
   const handleSilenceAlarm = async () => {
-    if (!status || !status.alarm_active || !(canViewFullSettings || access.canSilenceAlarm)) return;
+    if (
+      !status ||
+      !status.alarm_active ||
+      !(canViewFullSettings || access.canSilenceAlarm)
+    )
+      return;
     try {
-      const nextStatus = await piPut<SystemStatus>("/api/system/alarm", { active: false }, session?.username);
+      const nextStatus = await piPut<SystemStatus>(
+        "/api/system/alarm",
+        { active: false },
+        session?.username,
+      );
       setStatus(nextStatus);
     } catch (e) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Failed to silence alarm");
+      Alert.alert(
+        "Error",
+        e instanceof Error ? e.message : "Failed to silence alarm",
+      );
     }
   };
 
@@ -157,8 +191,12 @@ export default function SettingsScreen() {
       "This will permanently delete this Pi's events and faces, reset its configuration, and unlink paired users. User accounts will not be deleted.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Reset Everything", style: "destructive", onPress: confirmReset },
-      ]
+        {
+          text: "Reset Everything",
+          style: "destructive",
+          onPress: confirmReset,
+        },
+      ],
     );
   };
 
@@ -168,8 +206,12 @@ export default function SettingsScreen() {
       "Events, faces, local pairing links, and system settings for this Pi will be reset.",
       [
         { text: "No, go back", style: "cancel" },
-        { text: "Yes, factory reset", style: "destructive", onPress: executeReset },
-      ]
+        {
+          text: "Yes, factory reset",
+          style: "destructive",
+          onPress: executeReset,
+        },
+      ],
     );
   };
 
@@ -179,9 +221,14 @@ export default function SettingsScreen() {
       const result = await piPost<ResetResult>("/api/admin/factory-reset");
       if (activeDevice) {
         if (session?.token) {
-          await unpairCentralDevice(activeDevice.deviceId, session.token).catch((error) => {
-            console.warn("[IRIS Mobile] Could not remove reset device from registry:", error);
-          });
+          await unpairCentralDevice(activeDevice.deviceId, session.token).catch(
+            (error) => {
+              console.warn(
+                "[IRIS Mobile] Could not remove reset device from registry:",
+                error,
+              );
+            },
+          );
         }
         await removeDevice(activeDevice.deviceId, session?.username);
         await refreshDevices();
@@ -192,7 +239,10 @@ export default function SettingsScreen() {
         [{ text: "OK", onPress: () => navigation.navigate("DeviceList") }],
       );
     } catch (e) {
-      Alert.alert("Reset Failed", e instanceof Error ? e.message : "Unknown error");
+      Alert.alert(
+        "Reset Failed",
+        e instanceof Error ? e.message : "Unknown error",
+      );
     } finally {
       setResetting(false);
     }
@@ -219,14 +269,19 @@ export default function SettingsScreen() {
       <View style={styles.container}>
         <ReferenceBackdrop />
         <Animated.ScrollView
-          style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+          style={[
+            styles.container,
+            { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+          ]}
           contentContainerStyle={[styles.content, layout.contentStyle]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
           <View style={styles.header}>
             <Text style={styles.pageTitle}>Settings</Text>
-            <Text style={styles.pageSubtitle}>Configure your security system</Text>
+            <Text style={styles.pageSubtitle}>
+              Configure your security system
+            </Text>
           </View>
 
           <View style={styles.profileCard}>
@@ -234,7 +289,9 @@ export default function SettingsScreen() {
               <Text style={styles.profileAvatarText}>{initials}</Text>
             </View>
             <View style={styles.profileText}>
-              <Text style={styles.profileName}>{session?.username ?? "I.R.I.S User"}</Text>
+              <Text style={styles.profileName}>
+                {session?.username ?? "I.R.I.S User"}
+              </Text>
               <Text style={styles.profileMeta}>
                 {role} | {activeDevice?.name ?? "Front Door Camera"}
               </Text>
@@ -249,17 +306,30 @@ export default function SettingsScreen() {
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconBlue]}>
-                        <Bell size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                        <Bell
+                          size={18}
+                          color={referenceColors.primary}
+                          strokeWidth={2.2}
+                        />
                       </View>
                       <View style={styles.settingCopy}>
-                        <Text style={styles.settingLabel}>Push Notifications</Text>
-                        <Text style={styles.settingDesc}>Receive alerts on your device</Text>
+                        <Text style={styles.settingLabel}>
+                          Push Notifications
+                        </Text>
+                        <Text style={styles.settingDesc}>
+                          Receive alerts on your device
+                        </Text>
                       </View>
                     </View>
                     <Switch
                       value={config!.notifications_enabled}
-                      onValueChange={(value) => updateField("notifications_enabled", value)}
-                      trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                      onValueChange={(value) =>
+                        updateField("notifications_enabled", value)
+                      }
+                      trackColor={{
+                        true: referenceColors.primary,
+                        false: "#cbd5e1",
+                      }}
                       thumbColor="#ffffff"
                     />
                   </View>
@@ -267,17 +337,30 @@ export default function SettingsScreen() {
                   <View style={[styles.settingRow, styles.rowLast]}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconOrange]}>
-                        <Camera size={18} color={referenceColors.warning} strokeWidth={2.2} />
+                        <Camera
+                          size={18}
+                          color={referenceColors.warning}
+                          strokeWidth={2.2}
+                        />
                       </View>
                       <View style={styles.settingCopy}>
-                        <Text style={styles.settingLabel}>Include Snapshot</Text>
-                        <Text style={styles.settingDesc}>Attach images to alarms</Text>
+                        <Text style={styles.settingLabel}>
+                          Include Snapshot
+                        </Text>
+                        <Text style={styles.settingDesc}>
+                          Attach images to alarms
+                        </Text>
                       </View>
                     </View>
                     <Switch
                       value={config!.include_snapshot_in_alerts}
-                      onValueChange={(value) => updateField("include_snapshot_in_alerts", value)}
-                      trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                      onValueChange={(value) =>
+                        updateField("include_snapshot_in_alerts", value)
+                      }
+                      trackColor={{
+                        true: referenceColors.primary,
+                        false: "#cbd5e1",
+                      }}
                       thumbColor="#ffffff"
                     />
                   </View>
@@ -290,10 +373,16 @@ export default function SettingsScreen() {
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconBlue]}>
-                        <Gauge size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                        <Gauge
+                          size={18}
+                          color={referenceColors.primary}
+                          strokeWidth={2.2}
+                        />
                       </View>
                       <View style={styles.settingCopy}>
-                        <Text style={styles.settingLabel}>Motion Detection</Text>
+                        <Text style={styles.settingLabel}>
+                          Motion Detection
+                        </Text>
                         <Text style={styles.settingDesc}>Area threshold</Text>
                       </View>
                     </View>
@@ -301,25 +390,38 @@ export default function SettingsScreen() {
                       style={styles.numInput}
                       keyboardType="numeric"
                       value={String(config!.motion_area_threshold)}
-                      onChangeText={(value) => updateField("motion_area_threshold", Number(value) || 0)}
+                      onChangeText={(value) =>
+                        updateField("motion_area_threshold", Number(value) || 0)
+                      }
                     />
                   </View>
 
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconSlate]}>
-                        <Shield size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
+                        <Shield
+                          size={18}
+                          color={referenceColors.textSoft}
+                          strokeWidth={2.2}
+                        />
                       </View>
                       <View style={styles.settingCopy}>
                         <Text style={styles.settingLabel}>Cooldown</Text>
-                        <Text style={styles.settingDesc}>Seconds between detections</Text>
+                        <Text style={styles.settingDesc}>
+                          Seconds between detections
+                        </Text>
                       </View>
                     </View>
                     <TextInput
                       style={styles.numInput}
                       keyboardType="numeric"
                       value={String(config!.detection_cooldown_seconds)}
-                      onChangeText={(value) => updateField("detection_cooldown_seconds", Number(value) || 0)}
+                      onChangeText={(value) =>
+                        updateField(
+                          "detection_cooldown_seconds",
+                          Number(value) || 0,
+                        )
+                      }
                     />
                   </View>
 
@@ -329,33 +431,53 @@ export default function SettingsScreen() {
                         <User size={18} color="#9333ea" strokeWidth={2.2} />
                       </View>
                       <View style={styles.settingCopy}>
-                        <Text style={styles.settingLabel}>Face Recognition Tolerance</Text>
-                        <Text style={styles.settingDesc}>Match accuracy threshold</Text>
+                        <Text style={styles.settingLabel}>
+                          Face Recognition Tolerance
+                        </Text>
+                        <Text style={styles.settingDesc}>
+                          Match accuracy threshold
+                        </Text>
                       </View>
                     </View>
                     <TextInput
                       style={styles.numInput}
                       keyboardType="decimal-pad"
                       value={String(config!.face_recognition_tolerance)}
-                      onChangeText={(value) => updateField("face_recognition_tolerance", parseFloat(value) || 0)}
+                      onChangeText={(value) =>
+                        updateField(
+                          "face_recognition_tolerance",
+                          parseFloat(value) || 0,
+                        )
+                      }
                     />
                   </View>
 
                   <View style={[styles.settingRow, styles.rowLast]}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconRed]}>
-                        <Siren size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                        <Siren
+                          size={18}
+                          color={referenceColors.danger}
+                          strokeWidth={2.2}
+                        />
                       </View>
                       <View style={styles.settingCopy}>
                         <Text style={styles.settingLabel}>Alarm Delay</Text>
-                        <Text style={styles.settingDesc}>Escalation delay in seconds</Text>
+                        <Text style={styles.settingDesc}>
+                          Escalation delay in seconds
+                        </Text>
                       </View>
                     </View>
                     <TextInput
                       style={styles.numInput}
                       keyboardType="numeric"
                       value={String(config!.alarm_escalation_delay)}
-                      onChangeText={(value) => updateField("alarm_escalation_delay", Number(value) || 0)}
+                      onChangeText={(value) =>
+                        updateField(
+                          "alarm_escalation_delay",
+                          Number(value) || 0,
+                        )
+                      }
                     />
                   </View>
                 </View>
@@ -368,41 +490,75 @@ export default function SettingsScreen() {
                 <View style={styles.settingRow}>
                   <View style={styles.settingInfo}>
                     <View style={[styles.settingIcon, styles.iconBlue]}>
-                      <Shield size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                      <Shield
+                        size={18}
+                        color={referenceColors.primary}
+                        strokeWidth={2.2}
+                      />
                     </View>
                     <View style={styles.settingCopy}>
                       <Text style={styles.settingLabel}>Current Mode</Text>
                       <Text style={styles.settingDesc}>
-                        {status?.mode === "home" ? "Home mode logs silently" : "Away mode can trigger alarms"}
+                        {status?.mode === "home"
+                          ? "Home mode logs silently"
+                          : "Away mode can trigger alarms"}
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.settingValue}>{status?.mode === "away" ? "Away" : "Home"}</Text>
+                  <Text style={styles.settingValue}>
+                    {status?.mode === "away" ? "Away" : "Home"}
+                  </Text>
                 </View>
 
                 {access.canChangeMode ? (
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconSlate]}>
-                        <Gauge size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
+                        <Gauge
+                          size={18}
+                          color={referenceColors.textSoft}
+                          strokeWidth={2.2}
+                        />
                       </View>
                       <View style={styles.settingCopy}>
                         <Text style={styles.settingLabel}>Security Mode</Text>
-                        <Text style={styles.settingDesc}>Switch between Home and Away</Text>
+                        <Text style={styles.settingDesc}>
+                          Switch between Home and Away
+                        </Text>
                       </View>
                     </View>
                     <View style={styles.modeToggle}>
                       <TouchableOpacity
-                        style={[styles.modeButton, status?.mode === "home" && styles.modeButtonActive]}
+                        style={[
+                          styles.modeButton,
+                          status?.mode === "home" && styles.modeButtonActive,
+                        ]}
                         onPress={() => void handleModeChange("home")}
                       >
-                        <Text style={[styles.modeText, status?.mode === "home" && styles.modeTextActive]}>Home</Text>
+                        <Text
+                          style={[
+                            styles.modeText,
+                            status?.mode === "home" && styles.modeTextActive,
+                          ]}
+                        >
+                          Home
+                        </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[styles.modeButton, status?.mode === "away" && styles.modeButtonActive]}
+                        style={[
+                          styles.modeButton,
+                          status?.mode === "away" && styles.modeButtonActive,
+                        ]}
                         onPress={() => void handleModeChange("away")}
                       >
-                        <Text style={[styles.modeText, status?.mode === "away" && styles.modeTextActive]}>Away</Text>
+                        <Text
+                          style={[
+                            styles.modeText,
+                            status?.mode === "away" && styles.modeTextActive,
+                          ]}
+                        >
+                          Away
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -412,19 +568,26 @@ export default function SettingsScreen() {
                   <View style={[styles.settingRow, styles.rowLast]}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconRed]}>
-                        <Siren size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                        <Siren
+                          size={18}
+                          color={referenceColors.danger}
+                          strokeWidth={2.2}
+                        />
                       </View>
                       <View style={styles.settingCopy}>
                         <Text style={styles.settingLabel}>Alarm Control</Text>
                         <Text style={styles.settingDesc}>
-                          {status?.alarm_active ? "The alarm is active on this device." : "The alarm is currently silent."}
+                          {status?.alarm_active
+                            ? "The alarm is active on this device."
+                            : "The alarm is currently silent."}
                         </Text>
                       </View>
                     </View>
                     <TouchableOpacity
                       style={[
                         styles.inlineActionButton,
-                        !status?.alarm_active && styles.inlineActionButtonDisabled,
+                        !status?.alarm_active &&
+                          styles.inlineActionButtonDisabled,
                       ]}
                       onPress={() => void handleSilenceAlarm()}
                       disabled={!status?.alarm_active}
@@ -436,11 +599,20 @@ export default function SettingsScreen() {
                   <View style={[styles.settingRow, styles.rowLast]}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconGreen]}>
-                        <Shield size={18} color={referenceColors.success} strokeWidth={2.2} />
+                        <Shield
+                          size={18}
+                          color={referenceColors.success}
+                          strokeWidth={2.2}
+                        />
                       </View>
                       <View style={styles.settingCopy}>
-                        <Text style={styles.settingLabel}>Shared Access Scope</Text>
-                        <Text style={styles.settingDesc}>You can only use the controls granted by the primary user.</Text>
+                        <Text style={styles.settingLabel}>
+                          Shared Access Scope
+                        </Text>
+                        <Text style={styles.settingDesc}>
+                          You can only use the controls granted by the primary
+                          user.
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -456,27 +628,53 @@ export default function SettingsScreen() {
                 <View style={styles.settingRow}>
                   <View style={styles.settingInfo}>
                     <View style={[styles.settingIcon, styles.iconSlate]}>
-                      <Shield size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
+                      <Shield
+                        size={18}
+                        color={referenceColors.textSoft}
+                        strokeWidth={2.2}
+                      />
                     </View>
                     <View style={styles.settingCopy}>
                       <Text style={styles.settingLabel}>Security Mode</Text>
                       <Text style={styles.settingDesc}>
-                        {status?.mode === "home" ? "Home mode logs silently" : "Away mode triggers alarms"}
+                        {status?.mode === "home"
+                          ? "Home mode logs silently"
+                          : "Away mode triggers alarms"}
                       </Text>
                     </View>
                   </View>
                   <View style={styles.modeToggle}>
                     <TouchableOpacity
-                      style={[styles.modeButton, status?.mode === "home" && styles.modeButtonActive]}
+                      style={[
+                        styles.modeButton,
+                        status?.mode === "home" && styles.modeButtonActive,
+                      ]}
                       onPress={() => void handleModeChange("home")}
                     >
-                      <Text style={[styles.modeText, status?.mode === "home" && styles.modeTextActive]}>Home</Text>
+                      <Text
+                        style={[
+                          styles.modeText,
+                          status?.mode === "home" && styles.modeTextActive,
+                        ]}
+                      >
+                        Home
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.modeButton, status?.mode === "away" && styles.modeButtonActive]}
+                      style={[
+                        styles.modeButton,
+                        status?.mode === "away" && styles.modeButtonActive,
+                      ]}
                       onPress={() => void handleModeChange("away")}
                     >
-                      <Text style={[styles.modeText, status?.mode === "away" && styles.modeTextActive]}>Away</Text>
+                      <Text
+                        style={[
+                          styles.modeText,
+                          status?.mode === "away" && styles.modeTextActive,
+                        ]}
+                      >
+                        Away
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -484,7 +682,11 @@ export default function SettingsScreen() {
                 <View style={[styles.settingRow, styles.rowLast]}>
                   <View style={styles.settingInfo}>
                     <View style={[styles.settingIcon, styles.iconGreen]}>
-                      <Siren size={18} color={referenceColors.success} strokeWidth={2.2} />
+                      <Siren
+                        size={18}
+                        color={referenceColors.success}
+                        strokeWidth={2.2}
+                      />
                     </View>
                     <View style={styles.settingCopy}>
                       <Text style={styles.settingLabel}>Buzzer Enabled</Text>
@@ -493,8 +695,13 @@ export default function SettingsScreen() {
                   </View>
                   <Switch
                     value={config!.buzzer_enabled}
-                    onValueChange={(value) => updateField("buzzer_enabled", value)}
-                    trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                    onValueChange={(value) =>
+                      updateField("buzzer_enabled", value)
+                    }
+                    trackColor={{
+                      true: referenceColors.primary,
+                      false: "#cbd5e1",
+                    }}
                     thumbColor="#ffffff"
                   />
                 </View>
@@ -508,26 +715,69 @@ export default function SettingsScreen() {
               onPress={() => void handleSave()}
               disabled={saving}
             >
-              {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveText}>Save Changes</Text>}
+              {saving ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.saveText}>Save Changes</Text>
+              )}
             </TouchableOpacity>
           ) : null}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account</Text>
             <View style={styles.groupCard}>
-              <TouchableOpacity style={[styles.settingRow, styles.rowLast]} onPress={logout}>
+              <TouchableOpacity
+                style={[styles.settingRow, styles.rowLast]}
+                onPress={logout}
+              >
                 <View style={styles.settingInfo}>
                   <View style={[styles.settingIcon, styles.iconRed]}>
-                    <LogOut size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                    <LogOut
+                      size={18}
+                      color={referenceColors.danger}
+                      strokeWidth={2.2}
+                    />
                   </View>
                   <View style={styles.settingCopy}>
                     <Text style={styles.logoutLabel}>Log Out</Text>
-                    <Text style={styles.settingDesc}>Sign out of your account</Text>
+                    <Text style={styles.settingDesc}>
+                      Sign out of your account
+                    </Text>
                   </View>
                 </View>
               </TouchableOpacity>
             </View>
           </View>
+
+          {access.canOpenSharedUsers ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Users & Sharing</Text>
+              <View style={styles.groupCard}>
+                <TouchableOpacity
+                  style={[styles.settingRow, styles.rowLast]}
+                  onPress={() => navigation.navigate("Users")}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.settingInfo}>
+                    <View style={[styles.settingIcon, styles.iconPurple]}>
+                      <Users size={18} color="#9333ea" strokeWidth={2.2} />
+                    </View>
+                    <View style={styles.settingCopy}>
+                      <Text style={styles.settingLabel}>Manage Users</Text>
+                      <Text style={styles.settingDesc}>
+                        Invite users and manage shared access
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight
+                    size={18}
+                    color={referenceColors.textMuted}
+                    strokeWidth={2.2}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
 
           {canViewFullSettings ? (
             <View style={styles.section}>
@@ -541,14 +791,24 @@ export default function SettingsScreen() {
                   {resetting ? (
                     <ActivityIndicator color={referenceColors.danger} />
                   ) : (
-                    <AlertTriangle size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                    <AlertTriangle
+                      size={18}
+                      color={referenceColors.danger}
+                      strokeWidth={2.2}
+                    />
                   )}
                 </View>
                 <View style={styles.settingCopy}>
                   <Text style={styles.dangerTitle}>Factory Reset</Text>
-                  <Text style={styles.settingDesc}>Permanently erase this device and unlink users</Text>
+                  <Text style={styles.settingDesc}>
+                    Permanently erase this device and unlink users
+                  </Text>
                 </View>
-                <ChevronRight size={16} color={referenceColors.danger} strokeWidth={2.2} />
+                <ChevronRight
+                  size={16}
+                  color={referenceColors.danger}
+                  strokeWidth={2.2}
+                />
               </TouchableOpacity>
             </View>
           ) : null}
