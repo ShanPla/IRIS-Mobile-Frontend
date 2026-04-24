@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,6 +18,7 @@ import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
+  AlertTriangle,
   Bell,
   Camera,
   ChevronRight,
@@ -30,7 +32,8 @@ import type { MainTabParamList, RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { getSessionAccess } from "../../lib/access";
-import { piGet, piPut } from "../../lib/pi";
+import { unpairCentralDevice } from "../../lib/backend";
+import { piGet, piPost, piPut, removeDevice } from "../../lib/pi";
 import type { SystemConfig, SystemStatus } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 import { useScreenLayout } from "../../theme/layout";
@@ -40,17 +43,45 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
+interface ResetResult {
+  events_deleted: number;
+  faces_deleted: number;
+  users_deleted: number;
+  pairings_deleted?: number;
+  snapshots_cleared: boolean;
+  config_reset: boolean;
+}
+
 export default function SettingsScreen() {
   const navigation = useNavigation<Nav>();
-  const { logout, session, activeDevice } = useAuth();
+  const { logout, session, activeDevice, refreshDevices } = useAuth();
   const access = getSessionAccess(session);
   const layout = useScreenLayout({ bottom: "tab" });
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [dirty, setDirty] = useState(false);
   const canViewFullSettings = access.isAdmin || access.isPrimary;
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -120,6 +151,53 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleFactoryReset = () => {
+    Alert.alert(
+      "Factory Reset",
+      "This will permanently delete this Pi's events and faces, reset its configuration, and unlink paired users. User accounts will not be deleted.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Reset Everything", style: "destructive", onPress: confirmReset },
+      ]
+    );
+  };
+
+  const confirmReset = () => {
+    Alert.alert(
+      "Are you absolutely sure?",
+      "Events, faces, local pairing links, and system settings for this Pi will be reset.",
+      [
+        { text: "No, go back", style: "cancel" },
+        { text: "Yes, factory reset", style: "destructive", onPress: executeReset },
+      ]
+    );
+  };
+
+  const executeReset = async () => {
+    setResetting(true);
+    try {
+      const result = await piPost<ResetResult>("/api/admin/factory-reset");
+      if (activeDevice) {
+        if (session?.token) {
+          await unpairCentralDevice(activeDevice.deviceId, session.token).catch((error) => {
+            console.warn("[IRIS Mobile] Could not remove reset device from registry:", error);
+          });
+        }
+        await removeDevice(activeDevice.deviceId, session?.username);
+        await refreshDevices();
+      }
+      Alert.alert(
+        "Factory Reset Complete",
+        `Cleared ${result.events_deleted} events and ${result.faces_deleted} faces, then unlinked ${result.pairings_deleted ?? 0} user pairing(s). The reset device was removed from this phone. Add it again from Setup when you want to pair it fresh.`,
+        [{ text: "OK", onPress: () => navigation.navigate("DeviceList") }],
+      );
+    } catch (e) {
+      Alert.alert("Reset Failed", e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (loading || (canViewFullSettings && !config)) {
     return (
       <View style={styles.centered}>
@@ -138,253 +216,179 @@ export default function SettingsScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
     >
-        <View style={styles.container}>
-          <ReferenceBackdrop />
-          <ScrollView
-            style={styles.container}
-            contentContainerStyle={[styles.content, layout.contentStyle]}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-          >
-            <View style={styles.header}>
-              <Text style={styles.pageTitle}>Settings</Text>
-              <Text style={styles.pageSubtitle}>Configure your security system</Text>
+      <View style={styles.container}>
+        <ReferenceBackdrop />
+        <Animated.ScrollView
+          style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+          contentContainerStyle={[styles.content, layout.contentStyle]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          <View style={styles.header}>
+            <Text style={styles.pageTitle}>Settings</Text>
+            <Text style={styles.pageSubtitle}>Configure your security system</Text>
+          </View>
+
+          <View style={styles.profileCard}>
+            <View style={styles.profileAvatar}>
+              <Text style={styles.profileAvatarText}>{initials}</Text>
             </View>
-
-            <View style={styles.profileCard}>
-              <View style={styles.profileAvatar}>
-                <Text style={styles.profileAvatarText}>{initials}</Text>
-              </View>
-              <View style={styles.profileText}>
-                <Text style={styles.profileName}>{session?.username ?? "I.R.I.S User"}</Text>
-                <Text style={styles.profileMeta}>
-                  {role} | {activeDevice?.name ?? "Front Door Camera"}
-                </Text>
-              </View>
+            <View style={styles.profileText}>
+              <Text style={styles.profileName}>{session?.username ?? "I.R.I.S User"}</Text>
+              <Text style={styles.profileMeta}>
+                {role} | {activeDevice?.name ?? "Front Door Camera"}
+              </Text>
             </View>
+          </View>
 
-            {canViewFullSettings ? (
-              <>
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Notifications</Text>
-                  <View style={styles.groupCard}>
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconBlue]}>
-                          <Bell size={18} color={referenceColors.primary} strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Push Notifications</Text>
-                          <Text style={styles.settingDesc}>Receive alerts on your device</Text>
-                        </View>
-                      </View>
-                      <Switch
-                        value={config!.notifications_enabled}
-                        onValueChange={(value) => updateField("notifications_enabled", value)}
-                        trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-                        thumbColor="#ffffff"
-                      />
-                    </View>
-
-                    <View style={[styles.settingRow, styles.rowLast]}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconOrange]}>
-                          <Camera size={18} color={referenceColors.warning} strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Include Snapshot</Text>
-                          <Text style={styles.settingDesc}>Attach images to alarms</Text>
-                        </View>
-                      </View>
-                      <Switch
-                        value={config!.include_snapshot_in_alerts}
-                        onValueChange={(value) => updateField("include_snapshot_in_alerts", value)}
-                        trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-                        thumbColor="#ffffff"
-                      />
-                    </View>
-                  </View>
-                </View>
-
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Detection</Text>
-                  <View style={styles.groupCard}>
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconBlue]}>
-                          <Gauge size={18} color={referenceColors.primary} strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Motion Detection</Text>
-                          <Text style={styles.settingDesc}>Area threshold</Text>
-                        </View>
-                      </View>
-                      <TextInput
-                        style={styles.numInput}
-                        keyboardType="numeric"
-                        value={String(config!.motion_area_threshold)}
-                        onChangeText={(value) => updateField("motion_area_threshold", Number(value) || 0)}
-                      />
-                    </View>
-
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconSlate]}>
-                          <Shield size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Cooldown</Text>
-                          <Text style={styles.settingDesc}>Seconds between detections</Text>
-                        </View>
-                      </View>
-                      <TextInput
-                        style={styles.numInput}
-                        keyboardType="numeric"
-                        value={String(config!.detection_cooldown_seconds)}
-                        onChangeText={(value) => updateField("detection_cooldown_seconds", Number(value) || 0)}
-                      />
-                    </View>
-
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconPurple]}>
-                          <User size={18} color="#9333ea" strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Face Recognition Tolerance</Text>
-                          <Text style={styles.settingDesc}>Match accuracy threshold</Text>
-                        </View>
-                      </View>
-                      <TextInput
-                        style={styles.numInput}
-                        keyboardType="decimal-pad"
-                        value={String(config!.face_recognition_tolerance)}
-                        onChangeText={(value) => updateField("face_recognition_tolerance", parseFloat(value) || 0)}
-                      />
-                    </View>
-
-                    <View style={[styles.settingRow, styles.rowLast]}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconRed]}>
-                          <Siren size={18} color={referenceColors.danger} strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Alarm Delay</Text>
-                          <Text style={styles.settingDesc}>Escalation delay in seconds</Text>
-                        </View>
-                      </View>
-                      <TextInput
-                        style={styles.numInput}
-                        keyboardType="numeric"
-                        value={String(config!.alarm_escalation_delay)}
-                        onChangeText={(value) => updateField("alarm_escalation_delay", Number(value) || 0)}
-                      />
-                    </View>
-                  </View>
-                </View>
-              </>
-            ) : (
+          {canViewFullSettings ? (
+            <>
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Shared Access</Text>
+                <Text style={styles.sectionTitle}>Notifications</Text>
                 <View style={styles.groupCard}>
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconBlue]}>
-                        <Shield size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                        <Bell size={18} color={referenceColors.primary} strokeWidth={2.2} />
                       </View>
                       <View style={styles.settingCopy}>
-                        <Text style={styles.settingLabel}>Current Mode</Text>
-                        <Text style={styles.settingDesc}>
-                          {status?.mode === "home" ? "Home mode logs silently" : "Away mode can trigger alarms"}
-                        </Text>
+                        <Text style={styles.settingLabel}>Push Notifications</Text>
+                        <Text style={styles.settingDesc}>Receive alerts on your device</Text>
                       </View>
                     </View>
-                    <Text style={styles.settingValue}>{status?.mode === "away" ? "Away" : "Home"}</Text>
+                    <Switch
+                      value={config!.notifications_enabled}
+                      onValueChange={(value) => updateField("notifications_enabled", value)}
+                      trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                      thumbColor="#ffffff"
+                    />
                   </View>
 
-                  {access.canChangeMode ? (
-                    <View style={styles.settingRow}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconSlate]}>
-                          <Gauge size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Security Mode</Text>
-                          <Text style={styles.settingDesc}>Switch between Home and Away</Text>
-                        </View>
+                  <View style={[styles.settingRow, styles.rowLast]}>
+                    <View style={styles.settingInfo}>
+                      <View style={[styles.settingIcon, styles.iconOrange]}>
+                        <Camera size={18} color={referenceColors.warning} strokeWidth={2.2} />
                       </View>
-                      <View style={styles.modeToggle}>
-                        <TouchableOpacity
-                          style={[styles.modeButton, status?.mode === "home" && styles.modeButtonActive]}
-                          onPress={() => void handleModeChange("home")}
-                        >
-                          <Text style={[styles.modeText, status?.mode === "home" && styles.modeTextActive]}>Home</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.modeButton, status?.mode === "away" && styles.modeButtonActive]}
-                          onPress={() => void handleModeChange("away")}
-                        >
-                          <Text style={[styles.modeText, status?.mode === "away" && styles.modeTextActive]}>Away</Text>
-                        </TouchableOpacity>
+                      <View style={styles.settingCopy}>
+                        <Text style={styles.settingLabel}>Include Snapshot</Text>
+                        <Text style={styles.settingDesc}>Attach images to alarms</Text>
                       </View>
                     </View>
-                  ) : null}
-
-                  {access.canSilenceAlarm ? (
-                    <View style={[styles.settingRow, styles.rowLast]}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconRed]}>
-                          <Siren size={18} color={referenceColors.danger} strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Alarm Control</Text>
-                          <Text style={styles.settingDesc}>
-                            {status?.alarm_active ? "The alarm is active on this device." : "The alarm is currently silent."}
-                          </Text>
-                        </View>
-                      </View>
-                      <TouchableOpacity
-                        style={[
-                          styles.inlineActionButton,
-                          !status?.alarm_active && styles.inlineActionButtonDisabled,
-                        ]}
-                        onPress={() => void handleSilenceAlarm()}
-                        disabled={!status?.alarm_active}
-                      >
-                        <Text style={styles.inlineActionButtonText}>Silence</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={[styles.settingRow, styles.rowLast]}>
-                      <View style={styles.settingInfo}>
-                        <View style={[styles.settingIcon, styles.iconGreen]}>
-                          <Shield size={18} color={referenceColors.success} strokeWidth={2.2} />
-                        </View>
-                        <View style={styles.settingCopy}>
-                          <Text style={styles.settingLabel}>Shared Access Scope</Text>
-                          <Text style={styles.settingDesc}>You can only use the controls granted by the primary user.</Text>
-                        </View>
-                      </View>
-                    </View>
-                  )}
+                    <Switch
+                      value={config!.include_snapshot_in_alerts}
+                      onValueChange={(value) => updateField("include_snapshot_in_alerts", value)}
+                      trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                      thumbColor="#ffffff"
+                    />
+                  </View>
                 </View>
               </View>
-            )}
 
-            {canViewFullSettings ? (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>System</Text>
+                <Text style={styles.sectionTitle}>Detection</Text>
                 <View style={styles.groupCard}>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <View style={[styles.settingIcon, styles.iconBlue]}>
+                        <Gauge size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.settingCopy}>
+                        <Text style={styles.settingLabel}>Motion Detection</Text>
+                        <Text style={styles.settingDesc}>Area threshold</Text>
+                      </View>
+                    </View>
+                    <TextInput
+                      style={styles.numInput}
+                      keyboardType="numeric"
+                      value={String(config!.motion_area_threshold)}
+                      onChangeText={(value) => updateField("motion_area_threshold", Number(value) || 0)}
+                    />
+                  </View>
+
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconSlate]}>
                         <Shield size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
                       </View>
                       <View style={styles.settingCopy}>
+                        <Text style={styles.settingLabel}>Cooldown</Text>
+                        <Text style={styles.settingDesc}>Seconds between detections</Text>
+                      </View>
+                    </View>
+                    <TextInput
+                      style={styles.numInput}
+                      keyboardType="numeric"
+                      value={String(config!.detection_cooldown_seconds)}
+                      onChangeText={(value) => updateField("detection_cooldown_seconds", Number(value) || 0)}
+                    />
+                  </View>
+
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <View style={[styles.settingIcon, styles.iconPurple]}>
+                        <User size={18} color="#9333ea" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.settingCopy}>
+                        <Text style={styles.settingLabel}>Face Recognition Tolerance</Text>
+                        <Text style={styles.settingDesc}>Match accuracy threshold</Text>
+                      </View>
+                    </View>
+                    <TextInput
+                      style={styles.numInput}
+                      keyboardType="decimal-pad"
+                      value={String(config!.face_recognition_tolerance)}
+                      onChangeText={(value) => updateField("face_recognition_tolerance", parseFloat(value) || 0)}
+                    />
+                  </View>
+
+                  <View style={[styles.settingRow, styles.rowLast]}>
+                    <View style={styles.settingInfo}>
+                      <View style={[styles.settingIcon, styles.iconRed]}>
+                        <Siren size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.settingCopy}>
+                        <Text style={styles.settingLabel}>Alarm Delay</Text>
+                        <Text style={styles.settingDesc}>Escalation delay in seconds</Text>
+                      </View>
+                    </View>
+                    <TextInput
+                      style={styles.numInput}
+                      keyboardType="numeric"
+                      value={String(config!.alarm_escalation_delay)}
+                      onChangeText={(value) => updateField("alarm_escalation_delay", Number(value) || 0)}
+                    />
+                  </View>
+                </View>
+              </View>
+            </>
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Shared Access</Text>
+              <View style={styles.groupCard}>
+                <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <View style={[styles.settingIcon, styles.iconBlue]}>
+                      <Shield size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                    </View>
+                    <View style={styles.settingCopy}>
+                      <Text style={styles.settingLabel}>Current Mode</Text>
+                      <Text style={styles.settingDesc}>
+                        {status?.mode === "home" ? "Home mode logs silently" : "Away mode can trigger alarms"}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.settingValue}>{status?.mode === "away" ? "Away" : "Home"}</Text>
+                </View>
+
+                {access.canChangeMode ? (
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <View style={[styles.settingIcon, styles.iconSlate]}>
+                        <Gauge size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.settingCopy}>
                         <Text style={styles.settingLabel}>Security Mode</Text>
-                        <Text style={styles.settingDesc}>
-                          {status?.mode === "home" ? "Home mode logs silently" : "Away mode triggers alarms"}
-                        </Text>
+                        <Text style={styles.settingDesc}>Switch between Home and Away</Text>
                       </View>
                     </View>
                     <View style={styles.modeToggle}>
@@ -402,77 +406,159 @@ export default function SettingsScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
+                ) : null}
 
+                {access.canSilenceAlarm ? (
+                  <View style={[styles.settingRow, styles.rowLast]}>
+                    <View style={styles.settingInfo}>
+                      <View style={[styles.settingIcon, styles.iconRed]}>
+                        <Siren size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.settingCopy}>
+                        <Text style={styles.settingLabel}>Alarm Control</Text>
+                        <Text style={styles.settingDesc}>
+                          {status?.alarm_active ? "The alarm is active on this device." : "The alarm is currently silent."}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.inlineActionButton,
+                        !status?.alarm_active && styles.inlineActionButtonDisabled,
+                      ]}
+                      onPress={() => void handleSilenceAlarm()}
+                      disabled={!status?.alarm_active}
+                    >
+                      <Text style={styles.inlineActionButtonText}>Silence</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
                   <View style={[styles.settingRow, styles.rowLast]}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconGreen]}>
-                        <Siren size={18} color={referenceColors.success} strokeWidth={2.2} />
+                        <Shield size={18} color={referenceColors.success} strokeWidth={2.2} />
                       </View>
                       <View style={styles.settingCopy}>
-                        <Text style={styles.settingLabel}>Buzzer Enabled</Text>
-                        <Text style={styles.settingDesc}>Local alarm sound</Text>
+                        <Text style={styles.settingLabel}>Shared Access Scope</Text>
+                        <Text style={styles.settingDesc}>You can only use the controls granted by the primary user.</Text>
                       </View>
                     </View>
-                    <Switch
-                      value={config!.buzzer_enabled}
-                      onValueChange={(value) => updateField("buzzer_enabled", value)}
-                      trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
-                      thumbColor="#ffffff"
-                    />
                   </View>
-                </View>
-              </View>
-            ) : null}
-
-            {canViewFullSettings && dirty ? (
-              <TouchableOpacity
-                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-                onPress={() => void handleSave()}
-                disabled={saving}
-              >
-                {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveText}>Save Changes</Text>}
-              </TouchableOpacity>
-            ) : null}
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Account</Text>
-              <View style={styles.groupCard}>
-                <TouchableOpacity style={[styles.settingRow, styles.rowLast]} onPress={logout}>
-                  <View style={styles.settingInfo}>
-                    <View style={[styles.settingIcon, styles.iconRed]}>
-                      <LogOut size={18} color={referenceColors.danger} strokeWidth={2.2} />
-                    </View>
-                    <View style={styles.settingCopy}>
-                      <Text style={styles.logoutLabel}>Log Out</Text>
-                      <Text style={styles.settingDesc}>Sign out of your account</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                )}
               </View>
             </View>
+          )}
 
-            {canViewFullSettings ? (
+          {canViewFullSettings ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>System</Text>
+              <View style={styles.groupCard}>
+                <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <View style={[styles.settingIcon, styles.iconSlate]}>
+                      <Shield size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
+                    </View>
+                    <View style={styles.settingCopy}>
+                      <Text style={styles.settingLabel}>Security Mode</Text>
+                      <Text style={styles.settingDesc}>
+                        {status?.mode === "home" ? "Home mode logs silently" : "Away mode triggers alarms"}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.modeToggle}>
+                    <TouchableOpacity
+                      style={[styles.modeButton, status?.mode === "home" && styles.modeButtonActive]}
+                      onPress={() => void handleModeChange("home")}
+                    >
+                      <Text style={[styles.modeText, status?.mode === "home" && styles.modeTextActive]}>Home</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modeButton, status?.mode === "away" && styles.modeButtonActive]}
+                      onPress={() => void handleModeChange("away")}
+                    >
+                      <Text style={[styles.modeText, status?.mode === "away" && styles.modeTextActive]}>Away</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={[styles.settingRow, styles.rowLast]}>
+                  <View style={styles.settingInfo}>
+                    <View style={[styles.settingIcon, styles.iconGreen]}>
+                      <Siren size={18} color={referenceColors.success} strokeWidth={2.2} />
+                    </View>
+                    <View style={styles.settingCopy}>
+                      <Text style={styles.settingLabel}>Buzzer Enabled</Text>
+                      <Text style={styles.settingDesc}>Local alarm sound</Text>
+                    </View>
+                  </View>
+                  <Switch
+                    value={config!.buzzer_enabled}
+                    onValueChange={(value) => updateField("buzzer_enabled", value)}
+                    trackColor={{ true: referenceColors.primary, false: "#cbd5e1" }}
+                    thumbColor="#ffffff"
+                  />
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          {canViewFullSettings && dirty ? (
+            <TouchableOpacity
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={() => void handleSave()}
+              disabled={saving}
+            >
+              {saving ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveText}>Save Changes</Text>}
+            </TouchableOpacity>
+          ) : null}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
+            <View style={styles.groupCard}>
+              <TouchableOpacity style={[styles.settingRow, styles.rowLast]} onPress={logout}>
+                <View style={styles.settingInfo}>
+                  <View style={[styles.settingIcon, styles.iconRed]}>
+                    <LogOut size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.settingCopy}>
+                    <Text style={styles.logoutLabel}>Log Out</Text>
+                    <Text style={styles.settingDesc}>Sign out of your account</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {canViewFullSettings ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Management</Text>
               <TouchableOpacity
                 style={styles.dangerCard}
-                onPress={() => navigation.navigate("DeviceList")}
+                onPress={handleFactoryReset}
+                disabled={resetting}
               >
                 <View style={[styles.settingIcon, styles.iconRed]}>
-                  <Siren size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                  {resetting ? (
+                    <ActivityIndicator color={referenceColors.danger} />
+                  ) : (
+                    <AlertTriangle size={18} color={referenceColors.danger} strokeWidth={2.2} />
+                  )}
                 </View>
                 <View style={styles.settingCopy}>
                   <Text style={styles.dangerTitle}>Factory Reset</Text>
-                  <Text style={styles.settingDesc}>Long-press a device in My Devices to erase it</Text>
+                  <Text style={styles.settingDesc}>Permanently erase this device and unlink users</Text>
                 </View>
                 <ChevronRight size={16} color={referenceColors.danger} strokeWidth={2.2} />
               </TouchableOpacity>
-            ) : null}
-
-            <View style={styles.versionInfo}>
-              <Text style={styles.versionText}>I.R.I.S v2.1.0</Text>
-              <Text style={styles.versionText}>2026 Security Systems</Text>
             </View>
-          </ScrollView>
-        </View>
+          ) : null}
+
+          <View style={styles.versionInfo}>
+            <Text style={styles.versionText}>I.R.I.S v2.1.0</Text>
+            <Text style={styles.versionText}>2026 Security Systems</Text>
+          </View>
+        </Animated.ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 }

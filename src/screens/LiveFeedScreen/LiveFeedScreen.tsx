@@ -48,6 +48,24 @@ export default function LiveFeedScreen() {
   const [lastFrameMs, setLastFrameMs] = useState<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consecutiveFailsRef = useRef(0);
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
   // Backpressure gate: while a frame is in flight (fetched URL set, but <Image>
   // hasn't yet fired onLoad/onError) we don't schedule another. Replaces the
   // old unconditional setInterval that queued requests.
@@ -197,7 +215,10 @@ export default function LiveFeedScreen() {
   return (
     <View style={styles.container}>
       <ReferenceBackdrop />
-      <ScrollView style={styles.container} contentContainerStyle={[styles.content, layout.contentStyle]}>
+      <Animated.ScrollView
+        style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        contentContainerStyle={[styles.content, layout.contentStyle]}
+      >
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />

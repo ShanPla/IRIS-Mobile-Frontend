@@ -38,6 +38,10 @@ yarn-error.*
 # local logs
 *.log
 
+# Claude
+CLAUDE.md
+CLAUDE_CONTEXT.md
+
 # typescript
 *.tsbuildinfo
 

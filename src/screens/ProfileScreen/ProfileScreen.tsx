@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -47,6 +48,24 @@ export default function ProfileScreen() {
   const [newPassword, setNewPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState("");
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const loadProfile = useCallback(async () => {
     const storedDevices = await getDevices(session?.username);
@@ -112,8 +131,8 @@ export default function ProfileScreen() {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
           <ReferenceBackdrop />
-          <ScrollView
-            style={styles.container}
+          <Animated.ScrollView
+            style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
             contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -202,7 +221,7 @@ export default function ProfileScreen() {
               <LogOut size={18} color={referenceColors.danger} strokeWidth={2.2} />
               <Text style={styles.logoutText}>Log Out</Text>
             </TouchableOpacity>
-          </ScrollView>
+          </Animated.ScrollView>
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>

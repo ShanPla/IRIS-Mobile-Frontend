@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -90,6 +91,24 @@ export default function LoginScreen() {
   const [regSuccess, setRegSuccess] = useState("");
   const [regLoading, setRegLoading] = useState(false);
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
       setLoginError("Username and password are required");
@@ -145,8 +164,8 @@ export default function LoginScreen() {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
           <ReferenceBackdrop />
-          <ScrollView
-            style={styles.container}
+          <Animated.ScrollView
+            style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
             contentContainerStyle={[styles.content, layout.contentStyle]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -253,7 +272,7 @@ export default function LoginScreen() {
               </View>
 
             </View>
-          </ScrollView>
+          </Animated.ScrollView>
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>

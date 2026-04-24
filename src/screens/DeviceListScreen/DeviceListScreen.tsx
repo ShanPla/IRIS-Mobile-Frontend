@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -27,7 +28,6 @@ import {
   getDevices,
   loginAllDeviceAccounts,
   loginDeviceAccount,
-  piPost,
   redeemTrustedUserInvite,
   removeDevice,
   syncRegistryDevices,
@@ -39,7 +39,6 @@ import { useScreenLayout } from "../../theme/layout";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "DeviceList">;
 type DeviceAccess = "primary" | "secondary";
-type SecureAction = "remove" | "factoryReset";
 type DeviceConnectionState = {
   state: "checking" | "online" | "offline" | "unknown";
   source?: "lan" | "tunnel" | "none";
@@ -54,7 +53,7 @@ function resolveAccessRole(device: PiDevice, index: number): DeviceAccess {
 
 export default function DeviceListScreen() {
   const navigation = useNavigation<Nav>();
-  const { session, sessionPassword, activeDevice, selectDevice, refreshDevices } = useAuth();
+  const { session, sessionPassword, activeDevice, selectDevice } = useAuth();
   const access = getSessionAccess(session);
   const layout = useScreenLayout({ bottom: "stack" });
   const [devices, setDevices] = useState<PiDevice[]>([]);
@@ -68,6 +67,24 @@ export default function DeviceListScreen() {
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState("");
   const [deviceSyncError, setDeviceSyncError] = useState("");
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const refreshConnections = useCallback(async (devicesToCheck: PiDevice[]) => {
     if (devicesToCheck.length === 0) {
@@ -173,95 +190,29 @@ export default function DeviceListScreen() {
     }
   };
 
-  const startSecureAction = (device: PiDevice, action: SecureAction, access: DeviceAccess) => {
-    if (access !== "primary") {
-      Alert.alert("Primary Only", "Only the Primary User can do this.");
-      return;
-    }
-
-    if (action === "remove") {
-      Alert.alert(
-        "Remove Device",
-        `Remove ${device.name} from this account? You can re-add it later on the Setup screen.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Remove",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                if (session?.token) {
-                  await unpairCentralDevice(device.deviceId, session.token);
-                }
-                await removeDevice(device.deviceId, session?.username);
-                await loadDevices();
-              } catch (err) {
-                Alert.alert("Remove Failed", err instanceof Error ? err.message : "Could not remove the device.");
-              }
-            },
-          },
-        ],
-      );
-      return;
-    }
-
+  const startRemoveDevice = (device: PiDevice) => {
     Alert.alert(
-      "Factory Reset",
-      `This will permanently delete events and faces on ${device.name}, reset its configuration, and unlink paired users. User accounts will not be deleted.`,
+      "Remove Device",
+      `Remove ${device.name} from this account? You can re-add it later on the Setup screen.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Continue",
+          text: "Remove",
           style: "destructive",
-          onPress: () => confirmFactoryReset(device),
+          onPress: async () => {
+            try {
+              if (session?.token) {
+                await unpairCentralDevice(device.deviceId, session.token);
+              }
+              await removeDevice(device.deviceId, session?.username);
+              await loadDevices();
+            } catch (err) {
+              Alert.alert("Remove Failed", err instanceof Error ? err.message : "Could not remove the device.");
+            }
+          },
         },
       ],
     );
-  };
-
-  const confirmFactoryReset = (device: PiDevice) => {
-    Alert.alert(
-      "Are you absolutely sure?",
-      `Reset ${device.name} to factory defaults now?`,
-      [
-        { text: "No, go back", style: "cancel" },
-        {
-          text: "Yes, reset",
-          style: "destructive",
-          onPress: () => void runFactoryReset(device),
-        },
-      ],
-    );
-  };
-
-  const runFactoryReset = async (device: PiDevice) => {
-    try {
-      await selectDevice(device.deviceId);
-      const result = await piPost<{ events_deleted: number; faces_deleted: number; pairings_deleted?: number }>(
-        "/api/admin/factory-reset",
-        undefined,
-        session?.username,
-      );
-      if (session?.token) {
-        await unpairCentralDevice(device.deviceId, session.token).catch((error) => {
-          console.warn("[IRIS Mobile] Could not remove reset device from registry:", error);
-        });
-      }
-      await removeDevice(device.deviceId, session?.username);
-      setDevices((current) => current.filter((item) => item.deviceId !== device.deviceId));
-      setConnectionById((current) => {
-        const next = { ...current };
-        delete next[device.deviceId];
-        return next;
-      });
-      await refreshDevices();
-      Alert.alert(
-        "Factory Reset Complete",
-        `Cleared ${result.events_deleted} events and ${result.faces_deleted} faces, then unlinked ${result.pairings_deleted ?? 0} user pairing(s). ${device.name} was removed from this phone. Add it again from Setup when you want to pair it fresh.`,
-      );
-    } catch (e) {
-      Alert.alert("Reset Failed", e instanceof Error ? e.message : "The device rejected the reset request.");
-    }
   };
 
   const openInvitePlaceholder = () => {
@@ -344,11 +295,11 @@ export default function DeviceListScreen() {
       connection.state === "checking"
         ? "Checking"
         : connection.state === "online"
-          ? routeLabel ? `Online · ${routeLabel}` : "Online"
+          ? routeLabel ? `Online \u2022 ${routeLabel}` : "Online"
           : "Offline";
-    const statusLabel = isConnecting ? "Connecting" : isActive ? `Active · ${connectionLabel}` : connectionLabel;
+    const statusLabel = isConnecting ? "Connecting" : isActive ? `Active \u2022 ${connectionLabel}` : connectionLabel;
     const deviceRoute = device.deviceIp
-      ? `${device.deviceIp}${device.url ? ` · ${device.url}` : ""}`
+      ? `${device.deviceIp}${device.url ? ` \u2022 ${device.url}` : ""}`
       : device.url || "Waiting for heartbeat from Pi";
 
     return (
@@ -386,19 +337,190 @@ export default function DeviceListScreen() {
 
         {isPrimary ? (
           <View style={styles.inlineActions}>
-            <TouchableOpacity style={styles.secondaryAction} onPress={() => startSecureAction(device, "remove", access)}>
+            <TouchableOpacity style={styles.secondaryAction} onPress={() => startRemoveDevice(device)}>
               <Text style={styles.secondaryActionText}>Remove Device</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.warningAction} onPress={() => startSecureAction(device, "factoryReset", access)}>
-              <Text style={styles.warningActionText}>Factory Reset</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <Text style={styles.secondaryHint}>Primary user approval is required for removal or reset.</Text>
+          <Text style={styles.secondaryHint}>Primary user approval is required for removal.</Text>
         )}
       </View>
     );
   };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ReferenceBackdrop />
+        <ActivityIndicator color={referenceColors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <ReferenceBackdrop />
+          <Animated.ScrollView
+            style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => {
+                  setRefreshing(true);
+                  void loadDevices();
+                }}
+                tintColor={referenceColors.primary}
+              />
+            }
+          >
+            <View style={styles.header}>
+              <View style={styles.headerCopy}>
+                <Text style={styles.title}>My Devices</Text>
+                <Text style={styles.subtitle}>Select a device to monitor</Text>
+              </View>
+              <View style={styles.headerActions}>
+                <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate("Profile")}>
+                  <User size={18} color={referenceColors.textSoft} strokeWidth={2.2} />
+                  <Text style={styles.profileButtonText}>{initials}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {deviceSyncError ? (
+              <View style={styles.syncErrorCard}>
+                <Text style={styles.syncErrorTitle}>Neon refresh failed</Text>
+                <Text style={styles.syncErrorText}>{deviceSyncError}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleWrap}>
+                  <View style={styles.sectionIconPrimary}>
+                    <Crown size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                  </View>
+                  <View>
+                    <Text style={styles.sectionTitle}>Primary Devices</Text>
+                    <Text style={styles.sectionSubtitle}>Full control and sharing permissions</Text>
+                  </View>
+                </View>
+                <Text style={styles.sectionCount}>{primaryDevices.length}</Text>
+              </View>
+
+              {primaryDevices.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>No primary devices yet</Text>
+                  <Text style={styles.emptyText}>Add a device to become its Primary User.</Text>
+                </View>
+              ) : (
+                primaryDevices.map((device) => renderDeviceCard(device, "primary"))
+              )}
+            </View>
+
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleWrap}>
+                  <View style={styles.sectionIconSecondary}>
+                    <Users size={18} color={referenceColors.success} strokeWidth={2.2} />
+                  </View>
+                  <View>
+                    <Text style={styles.sectionTitle}>Secondary Devices</Text>
+                    <Text style={styles.sectionSubtitle}>Shared access from another Primary User</Text>
+                  </View>
+                </View>
+                <Text style={styles.sectionCount}>{secondaryDevices.length}</Text>
+              </View>
+
+              {secondaryDevices.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>No secondary devices</Text>
+                  <Text style={styles.emptyText}>Shared devices will appear here after you accept an invite.</Text>
+                </View>
+              ) : (
+                secondaryDevices.map((device) => renderDeviceCard(device, "secondary"))
+              )}
+            </View>
+
+            {access.canAddDevice ? (
+              <TouchableOpacity style={styles.primaryCTAWrap} onPress={() => navigation.navigate("Setup")} activeOpacity={0.9}>
+                <View style={styles.primaryCTA}>
+                  <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
+                  <Text style={styles.primaryCTAText}>Add New Device</Text>
+                </View>
+              </TouchableOpacity>
+            ) : null}
+
+            {access.canJoinSharedDevices ? (
+              <TouchableOpacity style={styles.secondaryCTA} onPress={openInvitePlaceholder}>
+                <Text style={styles.secondaryCTAText}>Join with Invite Code</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            {joiningInvite ? (
+              <View style={styles.joinCard}>
+                <Text style={styles.joinTitle}>Join Shared Device</Text>
+                <Text style={styles.joinText}>
+                  Paste the invite code from the primary user and we will fill the device code when it is included.
+                </Text>
+
+                <TextInput
+                  style={styles.joinInput}
+                  placeholder="Device code"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  value={joinDeviceCode}
+                  onChangeText={(value) => {
+                    setJoinDeviceCode(value.trim().toUpperCase());
+                    setJoinError("");
+                  }}
+                  editable={!joinLoading}
+                />
+
+                <TextInput
+                  style={[styles.joinInput, styles.joinInviteInput]}
+                  placeholder="Invite code"
+                  placeholderTextColor="#94a3b8"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  multiline
+                  value={joinInviteCode}
+                  onChangeText={handleJoinInviteCodeChange}
+                  editable={!joinLoading}
+                />
+
+                {joinError ? <Text style={styles.joinError}>{joinError}</Text> : null}
+
+                <View style={styles.joinActions}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={cancelJoinInvite} disabled={joinLoading}>
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.joinConfirmButton, joinLoading && styles.buttonDisabled]}
+                    onPress={() => void joinSharedDevice()}
+                    disabled={joinLoading}
+                  >
+                    {joinLoading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.joinConfirmText}>Join Device</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+          </ScrollView>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
+  );
+}
 
   if (loading) {
     return (

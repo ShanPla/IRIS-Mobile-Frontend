@@ -1,23 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Animated,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { AlertTriangle, Shield, Users } from "lucide-react-native";
+import { Shield, Users } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
-import { unpairCentralDevice } from "../../lib/backend";
-import { piGet, piPost, removeDevice } from "../../lib/pi";
-import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
+import { piGet } from "../../lib/pi";
+import { cardShadow, referenceColors } from "../../theme/reference";
 import { useScreenLayout } from "../../theme/layout";
 
 interface PairedUser {
@@ -41,27 +39,35 @@ interface SystemStats {
   device_name: string;
 }
 
-interface ResetResult {
-  events_deleted: number;
-  faces_deleted: number;
-  users_deleted: number;
-  pairings_deleted?: number;
-  snapshots_cleared: boolean;
-  config_reset: boolean;
-}
-
 type Nav = NativeStackNavigationProp<RootStackParamList, "Admin">;
 
 export default function AdminScreen() {
   const navigation = useNavigation<Nav>();
-  const { activeDevice, session, refreshDevices } = useAuth();
+  const { session } = useAuth();
   const layout = useScreenLayout({ bottom: "stack" });
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [pairedUsers, setPairedUsers] = useState<PairedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState("");
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -88,53 +94,6 @@ export default function AdminScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     void loadData(true);
-  };
-
-  const handleFactoryReset = () => {
-    Alert.alert(
-      "Factory Reset",
-      "This will permanently delete this Pi's events and faces, reset its configuration, and unlink paired users. User accounts will not be deleted.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Reset Everything", style: "destructive", onPress: confirmReset },
-      ]
-    );
-  };
-
-  const confirmReset = () => {
-    Alert.alert(
-      "Are you absolutely sure?",
-      "Events, faces, local pairing links, and system settings for this Pi will be reset.",
-      [
-        { text: "No, go back", style: "cancel" },
-        { text: "Yes, factory reset", style: "destructive", onPress: executeReset },
-      ]
-    );
-  };
-
-  const executeReset = async () => {
-    setResetting(true);
-    try {
-      const result = await piPost<ResetResult>("/api/admin/factory-reset");
-      if (activeDevice) {
-        if (session?.token) {
-          await unpairCentralDevice(activeDevice.deviceId, session.token).catch((error) => {
-            console.warn("[IRIS Mobile] Could not remove reset device from registry:", error);
-          });
-        }
-        await removeDevice(activeDevice.deviceId, session?.username);
-        await refreshDevices();
-      }
-      Alert.alert(
-        "Factory Reset Complete",
-        `Cleared ${result.events_deleted} events and ${result.faces_deleted} faces, then unlinked ${result.pairings_deleted ?? 0} user pairing(s). The reset device was removed from this phone. Add it again from Setup when you want to pair it fresh.`,
-        [{ text: "OK", onPress: () => navigation.navigate("DeviceList") }],
-      );
-    } catch (e) {
-      Alert.alert("Reset Failed", e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setResetting(false);
-    }
   };
 
   const formatDate = (iso: string) => {
@@ -181,14 +140,14 @@ export default function AdminScreen() {
   return (
     <View style={styles.container}>
       <ReferenceBackdrop />
-      <ScrollView
-        style={styles.container}
+      <Animated.ScrollView
+        style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
         contentContainerStyle={[styles.content, layout.contentStyle]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={referenceColors.primary} />}
       >
         <View style={styles.header}>
           <Text style={styles.title}>Admin Panel</Text>
-          <Text style={styles.subtitle}>Device ownership, pairing, and reset controls</Text>
+          <Text style={styles.subtitle}>Device ownership and pairing statistics</Text>
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -249,31 +208,202 @@ export default function AdminScreen() {
           )}
         </View>
 
-        <View style={[styles.card, styles.dangerCard]}>
-          <View style={styles.dangerHeader}>
-            <View style={styles.dangerIcon}>
-              <AlertTriangle size={18} color={referenceColors.danger} strokeWidth={2.2} />
-            </View>
-            <View style={styles.dangerCopy}>
-              <Text style={styles.cardTitle}>Danger Zone</Text>
-              <Text style={styles.dangerText}>
-                Factory reset permanently deletes this Pi's events and faces, unlinks device pairings, and resets system configuration.
-              </Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.resetButton, resetting && styles.resetButtonDisabled]}
-            onPress={handleFactoryReset}
-            disabled={resetting}
-          >
-            {resetting ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.resetButtonText}>Factory Reset</Text>}
-          </TouchableOpacity>
+        <View style={styles.infoSection}>
+          <Text style={styles.infoText}>
+            Need to reset this device? Go to <Text style={styles.infoHighlight}>Settings</Text> and scroll to the Management section.
+          </Text>
         </View>
       </ScrollView>
     </View>
   );
 }
+
+function StatBox({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.statBox}>
+      <Shield size={16} color={referenceColors.primary} strokeWidth={2.2} />
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 118,
+  },
+  center: {
+    flex: 1,
+    backgroundColor: referenceColors.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: referenceColors.textMuted,
+    marginTop: 12,
+    fontSize: 13,
+  },
+  header: {
+    marginBottom: 20,
+  },
+  title: {
+    color: referenceColors.text,
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  subtitle: {
+    color: referenceColors.textMuted,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  errorText: {
+    color: referenceColors.danger,
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  card: {
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    padding: 16,
+    marginBottom: 16,
+    ...cardShadow,
+  },
+  cardTitle: {
+    color: referenceColors.text,
+    fontSize: 17,
+    fontWeight: "800",
+    marginBottom: 12,
+  },
+  row: {
+    minHeight: 44,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(226,232,240,0.8)",
+    gap: 12,
+  },
+  rowLast: {
+    borderBottomWidth: 0,
+  },
+  label: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    flex: 1,
+    minWidth: 0,
+  },
+  value: {
+    color: referenceColors.text,
+    fontSize: 13,
+    fontWeight: "700",
+    flex: 1,
+    textAlign: "right",
+    flexShrink: 1,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  statBox: {
+    minWidth: 88,
+    borderRadius: 18,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 4,
+  },
+  statValue: {
+    color: referenceColors.primary,
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  statLabel: {
+    color: referenceColors.textSoft,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  userRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(226,232,240,0.8)",
+  },
+  userHeader: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  userAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#dbeafe",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  userNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+    flexWrap: "wrap",
+  },
+  username: {
+    color: referenceColors.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  badgeText: {
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  userMeta: {
+    color: referenceColors.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  emptyText: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+    fontStyle: "italic",
+  },
+  infoSection: {
+    alignItems: "center",
+    padding: 20,
+  },
+  infoText: {
+    color: referenceColors.textMuted,
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  infoHighlight: {
+    color: referenceColors.primary,
+    fontWeight: "700",
+  },
+});
+
 
 function StatBox({ label, value }: { label: string; value: number }) {
   return (
