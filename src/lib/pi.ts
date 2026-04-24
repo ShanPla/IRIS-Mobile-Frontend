@@ -253,6 +253,18 @@ async function parseErrorMessage(res: Response, fallback: string): Promise<strin
   return fallback;
 }
 
+function shouldTryNextDeviceRoute(status: number, message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    status >= 500 ||
+    normalized.includes("device is not online") ||
+    normalized.includes("network request failed") ||
+    normalized.includes("failed to fetch") ||
+    normalized.includes("timed out") ||
+    normalized.includes("aborted")
+  );
+}
+
 async function getCandidateDevices(...accountIds: Array<string | undefined>): Promise<Array<{ accountId?: string; device: PiDevice }>> {
   const seen = new Set<string>();
   const candidates: Array<{ accountId?: string; device: PiDevice }> = [];
@@ -664,23 +676,47 @@ export async function piGet<T>(path: string, accountId?: string): Promise<T> {
 }
 
 export async function piPost<T>(path: string, body?: unknown, accountId?: string): Promise<T> {
-  const attempt = async (): Promise<Response> => {
-    const device = await getActiveDevice(accountId);
-    if (!device) throw new Error("No active Pi device");
-    const base = await deviceBaseUrl(device);
-    return fetch(`${base}${path}`, {
-      method: "POST",
-      headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  };
+  const device = await getActiveDevice(accountId);
+  if (!device) throw new Error("No active Pi device");
 
-  let res = await attempt();
-  if (!res.ok) {
+  const resolvedBase = await deviceBaseUrl(device);
+  const candidates = Array.from(new Set([resolvedBase, ...getBaseUrlCandidates(device)].filter(Boolean)));
+  let lastError = `Pi POST ${path} failed: ${DEVICE_OFFLINE_MESSAGE}`;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const base = candidates[index];
+    let res: Response;
+
+    try {
+      res = await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: authHeaders(device.token, body !== undefined ? { "Content-Type": "application/json" } : undefined),
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch (error) {
+      const message = formatDeviceConnectionError(error);
+      lastError = `Pi POST ${path} failed: ${message}`;
+      if (index < candidates.length - 1) continue;
+      throw new Error(lastError);
+    }
+
+    if (res.ok) {
+      const lan = isLanBaseUrl(base, device);
+      rememberBaseUrlResolution(device.deviceId, base, lan);
+      return (await res.json()) as T;
+    }
+
     const err = await parseErrorMessage(res, `Pi POST ${path} failed (${res.status}).`);
-    throw new Error(`Pi POST ${path} failed (${res.status}): ${err}`);
+    lastError = `Pi POST ${path} failed (${res.status}): ${err}`;
+    if (index < candidates.length - 1 && shouldTryNextDeviceRoute(res.status, err)) {
+      invalidateBaseUrlCache(device.deviceId);
+      continue;
+    }
+
+    throw new Error(lastError);
   }
-  return (await res.json()) as T;
+
+  throw new Error(lastError);
 }
 
 async function updateDeviceToken(deviceId: string, token: string, accountId?: string): Promise<void> {
