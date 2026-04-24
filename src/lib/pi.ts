@@ -230,12 +230,22 @@ async function parseErrorMessage(res: Response, fallback: string): Promise<strin
   try {
     const contentType = res.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      const data = (await res.json()) as { detail?: string };
-      if (data.detail) return data.detail;
+      const data = (await res.json()) as { detail?: string | { message?: string } };
+      const detail = data.detail;
+      if (typeof detail === "string" && detail.trim()) return detail;
+      if (typeof detail === "object" && typeof detail.message === "string" && detail.message.trim()) {
+        return detail.message;
+      }
     }
 
     const text = (await res.text()).trim();
-    if (text) return text;
+    if (text) {
+      const looksLikeHtml = contentType.includes("text/html") || /^<!doctype html|^<html[\s>]/i.test(text);
+      if (looksLikeHtml) {
+        return DEVICE_OFFLINE_MESSAGE;
+      }
+      return text.length > 240 ? `${text.slice(0, 240).trim()}...` : text;
+    }
   } catch {
     // Ignore parsing failures and use the fallback.
   }
@@ -647,7 +657,7 @@ export async function piGet<T>(path: string, accountId?: string): Promise<T> {
 
   let res = await doGet();
   if (!res.ok) {
-    const err = await res.text();
+    const err = await parseErrorMessage(res, `Pi GET ${path} failed (${res.status}).`);
     throw new Error(`Pi GET ${path} failed (${res.status}): ${err}`);
   }
   return (await res.json()) as T;
@@ -667,7 +677,7 @@ export async function piPost<T>(path: string, body?: unknown, accountId?: string
 
   let res = await attempt();
   if (!res.ok) {
-    const err = await res.text();
+    const err = await parseErrorMessage(res, `Pi POST ${path} failed (${res.status}).`);
     throw new Error(`Pi POST ${path} failed (${res.status}): ${err}`);
   }
   return (await res.json()) as T;
@@ -961,7 +971,7 @@ export async function piPostToDevice<T>(device: PiDevice, path: string, body?: u
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const err = await res.text();
+    const err = await parseErrorMessage(res, `Pi POST ${path} failed (${res.status}).`);
     throw new Error(`Pi POST ${path} failed (${res.status}): ${err}`);
   }
   return (await res.json()) as T;
@@ -981,7 +991,7 @@ export async function piPostForm<T>(path: string, formData: FormData, accountId?
 
   let res = await attempt();
   if (!res.ok) {
-    const err = await res.text();
+    const err = await parseErrorMessage(res, `Pi POST ${path} failed (${res.status}).`);
     throw new Error(`Pi POST ${path} failed (${res.status}): ${err}`);
   }
   return (await res.json()) as T;
@@ -1001,7 +1011,7 @@ export async function piPut<T>(path: string, body?: unknown, accountId?: string)
 
   let res = await attempt();
   if (!res.ok) {
-    const err = await res.text();
+    const err = await parseErrorMessage(res, `Pi PUT ${path} failed (${res.status}).`);
     throw new Error(`Pi PUT ${path} failed (${res.status}): ${err}`);
   }
   return (await res.json()) as T;
@@ -1020,7 +1030,7 @@ export async function piDelete<T>(path: string, accountId?: string): Promise<T |
 
   let res = await attempt();
   if (!res.ok) {
-    const err = await res.text();
+    const err = await parseErrorMessage(res, `Pi DELETE ${path} failed (${res.status}).`);
     throw new Error(`Pi DELETE ${path} failed (${res.status}): ${err}`);
   }
   if (res.status === 204) return null;
