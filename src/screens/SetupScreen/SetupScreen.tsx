@@ -166,6 +166,8 @@ function formatAddDeviceError(error: unknown): string {
   if (
     normalized.includes("not online") ||
     normalized.includes("not found") ||
+    normalized.includes("no reachable device route") ||
+    normalized.includes("without device info") ||
     normalized.includes("network request failed") ||
     normalized.includes("failed to fetch") ||
     normalized.includes("couldn't reach")

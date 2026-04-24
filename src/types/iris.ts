@@ -56,11 +56,19 @@ export interface FaceProfile {
   updated_at: string;
 }
 
+export interface PermissionSet {
+  can_view_events: boolean;
+  can_silence_alarm: boolean;
+  can_change_mode: boolean;
+  can_manage_profiles: boolean;
+}
+
 export interface AuthSession {
   token: string;
   username: string;
   email: string;
   role: string;
+  permissions: PermissionSet | null;
 }
 
 export interface UserResponse {
@@ -69,6 +77,7 @@ export interface UserResponse {
   gmail: string | null;
   role: string;
   fcm_token: string | null;
+  permissions: PermissionSet | null;
 }
 
 export interface InvitedUser {
@@ -76,13 +85,6 @@ export interface InvitedUser {
   username: string;
   role: string;
   permissions: PermissionSet | null;
-}
-
-export interface PermissionSet {
-  can_view_events: boolean;
-  can_silence_alarm: boolean;
-  can_change_mode: boolean;
-  can_manage_profiles: boolean;
 }
 
 export interface WebSocketEvent {

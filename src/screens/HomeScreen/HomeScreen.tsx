@@ -35,6 +35,7 @@ import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { useWebSocket } from "../../hooks/useWebSocket";
 import { usePiHealth } from "../../hooks/usePiHealth";
+import { getSessionAccess } from "../../lib/access";
 import { buildPiUrl, ensureDeviceAuth, piGet, piPost, piPut } from "../../lib/pi";
 import type { EventsResponse, SecurityEvent, SecurityMode, SystemStatus } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors, referenceLiveImage } from "../../theme/reference";
@@ -45,6 +46,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 export default function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const { activeDevice, session, sessionPassword } = useAuth();
+  const access = getSessionAccess(session);
   const { health } = usePiHealth(10000, session?.username);
   const layout = useScreenLayout({ bottom: "tab" });
 
@@ -301,11 +303,13 @@ export default function HomeScreen() {
             <Text style={styles.headerTitle}>I.R.I.S</Text>
             <Text style={styles.headerSubtitle}>{activeDevice ? "Your property is protected" : "Connect a Pi to start monitoring"}</Text>
           </View>
-          <TouchableOpacity style={styles.addButtonWrap} onPress={() => navigation.navigate("AddCamera")} activeOpacity={0.9}>
-            <View style={styles.addButton}>
-              <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
-            </View>
-          </TouchableOpacity>
+          {access.canAddDevice ? (
+            <TouchableOpacity style={styles.addButtonWrap} onPress={() => navigation.navigate("AddCamera")} activeOpacity={0.9}>
+              <View style={styles.addButton}>
+                <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
+              </View>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -450,11 +454,13 @@ export default function HomeScreen() {
         )}
 
         <View style={styles.quickGrid}>
-          <TouchableOpacity style={styles.quickCard} onPress={() => navigation.navigate("FacialRegistration")}>
-            <ScanFace size={22} color={referenceColors.primary} strokeWidth={2.2} />
-            <Text style={styles.quickTitle}>Faces</Text>
-            <Text style={styles.quickMeta}>{knownFaces}</Text>
-          </TouchableOpacity>
+          {access.canOpenFaces ? (
+            <TouchableOpacity style={styles.quickCard} onPress={() => navigation.navigate("FacialRegistration")}>
+              <ScanFace size={22} color={referenceColors.primary} strokeWidth={2.2} />
+              <Text style={styles.quickTitle}>Faces</Text>
+              <Text style={styles.quickMeta}>{knownFaces}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <TouchableOpacity style={styles.quickCard} onPress={() => navigation.navigate("Logs")}>
             <Activity size={22} color={referenceColors.textSoft} strokeWidth={2.2} />
@@ -462,14 +468,16 @@ export default function HomeScreen() {
             <Text style={styles.quickMeta}>{recentEvents.length}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.quickCard}
-            onPress={() => navigation.getParent()?.navigate("SharedUsers" as never)}
-          >
-            <Users size={22} color={referenceColors.textSoft} strokeWidth={2.2} />
-            <Text style={styles.quickTitle}>Users</Text>
-            <Text style={styles.quickMeta}>{knownFaces}</Text>
-          </TouchableOpacity>
+          {access.canOpenSharedUsers ? (
+            <TouchableOpacity
+              style={styles.quickCard}
+              onPress={() => navigation.getParent()?.navigate("SharedUsers" as never)}
+            >
+              <Users size={22} color={referenceColors.textSoft} strokeWidth={2.2} />
+              <Text style={styles.quickTitle}>Users</Text>
+              <Text style={styles.quickMeta}>{knownFaces}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
     </View>

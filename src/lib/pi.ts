@@ -1,7 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PermissionSet, UserResponse } from "../types/iris";
-import { DEVICE_OFFLINE_MESSAGE, DEVICE_TUNNEL_MESSAGE, type CentralDevice } from "./backend";
-import { getCachedResolution, invalidateBaseUrlCache, resolveBaseUrl } from "./resolveBaseUrl";
+import { DEVICE_OFFLINE_MESSAGE, DEVICE_TUNNEL_MESSAGE, resolveCentralDevice, type CentralDevice } from "./backend";
+import {
+  buildLanBaseUrl,
+  getBaseUrlCandidates,
+  invalidateBaseUrlCache,
+  normalizeBaseUrl,
+  rememberBaseUrlResolution,
+  resolveBaseUrl,
+} from "./resolveBaseUrl";
 
 // Resolve the best reachable base URL for a device. LAN-direct if reachable,
 // tunnel otherwise. Cached per device; invalidate via `invalidateBaseUrlCache`
@@ -284,6 +291,32 @@ async function migrateLegacyDevices(accountId?: string): Promise<PiDevice[]> {
   }
 }
 
+export function isLegacyDeviceInviteCode(inviteCode: string): boolean {
+  const parts = inviteCode.trim().split(".");
+  return parts.length === 3 && parts.every(Boolean);
+}
+
+export function extractTrustedUserInvite(value: string): { inviteCode: string; deviceId: string } {
+  const trimmed = value.trim();
+  const inviteMatch = trimmed.match(/invite code:\s*([A-Za-z0-9._-]{6,512})/i);
+  const inviteCode = inviteMatch?.[1] ?? trimmed;
+  const deviceMatch = trimmed.match(/device code:\s*([A-Za-z0-9._-]{3,64})/i);
+
+  if (deviceMatch?.[1]) {
+    return {
+      inviteCode,
+      deviceId: deviceMatch[1].trim().toUpperCase(),
+    };
+  }
+
+  const decoded = parseDeviceInviteCode(inviteCode);
+
+  return {
+    inviteCode,
+    deviceId: decoded.device_id.trim().toUpperCase(),
+  };
+}
+
 export async function getDevices(accountId?: string): Promise<PiDevice[]> {
   const raw = await AsyncStorage.getItem(devicesKey(accountId));
   if (!raw) {
@@ -319,6 +352,7 @@ export async function removeDevice(deviceId: string, accountId?: string): Promis
   const devices = await getDevices(accountId);
   const filtered = devices.filter((d) => d.deviceId !== deviceId);
   runtimeDeviceTokens.delete(deviceTokenKey(accountId, deviceId));
+  invalidateBaseUrlCache(deviceId);
   await saveDevices(accountId, filtered);
 
   const activeId = await AsyncStorage.getItem(activeKey(accountId));
@@ -371,6 +405,18 @@ export async function syncRegistryDevices(devices: CentralDevice[], accountId?: 
   const existingById = new Map(existingDevices.map((device) => [device.deviceId, device]));
   const synced = devices.map((device) => fromCentralDevice(device, existingById.get(device.device_id)));
 
+  for (const device of synced) {
+    const previous = existingById.get(device.deviceId);
+    if (!previous || previous.url !== device.url || previous.deviceIp !== device.deviceIp) {
+      invalidateBaseUrlCache(device.deviceId);
+    }
+  }
+  for (const existing of existingDevices) {
+    if (!synced.some((device) => device.deviceId === existing.deviceId)) {
+      invalidateBaseUrlCache(existing.deviceId);
+    }
+  }
+
   await saveDevices(accountId, synced);
 
   const activeId = await AsyncStorage.getItem(activeKey(accountId));
@@ -389,12 +435,42 @@ async function fetchDeviceInfo(baseUrl: string, timeoutMs: number = 2200): Promi
   try {
     const response = await fetch(`${baseUrl}/api/device/info`, { signal: controller.signal });
     if (!response.ok) {
-      throw new Error(`Device info failed (${response.status})`);
+      throw new Error(`Device route responded without device info (${response.status})`);
     }
     return (await response.json()) as DeviceInfo;
   } finally {
     clearTimeout(timer);
   }
+}
+
+function isLanBaseUrl(baseUrl: string, device: Pick<PiDevice, "deviceIp">): boolean {
+  const lanBaseUrl = buildLanBaseUrl(device.deviceIp);
+  if (!lanBaseUrl) return false;
+  return normalizeBaseUrl(baseUrl) === normalizeBaseUrl(lanBaseUrl);
+}
+
+function formatDeviceConnectionError(error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : "";
+  if (!message) return DEVICE_OFFLINE_MESSAGE;
+
+  const normalized = message.toLowerCase();
+  if (normalized.includes("different camera")) {
+    return "Reached a different camera for this device code.";
+  }
+  if (
+    normalized.includes("without device info") ||
+    normalized.includes("device info failed") ||
+    normalized.includes("network request failed") ||
+    normalized.includes("failed to fetch") ||
+    normalized.includes("aborted") ||
+    normalized.includes("timed out") ||
+    normalized.includes("only absolute urls are supported") ||
+    normalized.includes("no reachable device route")
+  ) {
+    return DEVICE_OFFLINE_MESSAGE;
+  }
+
+  return message;
 }
 
 export async function verifyDeviceConnection(
@@ -415,39 +491,51 @@ export async function verifyDeviceConnection(
     invalidateBaseUrlCache(device.deviceId);
   }
 
-  try {
-    const baseUrl = await deviceBaseUrl(device);
-    if (!baseUrl) {
-      throw new Error("No reachable device route is available.");
-    }
-    const info = await fetchDeviceInfo(baseUrl);
-    if (info.device_id !== device.deviceId) {
-      return {
-        deviceId: device.deviceId,
-        online: false,
-        baseUrl,
-        source: "none",
-        message: "Reached a different camera for this device code.",
-      };
-    }
-
-    const cached = getCachedResolution(device.deviceId);
-    return {
-      deviceId: device.deviceId,
-      online: true,
-      baseUrl,
-      source: cached?.isLan ? "lan" : "tunnel",
-      message: cached?.isLan ? "Connected on LAN" : "Connected through tunnel",
-    };
-  } catch (error) {
+  const candidates = getBaseUrlCandidates(device);
+  if (candidates.length === 0) {
     return {
       deviceId: device.deviceId,
       online: false,
-      baseUrl: normalizeConnectionUrl(device.url),
+      baseUrl: "",
       source: "none",
-      message: error instanceof Error ? error.message : "Device is unreachable.",
+      message: "No reachable device route is available.",
     };
   }
+
+  let lastError: unknown = new Error(DEVICE_OFFLINE_MESSAGE);
+  let lastBaseUrl = normalizeConnectionUrl(device.url);
+
+  for (const candidate of candidates) {
+    lastBaseUrl = candidate;
+
+    try {
+      const info = await fetchDeviceInfo(candidate);
+      if (info.device_id !== device.deviceId) {
+        lastError = new Error("Reached a different camera for this device code.");
+        continue;
+      }
+
+      const lan = isLanBaseUrl(candidate, device);
+      rememberBaseUrlResolution(device.deviceId, candidate, lan);
+      return {
+        deviceId: device.deviceId,
+        online: true,
+        baseUrl: candidate,
+        source: lan ? "lan" : "tunnel",
+        message: lan ? "Connected on LAN" : "Connected through tunnel",
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  return {
+    deviceId: device.deviceId,
+    online: false,
+    baseUrl: lastBaseUrl,
+    source: "none",
+    message: formatDeviceConnectionError(lastError),
+  };
 }
 
 export async function createTrustedUserInvite(
@@ -470,29 +558,59 @@ export async function redeemTrustedUserInvite(
   inviteCode: string,
   username: string,
   password: string,
+  centralToken: string,
   accountId?: string,
 ): Promise<PiDevice> {
-  const decoded = parseDeviceInviteCode(inviteCode);
+  const normalizedDeviceId = deviceId.trim().toUpperCase();
+  const trimmedInviteCode = inviteCode.trim();
+  const trimmedUsername = username.trim();
+  let redeemBaseUrl = "";
+  let legacyInviteDeviceIp: string | null | undefined;
 
-  if (!decoded.device_url) {
-    throw new Error("Invite code is missing device connection details");
-  }
-  if (decoded.device_id !== deviceId.trim()) {
-    throw new Error("Device code does not match this invite code");
-  }
-  if (decoded.invited_username.toLowerCase() !== username.trim().toLowerCase()) {
-    throw new Error("Invite code was created for a different username");
+  if (isLegacyDeviceInviteCode(trimmedInviteCode)) {
+    const decoded = parseDeviceInviteCode(trimmedInviteCode);
+
+    if (!decoded.device_url) {
+      throw new Error("Invite code is missing device connection details");
+    }
+    if (decoded.device_id !== normalizedDeviceId) {
+      throw new Error("Device code does not match this invite code");
+    }
+    if (decoded.invited_username.toLowerCase() !== trimmedUsername.toLowerCase()) {
+      throw new Error("Invite code was created for a different username");
+    }
+
+    redeemBaseUrl = normalizeConnectionUrl(decoded.device_url);
+    legacyInviteDeviceIp = decoded.device_ip ?? "";
+  } else {
+    const resolvedDevice = await resolveCentralDevice(normalizedDeviceId, centralToken);
+    const candidate: PiDevice = {
+      deviceId: resolvedDevice.device_id,
+      name: resolvedDevice.device_name || normalizedDeviceId,
+      url: normalizeConnectionUrl(resolvedDevice.device_url || ""),
+      token: "",
+      addedAt: new Date().toISOString(),
+      accessRole: "secondary",
+      deviceIp: resolvedDevice.device_ip ?? "",
+      primaryEmail: "",
+    };
+    const verification = await verifyDeviceConnection(candidate, { refresh: true });
+    if (!verification.online) {
+      throw new Error(verification.message || DEVICE_OFFLINE_MESSAGE);
+    }
+    redeemBaseUrl = verification.baseUrl;
+    legacyInviteDeviceIp = resolvedDevice.device_ip ?? "";
   }
 
-  const response = await fetch(`${decoded.device_url}/api/auth/device-invites/redeem`, {
+  const response = await fetch(`${redeemBaseUrl}/api/auth/device-invites/redeem`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      device_id: deviceId.trim(),
-      invite_code: inviteCode.trim(),
-      username: username.trim(),
+      device_id: normalizedDeviceId,
+      invite_code: trimmedInviteCode,
+      username: trimmedUsername,
       password,
     }),
   });
@@ -506,11 +624,11 @@ export async function redeemTrustedUserInvite(
   const sharedDevice: PiDevice = {
     deviceId: data.device_id,
     name: data.device_name,
-    url: data.device_url,
+    url: normalizeConnectionUrl(data.device_url || redeemBaseUrl),
     token: data.access_token,
     addedAt: new Date().toISOString(),
     accessRole: "secondary",
-    deviceIp: data.device_ip ?? decoded.device_ip ?? "",
+    deviceIp: data.device_ip ?? legacyInviteDeviceIp ?? "",
     primaryEmail: "",
   };
 
@@ -569,11 +687,16 @@ async function upsertDevice(device: PiDevice, accountId?: string): Promise<void>
   const devices = await getDevices(accountId);
   const index = devices.findIndex((existing) => existing.deviceId === device.deviceId);
   if (index >= 0) {
+    const previous = devices[index];
+    if (previous.url !== device.url || previous.deviceIp !== device.deviceIp) {
+      invalidateBaseUrlCache(device.deviceId);
+    }
     devices[index] = {
       ...devices[index],
       ...device,
     };
   } else {
+    invalidateBaseUrlCache(device.deviceId);
     devices.push(device);
   }
 

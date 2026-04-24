@@ -129,6 +129,7 @@ export async function loginCentralAccount(
     username: user.username,
     email: user.gmail ?? "",
     role: user.role,
+    permissions: user.permissions ?? null,
   };
 }
 

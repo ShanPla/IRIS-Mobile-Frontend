@@ -20,8 +20,10 @@ import { ChevronRight, Crown, Plus, Shield, User, Users } from "lucide-react-nat
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
+import { getSessionAccess } from "../../lib/access";
 import { listCentralDevices, unpairCentralDevice } from "../../lib/backend";
 import {
+  extractTrustedUserInvite,
   getDevices,
   loginAllDeviceAccounts,
   loginDeviceAccount,
@@ -53,6 +55,7 @@ function resolveAccessRole(device: PiDevice, index: number): DeviceAccess {
 export default function DeviceListScreen() {
   const navigation = useNavigation<Nav>();
   const { session, sessionPassword, activeDevice, selectDevice } = useAuth();
+  const access = getSessionAccess(session);
   const layout = useScreenLayout({ bottom: "stack" });
   const [devices, setDevices] = useState<PiDevice[]>([]);
   const [connectionById, setConnectionById] = useState<Record<string, DeviceConnectionState>>({});
@@ -262,6 +265,19 @@ export default function DeviceListScreen() {
     setJoinLoading(false);
   };
 
+  const handleJoinInviteCodeChange = (value: string) => {
+    setJoinError("");
+
+    try {
+      const extracted = extractTrustedUserInvite(value);
+      setJoinInviteCode(extracted.inviteCode);
+      setJoinDeviceCode(extracted.deviceId);
+    } catch {
+      setJoinInviteCode(value);
+      // Ignore partial invite codes while the user is still typing or pasting.
+    }
+  };
+
   const joinSharedDevice = async () => {
     if (!session?.username) {
       setJoinError("Sign in again before joining a shared device.");
@@ -285,6 +301,7 @@ export default function DeviceListScreen() {
         joinInviteCode.trim(),
         session.username,
         sessionPassword,
+        session.token,
         session.username,
       );
       await loadDevices();
@@ -473,22 +490,26 @@ export default function DeviceListScreen() {
               )}
             </View>
 
-            <TouchableOpacity style={styles.primaryCTAWrap} onPress={() => navigation.navigate("Setup")} activeOpacity={0.9}>
-              <View style={styles.primaryCTA}>
-                <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
-                <Text style={styles.primaryCTAText}>Add New Device</Text>
-              </View>
-            </TouchableOpacity>
+            {access.canAddDevice ? (
+              <TouchableOpacity style={styles.primaryCTAWrap} onPress={() => navigation.navigate("Setup")} activeOpacity={0.9}>
+                <View style={styles.primaryCTA}>
+                  <Plus size={18} color={referenceColors.primary} strokeWidth={2.6} />
+                  <Text style={styles.primaryCTAText}>Add New Device</Text>
+                </View>
+              </TouchableOpacity>
+            ) : null}
 
-            <TouchableOpacity style={styles.secondaryCTA} onPress={openInvitePlaceholder}>
-              <Text style={styles.secondaryCTAText}>Join with Invite Code</Text>
-            </TouchableOpacity>
+            {access.canJoinSharedDevices ? (
+              <TouchableOpacity style={styles.secondaryCTA} onPress={openInvitePlaceholder}>
+                <Text style={styles.secondaryCTAText}>Join with Invite Code</Text>
+              </TouchableOpacity>
+            ) : null}
 
             {joiningInvite ? (
               <View style={styles.joinCard}>
                 <Text style={styles.joinTitle}>Join Shared Device</Text>
                 <Text style={styles.joinText}>
-                  Enter the device code and invite code from the primary user to add this Pi as shared access.
+                  Paste the invite code from the primary user and we will fill the device code when it is included.
                 </Text>
 
                 <TextInput
@@ -498,7 +519,10 @@ export default function DeviceListScreen() {
                   autoCapitalize="characters"
                   autoCorrect={false}
                   value={joinDeviceCode}
-                  onChangeText={setJoinDeviceCode}
+                  onChangeText={(value) => {
+                    setJoinDeviceCode(value.trim().toUpperCase());
+                    setJoinError("");
+                  }}
                   editable={!joinLoading}
                 />
 
@@ -510,7 +534,7 @@ export default function DeviceListScreen() {
                   autoCorrect={false}
                   multiline
                   value={joinInviteCode}
-                  onChangeText={setJoinInviteCode}
+                  onChangeText={handleJoinInviteCodeChange}
                   editable={!joinLoading}
                 />
 

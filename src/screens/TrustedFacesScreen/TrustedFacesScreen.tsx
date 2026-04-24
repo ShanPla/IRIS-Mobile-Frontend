@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Share,
   StyleSheet,
   Switch,
   Text,
@@ -29,6 +30,25 @@ const PERMISSION_LABELS: Array<{ key: keyof PermissionSet; label: string }> = [
   { key: "can_manage_profiles", label: "Manage Profiles" },
 ];
 
+type GeneratedInvite = {
+  invite: DeviceInviteResult;
+  username: string;
+  permissionLabels: string[];
+};
+
+function buildInviteShareMessage(generatedInvite: GeneratedInvite): string {
+  return [
+    `IRIS invite for ${generatedInvite.username}`,
+    "",
+    `Device code: ${generatedInvite.invite.device_id}`,
+    `Invite code: ${generatedInvite.invite.invite_code}`,
+    `Permissions: ${generatedInvite.permissionLabels.join(", ") || "Basic access only"}`,
+    `Expires: ${new Date(generatedInvite.invite.expires_at).toLocaleString()}`,
+    "",
+    `Join using the invited username: ${generatedInvite.username}`,
+  ].join("\n");
+}
+
 export default function TrustedFacesScreen() {
   const { session } = useAuth();
   const layout = useScreenLayout({ bottom: "tab" });
@@ -46,7 +66,7 @@ export default function TrustedFacesScreen() {
   });
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [inviteError, setInviteError] = useState("");
-  const [latestInvite, setLatestInvite] = useState<DeviceInviteResult | null>(null);
+  const [latestInvite, setLatestInvite] = useState<GeneratedInvite | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -79,6 +99,7 @@ export default function TrustedFacesScreen() {
   };
 
   const toggleInvitePermission = (key: keyof PermissionSet) => {
+    setInviteError("");
     setInvitePermissions((current) => ({
       ...current,
       [key]: !current[key],
@@ -86,24 +107,27 @@ export default function TrustedFacesScreen() {
   };
 
   const generateInviteCode = async () => {
-    if (!inviteUsername.trim()) {
+    const trimmedUsername = inviteUsername.trim();
+    if (!trimmedUsername) {
       setInviteError("Username is required");
       return;
     }
 
     setCreatingInvite(true);
     setInviteError("");
+    setLatestInvite(null);
     try {
+      const permissionLabels = PERMISSION_LABELS.filter(({ key }) => invitePermissions[key]).map(({ label }) => label);
       const invite = await createTrustedUserInvite(
-        inviteUsername.trim(),
+        trimmedUsername,
         invitePermissions,
         session?.username,
       );
-      setLatestInvite(invite);
-      Alert.alert(
-        "Invite Code Ready",
-        `${invite.device_id}\n\nShare the device code and invite code with ${inviteUsername.trim()}.`,
-      );
+      setLatestInvite({
+        invite,
+        username: trimmedUsername,
+        permissionLabels,
+      });
     } catch (e) {
       setLatestInvite(null);
       setInviteError(e instanceof Error ? e.message : "Failed to generate invite code");
@@ -123,6 +147,18 @@ export default function TrustedFacesScreen() {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to save");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const shareInvite = async () => {
+    if (!latestInvite) return;
+
+    try {
+      await Share.share({
+        message: buildInviteShareMessage(latestInvite),
+      });
+    } catch (e) {
+      Alert.alert("Share Failed", e instanceof Error ? e.message : "Could not open the share sheet.");
     }
   };
 
@@ -163,7 +199,7 @@ export default function TrustedFacesScreen() {
             <View style={styles.inviteCard}>
               <Text style={styles.inviteTitle}>Add Trusted User</Text>
               <Text style={styles.inviteSubtitle}>
-                Enter the username, choose their access, then share the device code and invite code.
+                Enter the username, choose their access, then generate one shareable invite package for them.
               </Text>
 
               <TextInput
@@ -173,7 +209,10 @@ export default function TrustedFacesScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 value={inviteUsername}
-                onChangeText={setInviteUsername}
+                onChangeText={(value) => {
+                  setInviteUsername(value);
+                  setInviteError("");
+                }}
               />
 
               <View style={styles.invitePermissionsCard}>
@@ -206,18 +245,43 @@ export default function TrustedFacesScreen() {
 
               {latestInvite ? (
                 <View style={styles.generatedCodeCard}>
-                  <Text style={styles.generatedCodeTitle}>Share These Codes</Text>
+                  <Text style={styles.generatedCodeTitle}>Invite Ready for {latestInvite.username}</Text>
+                  <Text style={styles.generatedCodeHint}>
+                    Share both codes below. {latestInvite.username} must join before{" "}
+                    {new Date(latestInvite.invite.expires_at).toLocaleString()}.
+                  </Text>
+                  <View style={styles.generatedSteps}>
+                    <View style={styles.generatedStep}>
+                      <Text style={styles.generatedStepNumber}>1</Text>
+                      <Text style={styles.generatedStepText}>Send the device code.</Text>
+                    </View>
+                    <View style={styles.generatedStep}>
+                      <Text style={styles.generatedStepNumber}>2</Text>
+                      <Text style={styles.generatedStepText}>Send the invite code.</Text>
+                    </View>
+                    <View style={styles.generatedStep}>
+                      <Text style={styles.generatedStepNumber}>3</Text>
+                      <Text style={styles.generatedStepText}>They sign in as {latestInvite.username}.</Text>
+                    </View>
+                  </View>
                   <View style={styles.generatedCodeRow}>
                     <Text style={styles.generatedCodeLabel}>Device Code</Text>
-                    <Text style={styles.generatedCodeValue}>{latestInvite.device_id}</Text>
+                    <Text selectable style={styles.generatedCodeValue}>{latestInvite.invite.device_id}</Text>
                   </View>
                   <View style={styles.generatedCodeBlock}>
                     <Text style={styles.generatedCodeLabel}>Invite Code</Text>
-                    <Text style={styles.generatedInviteCode}>{latestInvite.invite_code}</Text>
+                    <Text selectable style={styles.generatedInviteCode}>{latestInvite.invite.invite_code}</Text>
                   </View>
-                  <Text style={styles.generatedCodeHint}>
-                    {inviteUsername.trim()} must join with this device code and invite code before {new Date(latestInvite.expires_at).toLocaleString()}.
-                  </Text>
+                  <View style={styles.generatedPermissionList}>
+                    {latestInvite.permissionLabels.map((label) => (
+                      <View key={label} style={styles.generatedPermissionChip}>
+                        <Text style={styles.generatedPermissionText}>{label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <TouchableOpacity style={styles.shareInviteButton} onPress={() => void shareInvite()} activeOpacity={0.9}>
+                    <Text style={styles.shareInviteButtonText}>Share Invite</Text>
+                  </TouchableOpacity>
                 </View>
               ) : null}
             </View>
@@ -399,6 +463,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
+  generatedSteps: {
+    gap: 8,
+  },
+  generatedStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  generatedStepNumber: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    overflow: "hidden",
+    textAlign: "center",
+    textAlignVertical: "center",
+    color: referenceColors.primary,
+    fontSize: 12,
+    fontWeight: "800",
+    backgroundColor: "#dbeafe",
+    lineHeight: 22,
+  },
+  generatedStepText: {
+    flex: 1,
+    color: referenceColors.textSoft,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   generatedCodeRow: {
     gap: 6,
   },
@@ -427,6 +518,36 @@ const styles = StyleSheet.create({
     color: referenceColors.textSoft,
     fontSize: 12,
     lineHeight: 17,
+  },
+  generatedPermissionList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  generatedPermissionChip: {
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.86)",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  generatedPermissionText: {
+    color: referenceColors.primary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  shareInviteButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: referenceColors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shareInviteButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "800",
   },
   summaryCard: {
     flexDirection: "row",

@@ -22,6 +22,8 @@ interface CacheEntry {
   resolvedAt: number;
 }
 
+type DeviceRouteTarget = Pick<PiDevice, "deviceId" | "url" | "deviceIp">;
+
 // Module-level cache. Keyed on deviceId — the same device can have different
 // LAN IPs across networks, but the key is stable.
 const cache = new Map<string, CacheEntry>();
@@ -31,6 +33,13 @@ const cache = new Map<string, CacheEntry>();
  */
 export function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
+}
+
+function pushCandidate(seen: Set<string>, candidates: string[], url: string | null | undefined): void {
+  const normalized = normalizeBaseUrl(url ?? "");
+  if (!normalized || seen.has(normalized)) return;
+  seen.add(normalized);
+  candidates.push(normalized);
 }
 
 /**
@@ -76,13 +85,43 @@ export async function probeLan(
 }
 
 /**
+ * Return the candidate base URLs for a device in the order the app should try
+ * them: cached best route first, then LAN, then tunnel.
+ */
+export function getBaseUrlCandidates(device: DeviceRouteTarget): string[] {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+
+  pushCandidate(seen, candidates, cache.get(device.deviceId)?.baseUrl);
+  pushCandidate(seen, candidates, buildLanBaseUrl(device.deviceIp));
+  pushCandidate(seen, candidates, device.url);
+
+  return candidates;
+}
+
+/**
+ * Persist the last-known good route for a device so future requests can reuse
+ * it without probing again.
+ */
+export function rememberBaseUrlResolution(deviceId: string, baseUrl: string, isLan: boolean): void {
+  const normalized = normalizeBaseUrl(baseUrl);
+  if (!normalized) return;
+
+  cache.set(deviceId, {
+    baseUrl: normalized,
+    isLan,
+    resolvedAt: Date.now(),
+  });
+}
+
+/**
  * Resolve the best base URL for a device. Uses cache if present; otherwise
  * probes LAN with a short timeout and falls back to the stored tunnel URL.
  *
  * Pure-ish: the `probe` argument is injectable so tests don't need real network.
  */
 export async function resolveBaseUrl(
-  device: Pick<PiDevice, "deviceId" | "url" | "deviceIp">,
+  device: DeviceRouteTarget,
   probe: (lanUrl: string) => Promise<boolean> = (u) => probeLan(u),
 ): Promise<string> {
   const cached = cache.get(device.deviceId);
@@ -92,12 +131,13 @@ export async function resolveBaseUrl(
   const tunnel = normalizeBaseUrl(device.url);
 
   if (lan && (await probe(lan))) {
-    cache.set(device.deviceId, { baseUrl: lan, isLan: true, resolvedAt: Date.now() });
+    rememberBaseUrlResolution(device.deviceId, lan, true);
     return lan;
   }
 
-  cache.set(device.deviceId, { baseUrl: tunnel, isLan: false, resolvedAt: Date.now() });
-  return tunnel;
+  const fallback = tunnel || lan || "";
+  rememberBaseUrlResolution(device.deviceId, fallback, fallback === lan && Boolean(lan));
+  return fallback;
 }
 
 /**

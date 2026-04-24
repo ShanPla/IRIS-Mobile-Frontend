@@ -1,5 +1,7 @@
 import {
   buildLanBaseUrl,
+  getBaseUrlCandidates,
+  rememberBaseUrlResolution,
   normalizeBaseUrl,
   probeLan,
   resolveBaseUrl,
@@ -93,6 +95,15 @@ describe("resolveBaseUrl", () => {
     expect(probeCalls).toBe(0);
   });
 
+  it("falls back to LAN when the tunnel is missing", async () => {
+    const base = await resolveBaseUrl(
+      device({ url: "", deviceIp: "192.168.1.42" }),
+      async () => false,
+    );
+    expect(base).toBe(`http://192.168.1.42:${LAN_PORT}`);
+    expect(getCachedResolution("dev-1")?.isLan).toBe(true);
+  });
+
   it("caches: second call does not re-probe", async () => {
     let probeCalls = 0;
     const probe = async () => {
@@ -137,5 +148,24 @@ describe("resolveBaseUrl", () => {
       async () => false,
     );
     expect(base).toBe("https://iris-example.cfargotunnel.com");
+  });
+});
+
+describe("getBaseUrlCandidates", () => {
+  beforeEach(() => {
+    invalidateBaseUrlCache();
+  });
+
+  it("returns cached, LAN, then tunnel candidates without duplicates", () => {
+    rememberBaseUrlResolution("dev-1", "http://192.168.1.42:8000", true);
+
+    expect(getBaseUrlCandidates(device())).toEqual([
+      `http://192.168.1.42:${LAN_PORT}`,
+      "https://iris-example.cfargotunnel.com",
+    ]);
+  });
+
+  it("skips empty candidates", () => {
+    expect(getBaseUrlCandidates(device({ url: "", deviceIp: null }))).toEqual([]);
   });
 });

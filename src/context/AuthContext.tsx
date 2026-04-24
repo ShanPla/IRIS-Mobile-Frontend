@@ -10,6 +10,7 @@ import {
   purgeStoredAuthData,
   registerAccount,
 } from "../lib/accounts";
+import { getCentralCurrentUser } from "../lib/backend";
 import type { AuthSession } from "../types/iris";
 import type { PiDevice } from "../lib/pi";
 
@@ -93,6 +94,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const refreshSession = async () => {
+    if (session?.token) {
+      const currentUser = await getCentralCurrentUser(session.token);
+      setSession((current) => (
+        current
+          ? {
+              ...current,
+              username: currentUser.username,
+              email: currentUser.gmail ?? current.email,
+              role: currentUser.role,
+              permissions: currentUser.permissions ?? null,
+            }
+          : current
+      ));
+    }
     await refreshDeviceState(session?.username);
   };
 
