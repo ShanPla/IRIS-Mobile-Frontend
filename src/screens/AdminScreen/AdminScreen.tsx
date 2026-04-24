@@ -9,9 +9,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { AlertTriangle, Shield, Users } from "lucide-react-native";
+import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
-import { piGet, piPost } from "../../lib/pi";
+import { useAuth } from "../../context/AuthContext";
+import { unpairCentralDevice } from "../../lib/backend";
+import { piGet, piPost, removeDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 import { useScreenLayout } from "../../theme/layout";
 
@@ -40,11 +45,16 @@ interface ResetResult {
   events_deleted: number;
   faces_deleted: number;
   users_deleted: number;
+  pairings_deleted?: number;
   snapshots_cleared: boolean;
   config_reset: boolean;
 }
 
+type Nav = NativeStackNavigationProp<RootStackParamList, "Admin">;
+
 export default function AdminScreen() {
+  const navigation = useNavigation<Nav>();
+  const { activeDevice, session, refreshDevices } = useAuth();
   const layout = useScreenLayout({ bottom: "stack" });
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [pairedUsers, setPairedUsers] = useState<PairedUser[]>([]);
@@ -83,7 +93,7 @@ export default function AdminScreen() {
   const handleFactoryReset = () => {
     Alert.alert(
       "Factory Reset",
-      "This will permanently delete all non-admin data from this Pi. This action cannot be undone.",
+      "This will permanently delete this Pi's events and faces, reset its configuration, and unlink paired users. User accounts will not be deleted.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Reset Everything", style: "destructive", onPress: confirmReset },
@@ -94,7 +104,7 @@ export default function AdminScreen() {
   const confirmReset = () => {
     Alert.alert(
       "Are you absolutely sure?",
-      "All events, faces, pairings, and non-admin accounts will be removed.",
+      "Events, faces, local pairing links, and system settings for this Pi will be reset.",
       [
         { text: "No, go back", style: "cancel" },
         { text: "Yes, factory reset", style: "destructive", onPress: executeReset },
@@ -106,11 +116,20 @@ export default function AdminScreen() {
     setResetting(true);
     try {
       const result = await piPost<ResetResult>("/api/admin/factory-reset");
+      if (activeDevice) {
+        if (session?.token) {
+          await unpairCentralDevice(activeDevice.deviceId, session.token).catch((error) => {
+            console.warn("[IRIS Mobile] Could not remove reset device from registry:", error);
+          });
+        }
+        await removeDevice(activeDevice.deviceId, session?.username);
+        await refreshDevices();
+      }
       Alert.alert(
         "Factory Reset Complete",
-        `Deleted ${result.events_deleted} events, ${result.faces_deleted} faces, and ${result.users_deleted} user accounts.`,
+        `Cleared ${result.events_deleted} events and ${result.faces_deleted} faces, then unlinked ${result.pairings_deleted ?? 0} user pairing(s). The reset device was removed from this phone. Add it again from Setup when you want to pair it fresh.`,
+        [{ text: "OK", onPress: () => navigation.navigate("DeviceList") }],
       );
-      void loadData();
     } catch (e) {
       Alert.alert("Reset Failed", e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -238,7 +257,7 @@ export default function AdminScreen() {
             <View style={styles.dangerCopy}>
               <Text style={styles.cardTitle}>Danger Zone</Text>
               <Text style={styles.dangerText}>
-                Factory reset permanently deletes events, faces, non-admin users, device pairings, and system configuration.
+                Factory reset permanently deletes this Pi's events and faces, unlinks device pairings, and resets system configuration.
               </Text>
             </View>
           </View>

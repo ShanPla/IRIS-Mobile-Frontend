@@ -54,7 +54,7 @@ function resolveAccessRole(device: PiDevice, index: number): DeviceAccess {
 
 export default function DeviceListScreen() {
   const navigation = useNavigation<Nav>();
-  const { session, sessionPassword, activeDevice, selectDevice } = useAuth();
+  const { session, sessionPassword, activeDevice, selectDevice, refreshDevices } = useAuth();
   const access = getSessionAccess(session);
   const layout = useScreenLayout({ bottom: "stack" });
   const [devices, setDevices] = useState<PiDevice[]>([]);
@@ -207,7 +207,7 @@ export default function DeviceListScreen() {
 
     Alert.alert(
       "Factory Reset",
-      `This will permanently delete all events, faces, pairings, and non-admin accounts on ${device.name}. This cannot be undone.`,
+      `This will permanently delete events and faces on ${device.name}, reset its configuration, and unlink paired users. User accounts will not be deleted.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -237,16 +237,28 @@ export default function DeviceListScreen() {
   const runFactoryReset = async (device: PiDevice) => {
     try {
       await selectDevice(device.deviceId);
-      const result = await piPost<{ events_deleted: number; faces_deleted: number; users_deleted: number }>(
+      const result = await piPost<{ events_deleted: number; faces_deleted: number; pairings_deleted?: number }>(
         "/api/admin/factory-reset",
         undefined,
         session?.username,
       );
+      if (session?.token) {
+        await unpairCentralDevice(device.deviceId, session.token).catch((error) => {
+          console.warn("[IRIS Mobile] Could not remove reset device from registry:", error);
+        });
+      }
+      await removeDevice(device.deviceId, session?.username);
+      setDevices((current) => current.filter((item) => item.deviceId !== device.deviceId));
+      setConnectionById((current) => {
+        const next = { ...current };
+        delete next[device.deviceId];
+        return next;
+      });
+      await refreshDevices();
       Alert.alert(
         "Factory Reset Complete",
-        `Deleted ${result.events_deleted} events, ${result.faces_deleted} faces, and ${result.users_deleted} user accounts.`,
+        `Cleared ${result.events_deleted} events and ${result.faces_deleted} faces, then unlinked ${result.pairings_deleted ?? 0} user pairing(s). ${device.name} was removed from this phone. Add it again from Setup when you want to pair it fresh.`,
       );
-      await loadDevices();
     } catch (e) {
       Alert.alert("Reset Failed", e instanceof Error ? e.message : "The device rejected the reset request.");
     }

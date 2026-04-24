@@ -25,6 +25,7 @@ interface AuthContextType {
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  refreshDevices: () => Promise<void>;
   selectDevice: (deviceId: string) => Promise<void>;
 }
 
@@ -111,6 +112,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshDeviceState(session?.username);
   };
 
+  const refreshDevices = async () => {
+    await refreshDeviceState(session?.username);
+  };
+
   const selectDevice = async (deviceId: string) => {
     const accountId = session?.username;
     await persistActiveDevice(deviceId, accountId);
@@ -121,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, sessionPassword, bootstrapping, hasPi, activeDevice, login, register, changePassword, logout, refreshSession, selectDevice }}>
+    <AuthContext.Provider value={{ session, sessionPassword, bootstrapping, hasPi, activeDevice, login, register, changePassword, logout, refreshSession, refreshDevices, selectDevice }}>
       {children}
     </AuthContext.Provider>
   );
