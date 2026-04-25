@@ -432,7 +432,7 @@ export default function SettingsScreen() {
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
                       <View style={[styles.settingIcon, styles.iconPurple]}>
-                        <User size={18} color="#9333ea" strokeWidth={2.2} />
+                        <User size={18} color={referenceColors.purple} strokeWidth={2.2} />
                       </View>
                       <View style={styles.settingCopy}>
                         <Text style={styles.settingLabel}>
@@ -764,7 +764,7 @@ export default function SettingsScreen() {
                 >
                   <View style={styles.settingInfo}>
                     <View style={[styles.settingIcon, styles.iconPurple]}>
-                      <Users size={18} color="#9333ea" strokeWidth={2.2} />
+                      <Users size={18} color={referenceColors.purple} strokeWidth={2.2} />
                     </View>
                     <View style={styles.settingCopy}>
                       <Text style={styles.settingLabel}>Manage Users</Text>
@@ -958,7 +958,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f1f5f9",
   },
   iconPurple: {
-    backgroundColor: "#f3e8ff",
+    backgroundColor: referenceColors.purpleSoft,
   },
   iconRed: {
     backgroundColor: "#fee2e2",

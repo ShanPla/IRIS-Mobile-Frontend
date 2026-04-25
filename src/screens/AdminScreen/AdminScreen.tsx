@@ -118,11 +118,11 @@ export default function AdminScreen() {
   const roleBadgeColor = (role: string) => {
     switch (role) {
       case "admin":
-        return "#f59e0b";
+        return referenceColors.amber;
       case "homeowner_primary":
         return referenceColors.primary;
       case "homeowner_invited":
-        return "#7c3aed";
+        return referenceColors.purple;
       default:
         return referenceColors.textMuted;
     }

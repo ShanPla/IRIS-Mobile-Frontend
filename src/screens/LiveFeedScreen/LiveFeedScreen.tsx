@@ -726,8 +726,8 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   quickButtonPurple: {
-    backgroundColor: "#f3e8ff",
-    borderColor: "#d8b4fe",
+    backgroundColor: referenceColors.purpleSoft,
+    borderColor: referenceColors.purpleBorder,
   },
   quickButtonText: {
     color: referenceColors.text,

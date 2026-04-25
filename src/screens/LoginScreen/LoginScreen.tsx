@@ -215,7 +215,7 @@ export default function LoginScreen() {
                     activeOpacity={0.9}
                   >
                     <View style={styles.primaryButton}>
-                      {loginLoading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
+                      {loginLoading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Sign In</Text>}
                     </View>
                   </TouchableOpacity>
                 </>
@@ -256,7 +256,7 @@ export default function LoginScreen() {
                     activeOpacity={0.9}
                   >
                     <View style={styles.primaryButton}>
-                      {regLoading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.primaryButtonText}>Create Account</Text>}
+                      {regLoading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Create Account</Text>}
                     </View>
                   </TouchableOpacity>
                 </>
@@ -387,14 +387,13 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     minHeight: 58,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    backgroundColor: referenceColors.primary,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 18,
   },
   primaryButtonText: {
-    color: referenceColors.primary,
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
   },
