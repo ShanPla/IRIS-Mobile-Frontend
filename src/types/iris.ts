@@ -1,5 +1,5 @@
 export type SecurityMode = "home" | "away";
-export type EventType = "authorized" | "unknown" | "unverifiable" | "possible_threat";
+export type EventType = "authorized" | "unknown" | "unverifiable" | "possible_threat" | "uncertain_presence";
 
 export interface SecurityEvent {
   id: number;
@@ -45,6 +45,9 @@ export interface CameraHealth {
   mode: string;
   alarm_active: boolean;
   known_faces: number;
+  detection_state?: string;
+  frame_width?: number;
+  frame_height?: number;
 }
 
 export interface FaceProfile {

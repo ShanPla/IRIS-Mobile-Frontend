@@ -23,6 +23,7 @@ import {
 } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
+import { usePiHealth } from "../../hooks/usePiHealth";
 import { buildPiUrl, getActiveDevice } from "../../lib/pi";
 import { getCachedResolution, invalidateBaseUrlCache } from "../../lib/resolveBaseUrl";
 import { saveRemoteImageToLibrary } from "../../lib/saveImage";
@@ -49,6 +50,7 @@ export default function LiveFeedScreen() {
   const [lastFrameMs, setLastFrameMs] = useState<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consecutiveFailsRef = useRef(0);
+  const { health } = usePiHealth(5000, session?.username);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -213,6 +215,31 @@ export default function LiveFeedScreen() {
   };
   const feedHeight = getResponsiveMediaHeight(layout.width, { min: 260, max: 420, ratio: 0.9 });
 
+  function formatDetectionState(state: string | undefined): string {
+    switch (state) {
+      case "no_person": return "No Person";
+      case "uncertain_presence": return "Uncertain";
+      case "person_detected": return "Person Detected";
+      case "face_detected": return "Face Detected";
+      case "authorized": return "Authorized";
+      case "possible_threat": return "Possible Threat";
+      case "intruder": return "Intruder";
+      default: return "—";
+    }
+  }
+
+  function detectionStateStyle(state: string | undefined) {
+    switch (state) {
+      case "authorized": return styles.goodText;
+      case "possible_threat":
+      case "intruder": return styles.dangerText;
+      case "uncertain_presence": return styles.mutedText;
+      case "person_detected":
+      case "face_detected": return styles.warnText;
+      default: return null;
+    }
+  }
+
   return (
     <View style={styles.container}>
       <ReferenceBackdrop />
@@ -310,7 +337,11 @@ export default function LiveFeedScreen() {
           <Text style={styles.cardTitle}>Stream Information</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Resolution</Text>
-            <Text style={styles.infoValue}>640 x 480</Text>
+            <Text style={styles.infoValue}>
+              {health?.frame_width && health?.frame_height
+                ? `${health.frame_width} x ${health.frame_height}`
+                : "—"}
+            </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Frame Rate</Text>
@@ -338,19 +369,23 @@ export default function LiveFeedScreen() {
               <ScanLine size={20} color={referenceColors.primary} strokeWidth={2.2} />
             </View>
             <View>
-              <Text style={styles.cardTitle}>Detection Active</Text>
-              <Text style={styles.detectionSubtitle}>Motion and face recognition</Text>
+              <Text style={styles.cardTitle}>Detection Status</Text>
+              <Text style={styles.detectionSubtitle}>Live camera pipeline state</Text>
             </View>
           </View>
 
           <View style={styles.detectionGrid}>
             <View style={styles.detectionMetric}>
-              <Text style={styles.metricLabel}>Motion Sensitivity</Text>
-              <Text style={styles.metricValue}>High</Text>
+              <Text style={styles.metricLabel}>State</Text>
+              <Text style={[styles.metricValue, detectionStateStyle(health?.detection_state)]}>
+                {formatDetectionState(health?.detection_state)}
+              </Text>
             </View>
             <View style={styles.detectionMetric}>
-              <Text style={styles.metricLabel}>Face Tolerance</Text>
-              <Text style={styles.metricValue}>0.6</Text>
+              <Text style={styles.metricLabel}>Engine</Text>
+              <Text style={[styles.metricValue, health?.engine_running ? styles.goodText : styles.warnText]}>
+                {health?.engine_running ? "Running" : "Stopped"}
+              </Text>
             </View>
           </View>
         </View>
@@ -617,6 +652,12 @@ const styles = StyleSheet.create({
   },
   goodText: {
     color: referenceColors.success,
+  },
+  dangerText: {
+    color: "#f87171",
+  },
+  mutedText: {
+    color: "#94a3b8",
   },
   detectionCard: {
     backgroundColor: "rgba(238,246,255,0.84)",

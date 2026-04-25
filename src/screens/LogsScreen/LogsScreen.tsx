@@ -31,6 +31,7 @@ const FILTERS: Array<{ label: string; value: EventType | null }> = [
   { label: "All", value: null },
   { label: "Authorized", value: "authorized" },
   { label: "Uncertain", value: "possible_threat" },
+  { label: "Unverified", value: "uncertain_presence" },
   { label: "Intruder", value: "unknown" },
 ];
 
@@ -121,6 +122,8 @@ export default function LogsScreen() {
         return referenceColors.danger;
       case "possible_threat":
         return referenceColors.warning;
+      case "uncertain_presence":
+        return "#94a3b8";
       default:
         return referenceColors.textMuted;
     }
@@ -134,6 +137,8 @@ export default function LogsScreen() {
         return "intruder";
       case "possible_threat":
         return "possible threat";
+      case "uncertain_presence":
+        return "uncertain presence";
       default:
         return type;
     }
