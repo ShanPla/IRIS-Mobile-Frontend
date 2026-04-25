@@ -218,7 +218,11 @@ export default function SettingsScreen() {
   const executeReset = async () => {
     setResetting(true);
     try {
-      const result = await piPost<ResetResult>("/api/admin/factory-reset");
+      const result = await piPost<ResetResult>(
+        "/api/admin/factory-reset",
+        undefined,
+        session?.username,
+      );
       if (activeDevice) {
         if (session?.token) {
           await unpairCentralDevice(activeDevice.deviceId, session.token).catch(

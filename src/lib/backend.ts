@@ -13,19 +13,24 @@ export interface CentralDevice {
   access_role?: "primary" | "secondary";
 }
 
-export const DEVICE_OFFLINE_MESSAGE = "Device is not online\nCheck that heartbeat is running on the Pi";
-export const DEVICE_TUNNEL_MESSAGE = "Device has not reported tunnel or LAN IP yet\nCheck that heartbeat is running on the Pi";
+export const DEVICE_OFFLINE_MESSAGE =
+  "Device is not online\nCheck that heartbeat is running on the Pi";
+export const DEVICE_TUNNEL_MESSAGE =
+  "Device has not reported tunnel or LAN IP yet\nCheck that heartbeat is running on the Pi";
 
 const FALLBACK_BACKEND_URL = "https://iris-back-end.onrender.com";
 const ENV_BACKEND_URL = (
-  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.EXPO_PUBLIC_API_URL ?? ""
+  (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.EXPO_PUBLIC_API_URL ?? ""
 ).trim();
 
 function normalizeBackendUrl(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return "";
 
-  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
   try {
     const parsed = new URL(withProtocol);
     return `${parsed.protocol}//${parsed.host}`;
@@ -34,14 +39,19 @@ function normalizeBackendUrl(raw: string): string {
   }
 }
 
-export const CENTRAL_BACKEND_URL = normalizeBackendUrl(ENV_BACKEND_URL) || FALLBACK_BACKEND_URL;
+export const CENTRAL_BACKEND_URL =
+  normalizeBackendUrl(ENV_BACKEND_URL) || FALLBACK_BACKEND_URL;
 
-async function parseBackendError(res: Response, fallback: string): Promise<string> {
+async function parseBackendError(
+  res: Response,
+  fallback: string,
+): Promise<string> {
   try {
     const contentType = res.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
       const data = (await res.json()) as { detail?: string };
-      if (typeof data.detail === "string" && data.detail.trim()) return data.detail;
+      if (typeof data.detail === "string" && data.detail.trim())
+        return data.detail;
     }
 
     const text = (await res.text()).trim();
@@ -53,13 +63,20 @@ async function parseBackendError(res: Response, fallback: string): Promise<strin
   return fallback;
 }
 
-async function backendFetch(path: string, init?: RequestInit): Promise<Response> {
+async function backendFetch(
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
   return fetch(`${CENTRAL_BACKEND_URL}${path}`, init);
 }
 
 function friendlyDeviceLookupError(status: number, message: string): string {
   const normalized = message.toLowerCase();
-  if (status === 404 || normalized.includes("not found") || normalized.includes("not online")) {
+  if (
+    status === 404 ||
+    normalized.includes("not found") ||
+    normalized.includes("not online")
+  ) {
     return DEVICE_OFFLINE_MESSAGE;
   }
   if (normalized.includes("tunnel")) {
@@ -75,7 +92,11 @@ function bearerHeaders(token: string, extra?: HeadersInit): HeadersInit {
   };
 }
 
-export async function registerCentralAccount(username: string, gmail: string, password: string): Promise<UserResponse> {
+export async function registerCentralAccount(
+  username: string,
+  gmail: string,
+  password: string,
+): Promise<UserResponse> {
   const response = await backendFetch("/api/auth/register", {
     method: "POST",
     headers: {
@@ -85,13 +106,20 @@ export async function registerCentralAccount(username: string, gmail: string, pa
   });
 
   if (!response.ok) {
-    throw new Error(await parseBackendError(response, `Registration failed (${response.status}).`));
+    throw new Error(
+      await parseBackendError(
+        response,
+        `Registration failed (${response.status}).`,
+      ),
+    );
   }
 
   return (await response.json()) as UserResponse;
 }
 
-export async function getCentralCurrentUser(token: string): Promise<UserResponse> {
+export async function getCentralCurrentUser(
+  token: string,
+): Promise<UserResponse> {
   const response = await backendFetch("/api/auth/me", {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -99,7 +127,12 @@ export async function getCentralCurrentUser(token: string): Promise<UserResponse
   });
 
   if (!response.ok) {
-    throw new Error(await parseBackendError(response, `Failed to load account details (${response.status}).`));
+    throw new Error(
+      await parseBackendError(
+        response,
+        `Failed to load account details (${response.status}).`,
+      ),
+    );
   }
 
   return (await response.json()) as UserResponse;
@@ -118,7 +151,9 @@ export async function loginCentralAccount(
   });
 
   if (!response.ok) {
-    throw new Error(await parseBackendError(response, `Login failed (${response.status}).`));
+    throw new Error(
+      await parseBackendError(response, `Login failed (${response.status}).`),
+    );
   }
 
   const tokenData = (await response.json()) as { access_token: string };
@@ -152,30 +187,51 @@ export async function changeCentralPassword(
   });
 
   if (!response.ok) {
-    throw new Error(await parseBackendError(response, `Password change failed (${response.status}).`));
+    throw new Error(
+      await parseBackendError(
+        response,
+        `Password change failed (${response.status}).`,
+      ),
+    );
   }
 }
 
-export async function resolveCentralDevice(deviceId: string, token: string): Promise<CentralDevice> {
-  const response = await backendFetch(`/api/auth/devices/${encodeURIComponent(deviceId.trim().toUpperCase())}`, {
-    headers: bearerHeaders(token),
-  });
+export async function resolveCentralDevice(
+  deviceId: string,
+  token: string,
+): Promise<CentralDevice> {
+  const response = await backendFetch(
+    `/api/auth/devices/${encodeURIComponent(deviceId.trim().toUpperCase())}`,
+    {
+      headers: bearerHeaders(token),
+    },
+  );
 
   if (!response.ok) {
-    const message = await parseBackendError(response, `Device lookup failed (${response.status}).`);
+    const message = await parseBackendError(
+      response,
+      `Device lookup failed (${response.status}).`,
+    );
     throw new Error(friendlyDeviceLookupError(response.status, message));
   }
 
   return (await response.json()) as CentralDevice;
 }
 
-export async function listCentralDevices(token: string): Promise<CentralDevice[]> {
+export async function listCentralDevices(
+  token: string,
+): Promise<CentralDevice[]> {
   const response = await backendFetch("/api/auth/me/devices", {
     headers: bearerHeaders(token),
   });
 
   if (!response.ok) {
-    throw new Error(await parseBackendError(response, `Failed to load paired devices (${response.status}).`));
+    throw new Error(
+      await parseBackendError(
+        response,
+        `Failed to load paired devices (${response.status}).`,
+      ),
+    );
   }
 
   return (await response.json()) as CentralDevice[];
@@ -184,7 +240,12 @@ export async function listCentralDevices(token: string): Promise<CentralDevice[]
 export async function pairCentralDevice(
   deviceId: string,
   token: string,
-  connection?: Partial<Pick<CentralDevice, "device_name" | "device_url" | "device_ip" | "primary_gmail">>,
+  connection?: Partial<
+    Pick<
+      CentralDevice,
+      "device_name" | "device_url" | "device_ip" | "primary_gmail"
+    >
+  >,
 ): Promise<CentralDevice> {
   const response = await backendFetch("/api/auth/me/devices", {
     method: "POST",
@@ -201,20 +262,51 @@ export async function pairCentralDevice(
   });
 
   if (!response.ok) {
-    const message = await parseBackendError(response, `Device pairing failed (${response.status}).`);
+    const message = await parseBackendError(
+      response,
+      `Device pairing failed (${response.status}).`,
+    );
     throw new Error(friendlyDeviceLookupError(response.status, message));
   }
 
   return (await response.json()) as CentralDevice;
 }
 
-export async function unpairCentralDevice(deviceId: string, token: string): Promise<void> {
-  const response = await backendFetch(`/api/auth/me/devices/${encodeURIComponent(deviceId.trim().toUpperCase())}`, {
-    method: "DELETE",
-    headers: bearerHeaders(token),
-  });
+export async function unpairCentralDevice(
+  deviceId: string,
+  token: string,
+): Promise<void> {
+  const response = await backendFetch(
+    `/api/auth/me/devices/${encodeURIComponent(deviceId.trim().toUpperCase())}`,
+    {
+      method: "DELETE",
+      headers: bearerHeaders(token),
+    },
+  );
 
   if (!response.ok) {
-    throw new Error(await parseBackendError(response, `Device removal failed (${response.status}).`));
+    throw new Error(
+      await parseBackendError(
+        response,
+        `Device removal failed (${response.status}).`,
+      ),
+    );
+  }
+}
+
+export async function checkCentralUserExists(
+  username: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    const response = await backendFetch(
+      `/api/auth/users/${encodeURIComponent(username.trim())}/exists`,
+      { headers: bearerHeaders(token) },
+    );
+    if (!response.ok) return false;
+    const data = (await response.json()) as { exists: boolean };
+    return data.exists === true;
+  } catch {
+    return false;
   }
 }

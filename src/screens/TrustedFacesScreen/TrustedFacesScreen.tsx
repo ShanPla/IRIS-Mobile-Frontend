@@ -13,10 +13,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import { Shield, Users } from "lucide-react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { ArrowLeft, Shield, Users } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
+import { checkCentralUserExists } from "../../lib/backend";
 import { createTrustedUserInvite, piGet, piPut } from "../../lib/pi";
 import type { DeviceInviteResult } from "../../lib/pi";
 import type { InvitedUser, PermissionSet } from "../../types/iris";
@@ -54,6 +55,7 @@ function buildInviteShareMessage(generatedInvite: GeneratedInvite): string {
 }
 
 export default function TrustedFacesScreen() {
+  const navigation = useNavigation();
   const { session } = useAuth();
   const layout = useScreenLayout({ bottom: "stack" });
   const [users, setUsers] = useState<InvitedUser[]>([]);
@@ -121,11 +123,23 @@ export default function TrustedFacesScreen() {
       setInviteError("Username is required");
       return;
     }
+    if (!session?.token) {
+      setInviteError("You must be signed in to invite users.");
+      return;
+    }
 
     setCreatingInvite(true);
     setInviteError("");
     setLatestInvite(null);
     try {
+      const userExists = await checkCentralUserExists(
+        trimmedUsername,
+        session.token,
+      );
+      if (!userExists) {
+        setInviteError("User not found. Make sure they have an IRIS account.");
+        return;
+      }
       const permissionLabels = PERMISSION_LABELS.filter(
         ({ key }) => invitePermissions[key],
       ).map(({ label }) => label);
@@ -213,6 +227,17 @@ export default function TrustedFacesScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <ArrowLeft
+              size={16}
+              color={referenceColors.textSoft}
+              strokeWidth={2.2}
+            />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Trusted Users</Text>
@@ -801,5 +826,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: 28,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 18,
+  },
+  backText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

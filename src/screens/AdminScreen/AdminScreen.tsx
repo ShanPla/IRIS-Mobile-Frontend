@@ -6,11 +6,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Shield, Users } from "lucide-react-native";
+import { ArrowLeft, Shield, Users } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
@@ -141,13 +142,35 @@ export default function AdminScreen() {
     <View style={styles.container}>
       <ReferenceBackdrop />
       <Animated.ScrollView
-        style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        style={[
+          styles.container,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
         contentContainerStyle={[styles.content, layout.contentStyle]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={referenceColors.primary} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={referenceColors.primary}
+          />
+        }
       >
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <ArrowLeft
+            size={16}
+            color={referenceColors.textSoft}
+            strokeWidth={2.2}
+          />
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
         <View style={styles.header}>
           <Text style={styles.title}>Admin Panel</Text>
-          <Text style={styles.subtitle}>Device ownership and pairing statistics</Text>
+          <Text style={styles.subtitle}>
+            Device ownership and pairing statistics
+          </Text>
         </View>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -182,25 +205,50 @@ export default function AdminScreen() {
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Paired Users ({pairedUsers.length})</Text>
+          <Text style={styles.cardTitle}>
+            Paired Users ({pairedUsers.length})
+          </Text>
           {pairedUsers.length === 0 ? (
-            <Text style={styles.emptyText}>No users have paired with this Pi yet.</Text>
+            <Text style={styles.emptyText}>
+              No users have paired with this Pi yet.
+            </Text>
           ) : (
             pairedUsers.map((user, index) => (
-              <View key={user.id} style={[styles.userRow, index === pairedUsers.length - 1 && styles.rowLast]}>
+              <View
+                key={user.id}
+                style={[
+                  styles.userRow,
+                  index === pairedUsers.length - 1 && styles.rowLast,
+                ]}
+              >
                 <View style={styles.userHeader}>
                   <View style={styles.userAvatar}>
-                    <Users size={16} color={referenceColors.primary} strokeWidth={2.2} />
+                    <Users
+                      size={16}
+                      color={referenceColors.primary}
+                      strokeWidth={2.2}
+                    />
                   </View>
                   <View style={styles.userInfo}>
                     <View style={styles.userNameRow}>
                       <Text style={styles.username}>{user.username}</Text>
-                      <View style={[styles.badge, { backgroundColor: roleBadgeColor(user.role) }]}>
-                        <Text style={styles.badgeText}>{roleLabel(user.role)}</Text>
+                      <View
+                        style={[
+                          styles.badge,
+                          { backgroundColor: roleBadgeColor(user.role) },
+                        ]}
+                      >
+                        <Text style={styles.badgeText}>
+                          {roleLabel(user.role)}
+                        </Text>
                       </View>
                     </View>
-                    <Text style={styles.userMeta}>Paired: {formatDate(user.paired_at)}</Text>
-                    <Text style={styles.userMeta}>Last active: {formatDate(user.last_active)}</Text>
+                    <Text style={styles.userMeta}>
+                      Paired: {formatDate(user.paired_at)}
+                    </Text>
+                    <Text style={styles.userMeta}>
+                      Last active: {formatDate(user.last_active)}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -210,7 +258,9 @@ export default function AdminScreen() {
 
         <View style={styles.infoSection}>
           <Text style={styles.infoText}>
-            Need to reset this device? Go to <Text style={styles.infoHighlight}>Settings</Text> and scroll to the Management section.
+            Need to reset this device? Go to{" "}
+            <Text style={styles.infoHighlight}>Settings</Text> and scroll to the
+            Management section.
           </Text>
         </View>
       </Animated.ScrollView>
@@ -400,6 +450,24 @@ const styles = StyleSheet.create({
   },
   infoHighlight: {
     color: referenceColors.primary,
+    fontWeight: "700",
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 18,
+  },
+  backText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
     fontWeight: "700",
   },
 });
