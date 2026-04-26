@@ -25,6 +25,33 @@ import type { FaceProfile } from "../../types/iris";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 
+// Expected head-pose ranges per enrollment angle.
+// yaw  < 0: subject turned LEFT  (their left); yaw  > 0: turned RIGHT
+// pitch< 0: tilted UP;                          pitch> 0: tilted DOWN
+const ANGLE_POSE: Record<string, { yaw: [number, number]; pitch: [number, number] }> = {
+  front:        { yaw: [-0.15,  0.15], pitch: [-0.20,  0.20] },
+  slight_left:  { yaw: [-0.60, -0.15], pitch: [-0.28,  0.28] },
+  slight_right: { yaw: [ 0.15,  0.60], pitch: [-0.28,  0.28] },
+  up:           { yaw: [-0.20,  0.20], pitch: [-0.35, -0.08] },
+  down:         { yaw: [-0.20,  0.20], pitch: [ 0.08,  0.35] },
+};
+
+function getPoseGuidance(angleKey: string, yaw: number, pitch: number): string | null {
+  const expected = ANGLE_POSE[angleKey];
+  if (!expected) return null;
+  const yawOk   = yaw   >= expected.yaw[0]   && yaw   <= expected.yaw[1];
+  const pitchOk = pitch >= expected.pitch[0] && pitch <= expected.pitch[1];
+  if (yawOk && pitchOk) return null;
+  if (!yawOk) {
+    return yaw < expected.yaw[0]
+      ? "Turn your head more to the right."
+      : "Turn your head more to the left.";
+  }
+  return pitch < expected.pitch[0]
+    ? "Tilt your head down slightly."
+    : "Tilt your head up slightly.";
+}
+
 const PHONE_ANGLES = [
   { key: "front",        label: "Look Straight",  instruction: "Face the camera directly" },
   { key: "slight_left",  label: "Tilt Left",      instruction: "Turn your head slightly to the left" },
@@ -177,6 +204,15 @@ export default function FacialRegistrationScreen() {
     }
   }, [qualityOk, countdown, pulseAnim]);
 
+  // Hide the floating tab bar while the camera or confirmation screen is active
+  useEffect(() => {
+    const hidden = phoneCameraActive || confirmPending;
+    navigation.setOptions({ tabBarStyle: hidden ? { display: "none" } : undefined });
+    return () => {
+      navigation.setOptions({ tabBarStyle: undefined });
+    };
+  }, [phoneCameraActive, confirmPending, navigation]);
+
   // ── Probe loop ────────────────────────────────────────────────────────────
   // Runs while camera is active and ready. Takes a low-quality probe photo every
   // ~1.8 s, sends to /api/faces/validate, updates quality feedback.
@@ -215,9 +251,20 @@ export default function FacialRegistrationScreen() {
             }
 
             if (result.ok) {
-              setFeedbackMsg("Face detected — hold still...");
-              setFeedbackType("ok");
-              setQualityOk(true);
+              const angleKey = PHONE_ANGLES[phoneStepRef.current].key;
+              const poseMsg =
+                result.yaw !== undefined && result.pitch !== undefined
+                  ? getPoseGuidance(angleKey, result.yaw, result.pitch)
+                  : null;
+              if (poseMsg) {
+                setFeedbackMsg(poseMsg);
+                setFeedbackType("warn");
+                setQualityOk(false);
+              } else {
+                setFeedbackMsg("Face detected — hold still...");
+                setFeedbackType("ok");
+                setQualityOk(true);
+              }
             } else {
               const issue = result.issues[0] ?? "Adjust your position.";
               setFeedbackMsg(issue);
@@ -437,14 +484,19 @@ export default function FacialRegistrationScreen() {
       : feedbackType === "error" ? "#f87171"
       : "#94a3b8";
 
-    // Progress ring dots — elliptically arranged around the oval
-    const dotPad = 32;
-    const dotContW = ovalWidth  + dotPad * 2;
-    const dotContH = ovalHeight + dotPad * 2;
-    const dotXR = dotContW / 2 - 8;
-    const dotYR = dotContH / 2 - 8;
-    const dotContLeft = (SCREEN_W - dotContW) / 2;
-    const dotContTop  = (SCREEN_H - dotContH) / 2;
+    // Smooth arc ring (Face ID style) — circles the oval guide
+    const ringStroke = 6;
+    const ringDiam   = ovalHeight + 56;        // well outside the oval so the arc never overlaps it
+    const ringR      = ringDiam / 2;
+    const ringLeft   = (SCREEN_W - ringDiam) / 2;
+    const ringTop    = (SCREEN_H - ringDiam) / 2;
+    const progressDeg = (phoneCaptured.length / PHONE_ANGLES.length) * 360;
+
+    // Tip dot — small white circle at the leading edge of the arc
+    const tipRad = ((progressDeg) * Math.PI) / 180;   // local angle (container is rotated -90°)
+    const tipR   = ringR - ringStroke / 2;
+    const tipX   = ringR + tipR * Math.cos(tipRad);
+    const tipY   = ringR + tipR * Math.sin(tipRad);
 
     return (
       <View style={styles.cameraContainer}>
@@ -453,6 +505,7 @@ export default function FacialRegistrationScreen() {
           style={styles.camera}
           facing="front"
           mode="picture"
+          mute
           onCameraReady={() => setCameraReady(true)}
         />
 
@@ -482,48 +535,87 @@ export default function FacialRegistrationScreen() {
           <View style={styles.overlayBottom} />
         </View>
 
-        {/* Elliptical progress ring (dots outside the oval, Face ID style) */}
+        {/* ── Smooth circular progress arc (Face ID style) ─────────────────
+             Outer container is rotated -90° so the arc starts at 12 o'clock.
+             Two clipped half-discs reveal the arc clockwise as angles complete.
+        ────────────────────────────────────────────────────────────────────── */}
         <View
           pointerEvents="none"
           style={{
             position: "absolute",
-            width: dotContW,
-            height: dotContH,
-            left: dotContLeft,
-            top: dotContTop,
+            width: ringDiam,
+            height: ringDiam,
+            left: ringLeft,
+            top: ringTop,
+            transform: [{ rotate: "-90deg" }],
           }}
         >
-          {PHONE_ANGLES.map((angle, i) => {
-            const deg = -90 + (360 / PHONE_ANGLES.length) * i;
-            const rad = (deg * Math.PI) / 180;
-            const cx = dotContW / 2;
-            const cy = dotContH / 2;
-            const x = cx + Math.cos(rad) * dotXR;
-            const y = cy + Math.sin(rad) * dotYR;
-            const captured = i < phoneCaptured.length;
-            const active   = i === phoneStep && !captured;
-            const dotSize  = captured ? 14 : active ? 12 : 8;
-            return (
+          {/* Right-half clip — fills the first 0–180° of the arc */}
+          {progressDeg > 0 && (
+            <View
+              style={{
+                position: "absolute",
+                width: ringDiam / 2,
+                height: ringDiam,
+                right: 0,
+                overflow: "hidden",
+              }}
+            >
               <View
-                key={angle.key}
                 style={{
                   position: "absolute",
-                  width: dotSize,
-                  height: dotSize,
-                  borderRadius: dotSize / 2,
-                  backgroundColor: captured
-                    ? "#4ade80"
-                    : active
-                      ? ovalBorderColor
-                      : "rgba(255,255,255,0.18)",
-                  left: x - dotSize / 2,
-                  top:  y - dotSize / 2,
-                  borderWidth: active ? 1.5 : 0,
-                  borderColor: "rgba(255,255,255,0.5)",
+                  left: -(ringDiam / 2),
+                  width: ringDiam,
+                  height: ringDiam,
+                  borderRadius: ringR,
+                  borderWidth: ringStroke,
+                  borderColor: "#4ade80",
+                  transform: [{ rotate: `${Math.min(progressDeg, 180) - 180}deg` }],
                 }}
               />
-            );
-          })}
+            </View>
+          )}
+
+          {/* Left-half clip — fills 180–360° once right half is complete */}
+          {progressDeg > 180 && (
+            <View
+              style={{
+                position: "absolute",
+                width: ringDiam / 2,
+                height: ringDiam,
+                left: 0,
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  position: "absolute",
+                  right: -(ringDiam / 2),
+                  width: ringDiam,
+                  height: ringDiam,
+                  borderRadius: ringR,
+                  borderWidth: ringStroke,
+                  borderColor: "#4ade80",
+                  transform: [{ rotate: `${progressDeg - 360}deg` }],
+                }}
+              />
+            </View>
+          )}
+
+          {/* Tip dot — white circle at the leading edge of the arc */}
+          {progressDeg > 0 && progressDeg < 360 && (
+            <View
+              style={{
+                position: "absolute",
+                width: ringStroke + 4,
+                height: ringStroke + 4,
+                borderRadius: (ringStroke + 4) / 2,
+                backgroundColor: "#ffffff",
+                left: tipX - (ringStroke + 4) / 2,
+                top:  tipY - (ringStroke + 4) / 2,
+              }}
+            />
+          )}
         </View>
 
         {/* White capture flash */}

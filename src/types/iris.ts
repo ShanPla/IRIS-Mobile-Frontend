@@ -68,6 +68,8 @@ export interface FaceValidationResult {
   face_ratio?: number;
   sharpness?: number;
   brightness?: number;
+  yaw?: number;
+  pitch?: number;
 }
 
 export interface PermissionSet {
