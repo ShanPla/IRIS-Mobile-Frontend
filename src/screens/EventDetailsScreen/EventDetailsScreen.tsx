@@ -59,6 +59,10 @@ export default function EventDetailsScreen() {
         return referenceColors.danger;
       case "possible_threat":
         return referenceColors.warning;
+      case "uncertain_presence":
+        return "#94a3b8";
+      case "unverifiable":
+        return referenceColors.textMuted;
       default:
         return referenceColors.textMuted;
     }
@@ -72,6 +76,10 @@ export default function EventDetailsScreen() {
         return "Intruder Detected";
       case "possible_threat":
         return "Possible Threat";
+      case "uncertain_presence":
+        return "Uncertain Presence";
+      case "unverifiable":
+        return "Unverifiable";
       default:
         return type;
     }

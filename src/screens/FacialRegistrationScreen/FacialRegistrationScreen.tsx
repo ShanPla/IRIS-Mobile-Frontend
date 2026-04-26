@@ -537,7 +537,7 @@ export default function FacialRegistrationScreen() {
 
                       <TouchableOpacity style={[styles.primaryButtonWrap, uploading && styles.buttonDisabled]} onPress={() => void handleUpload()} disabled={uploading}>
                         <View style={styles.primaryButton}>
-                          {uploading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.primaryButtonText}>Upload & Register</Text>}
+                          {uploading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Upload & Register</Text>}
                         </View>
                       </TouchableOpacity>
                     </>
@@ -803,15 +803,13 @@ const styles = StyleSheet.create({
   primaryButton: {
     minHeight: 56,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    backgroundColor: referenceColors.primary,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   primaryButtonText: {
-    color: referenceColors.primary,
+    color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
   },

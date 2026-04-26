@@ -40,7 +40,7 @@ export default function AddCameraScreen() {
           <TouchableOpacity style={styles.buttonWrap} onPress={() => navigation.navigate("Setup")} activeOpacity={0.9}>
             <View style={styles.button}>
               <Text style={styles.buttonText}>Go to Setup</Text>
-              <ChevronRight size={18} color={referenceColors.primary} strokeWidth={2.2} />
+              <ChevronRight size={18} color="#ffffff" strokeWidth={2.2} />
             </View>
           </TouchableOpacity>
         </View>
@@ -125,9 +125,7 @@ const styles = StyleSheet.create({
   button: {
     minHeight: 56,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    backgroundColor: referenceColors.primary,
     paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
@@ -135,7 +133,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   buttonText: {
-    color: referenceColors.primary,
+    color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
   },

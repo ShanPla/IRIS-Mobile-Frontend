@@ -417,7 +417,7 @@ export default function SetupScreen() {
                 activeOpacity={0.9}
               >
                 <View style={styles.primaryButton}>
-                  {loading ? <ActivityIndicator color={referenceColors.primary} /> : <Text style={styles.primaryButtonText}>Add Device</Text>}
+                  {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Add Device</Text>}
                 </View>
               </TouchableOpacity>
             </View>
@@ -611,14 +611,13 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     minHeight: 58,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    borderRadius: 18,
+    backgroundColor: referenceColors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   primaryButtonText: {
-    color: referenceColors.primary,
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
   },

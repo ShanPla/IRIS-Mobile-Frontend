@@ -299,7 +299,7 @@ export default function TrustedFacesScreen() {
               disabled={creatingInvite}
             >
               {creatingInvite ? (
-                <ActivityIndicator color={referenceColors.primary} />
+                <ActivityIndicator color="#ffffff" />
               ) : (
                 <Text style={styles.generateButtonText}>
                   Generate Invite Code
@@ -553,16 +553,14 @@ const styles = StyleSheet.create({
   generateButton: {
     minHeight: 54,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    backgroundColor: referenceColors.primary,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
     ...buttonShadow,
   },
   generateButtonText: {
-    color: referenceColors.primary,
+    color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
   },
@@ -805,16 +803,14 @@ const styles = StyleSheet.create({
   saveButton: {
     minHeight: 54,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    backgroundColor: referenceColors.primary,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 18,
     ...buttonShadow,
   },
   saveText: {
-    color: referenceColors.primary,
+    color: "#ffffff",
     fontSize: 15,
     fontWeight: "800",
   },

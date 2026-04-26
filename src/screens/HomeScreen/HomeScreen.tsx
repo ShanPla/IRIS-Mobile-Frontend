@@ -68,6 +68,7 @@ export default function HomeScreen() {
   const layout = useScreenLayout({ bottom: "tab" });
 
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const statusRef = useRef<SystemStatus | null>(null);
   const [recentEvents, setRecentEvents] = useState<SecurityEvent[]>([]);
   const [frameUri, setFrameUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,6 +81,10 @@ export default function HomeScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     Animated.parallel([
@@ -180,7 +185,7 @@ export default function HomeScreen() {
         const currentMode =
           d.mode === "home" || d.mode === "away"
             ? (d.mode as SecurityMode)
-            : (status?.mode ?? null);
+            : (statusRef.current?.mode ?? null);
         const isIntruder = d.event_type === "unknown";
         const isUncertain = d.event_type === "possible_threat";
         const isAuthorized = d.event_type === "authorized";
@@ -255,11 +260,11 @@ export default function HomeScreen() {
         }
       },
       onAlarmChange: (msg: unknown) => {
-        const d = msg as { active?: boolean };
-        if (typeof d.active === "boolean") {
+        const d = msg as { alarm_active?: boolean };
+        if (typeof d.alarm_active === "boolean") {
           setStatus((prev) =>
             prev
-              ? { ...prev, alarm_active: d.active ?? prev.alarm_active }
+              ? { ...prev, alarm_active: d.alarm_active ?? prev.alarm_active }
               : prev,
           );
         }
@@ -277,7 +282,7 @@ export default function HomeScreen() {
         }
       },
     }),
-    [navigation, notifyEvent, status],
+    [navigation, notifyEvent],
   );
 
   useWebSocket(wsHandlers, session?.username);
@@ -332,6 +337,10 @@ export default function HomeScreen() {
         return referenceColors.danger;
       case "possible_threat":
         return referenceColors.warning;
+      case "uncertain_presence":
+        return "#94a3b8";
+      case "unverifiable":
+        return referenceColors.textMuted;
       default:
         return referenceColors.textMuted;
     }
@@ -345,6 +354,10 @@ export default function HomeScreen() {
         return "intruder";
       case "possible_threat":
         return "possible threat";
+      case "uncertain_presence":
+        return "uncertain";
+      case "unverifiable":
+        return "unverifiable";
       default:
         return type;
     }

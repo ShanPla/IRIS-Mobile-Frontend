@@ -605,7 +605,7 @@ export default function DeviceListScreen() {
                 <View style={styles.primaryCTA}>
                   <Plus
                     size={18}
-                    color={referenceColors.primary}
+                    color="#ffffff"
                     strokeWidth={2.6}
                   />
                   <Text style={styles.primaryCTAText}>Add New Device</Text>
@@ -679,7 +679,7 @@ export default function DeviceListScreen() {
                     disabled={joinLoading}
                   >
                     {joinLoading ? (
-                      <ActivityIndicator color={referenceColors.primary} />
+                      <ActivityIndicator color="#ffffff" />
                     ) : (
                       <Text style={styles.joinConfirmText}>Join Device</Text>
                     )}
@@ -982,9 +982,7 @@ const styles = StyleSheet.create({
   primaryCTA: {
     minHeight: 58,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    backgroundColor: referenceColors.primary,
     paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
@@ -992,7 +990,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   primaryCTAText: {
-    color: referenceColors.primary,
+    color: "#ffffff",
     fontSize: 15,
     fontWeight: "700",
   },
@@ -1066,15 +1064,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
+    backgroundColor: referenceColors.primary,
     alignItems: "center",
     justifyContent: "center",
     ...buttonShadow,
   },
   joinConfirmText: {
-    color: referenceColors.primary,
+    color: "#ffffff",
     fontSize: 13,
     fontWeight: "800",
   },
