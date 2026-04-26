@@ -18,6 +18,7 @@ import {
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
+  ArrowLeft,
   ChevronRight,
   Crown,
   Plus,
@@ -499,6 +500,16 @@ export default function DeviceListScreen() {
               />
             }
           >
+            {navigation.canGoBack() ? (
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+              >
+                <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
+                <Text style={styles.backText}>Back</Text>
+              </TouchableOpacity>
+            ) : null}
+
             <View style={styles.header}>
               <View style={styles.headerCopy}>
                 <Text style={styles.title}>My Devices</Text>
@@ -709,6 +720,24 @@ const styles = StyleSheet.create({
     backgroundColor: referenceColors.background,
     justifyContent: "center",
     alignItems: "center",
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderWidth: 1,
+    borderColor: referenceColors.border,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 18,
+  },
+  backText: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    fontWeight: "700",
   },
   header: {
     flexDirection: "row",

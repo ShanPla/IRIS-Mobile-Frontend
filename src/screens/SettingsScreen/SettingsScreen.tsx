@@ -26,6 +26,7 @@ import {
   LogOut,
   Shield,
   Siren,
+  Smartphone,
   User,
   Users,
 } from "lucide-react-native";
@@ -730,6 +731,24 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account</Text>
             <View style={styles.groupCard}>
+              <TouchableOpacity
+                style={styles.settingRow}
+                onPress={() => navigation.navigate("DeviceList")}
+                activeOpacity={0.8}
+              >
+                <View style={styles.settingInfo}>
+                  <View style={[styles.settingIcon, styles.iconBlue]}>
+                    <Smartphone size={18} color={referenceColors.primary} strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.settingCopy}>
+                    <Text style={styles.settingLabel}>Switch Device</Text>
+                    <Text style={styles.settingDesc}>
+                      Go back to your device list
+                    </Text>
+                  </View>
+                </View>
+                <ChevronRight size={18} color={referenceColors.textMuted} strokeWidth={2.2} />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.settingRow, styles.rowLast]}
                 onPress={logout}
