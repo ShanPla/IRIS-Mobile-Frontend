@@ -59,6 +59,17 @@ export interface FaceProfile {
   updated_at: string;
 }
 
+export interface FaceValidationResult {
+  ok: boolean;
+  face_detected: boolean;
+  face_count?: number;
+  issues: string[];
+  quality_score: number;
+  face_ratio?: number;
+  sharpness?: number;
+  brightness?: number;
+}
+
 export interface PermissionSet {
   can_view_events: boolean;
   can_silence_alarm: boolean;

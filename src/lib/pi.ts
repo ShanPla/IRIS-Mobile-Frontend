@@ -1320,3 +1320,16 @@ export async function hasDevices(accountId?: string): Promise<boolean> {
   const devices = await getDevices(accountId);
   return devices.length > 0;
 }
+
+export async function validateFaceImage(
+  imageUri: string,
+  accountId?: string,
+): Promise<import("../types/iris").FaceValidationResult> {
+  const formData = new FormData();
+  formData.append("file", {
+    uri: imageUri,
+    type: "image/jpeg",
+    name: "probe.jpg",
+  } as unknown as Blob);
+  return piPostForm("/api/faces/validate", formData, accountId);
+}
