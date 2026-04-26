@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Dimensions,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -13,10 +15,9 @@ import {
   View,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import * as ImagePicker from "expo-image-picker";
 import { useNavigation } from "@react-navigation/native";
 import { useFocusEffect } from "@react-navigation/native";
-import { ArrowLeft, Camera, CheckCircle, ScanFace, Trash2, Upload, User } from "lucide-react-native";
+import { ArrowLeft, Camera, CheckCircle, ScanFace, Trash2, User } from "lucide-react-native";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { piDelete, piGet, piPostForm, validateFaceImage } from "../../lib/pi";
@@ -33,14 +34,12 @@ const PHONE_ANGLES = [
 ] as const;
 
 type FeedbackType = "info" | "ok" | "warn" | "error";
-type Mode = "phone" | "upload";
 
 export default function FacialRegistrationScreen() {
   const navigation = useNavigation();
   const { session } = useAuth();
   const layout = useScreenLayout({ bottom: "tab" });
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<Mode>("phone");
 
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
@@ -58,9 +57,10 @@ export default function FacialRegistrationScreen() {
   const [captureError, setCaptureError] = useState("");
   const [angleAccepted, setAngleAccepted] = useState(false);
 
-  // Upload mode state
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  // Confirmation step state (after all angles captured, before saving)
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -81,6 +81,10 @@ export default function FacialRegistrationScreen() {
   nameRef.current = name;
   const sessionRef = useRef(session);
   sessionRef.current = session;
+
+  // Animation — pulses the ring when face is ready to capture
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const loadFaces = useCallback(async () => {
     setFacesError("");
@@ -154,6 +158,25 @@ export default function FacialRegistrationScreen() {
     setAngleAccepted(false);
   }, [phoneStep, phoneCameraActive]);
 
+  // Pulse the ring border when the face is good and capture is imminent
+  useEffect(() => {
+    if (qualityOk && countdown !== null) {
+      pulseLoopRef.current?.stop();
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.08, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1,    duration: 500, useNativeDriver: true }),
+        ])
+      );
+      pulseLoopRef.current = loop;
+      loop.start();
+    } else {
+      pulseLoopRef.current?.stop();
+      pulseLoopRef.current = null;
+      pulseAnim.setValue(1);
+    }
+  }, [qualityOk, countdown, pulseAnim]);
+
   // ── Probe loop ────────────────────────────────────────────────────────────
   // Runs while camera is active and ready. Takes a low-quality probe photo every
   // ~1.8 s, sends to /api/faces/validate, updates quality feedback.
@@ -192,13 +215,13 @@ export default function FacialRegistrationScreen() {
             }
 
             if (result.ok) {
-              setFeedbackMsg("Hold still...");
+              setFeedbackMsg("Face detected — hold still...");
               setFeedbackType("ok");
               setQualityOk(true);
             } else {
               const issue = result.issues[0] ?? "Adjust your position.";
               setFeedbackMsg(issue);
-              setFeedbackType("warn");
+              setFeedbackType(result.face_detected ? "warn" : "error");
               setQualityOk(false);
             }
           } catch {
@@ -219,39 +242,29 @@ export default function FacialRegistrationScreen() {
     return () => { active = false; };
   }, [phoneCameraActive, cameraReady, phoneStep]);
 
-  // ── Countdown ─────────────────────────────────────────────────────────────
-  // Starts a 3-s countdown as soon as qualityOk becomes true.
-  // If qualityOk drops back to false (probe fails), cleanup cancels all timers.
+  // ── Capture trigger ───────────────────────────────────────────────────────
+  // Waits 1.8 s of continuous quality-ok before auto-capturing (Face ID style —
+  // no visible countdown, just the ring pulsing until the shot fires).
   useEffect(() => {
     if (!phoneCameraActive || !cameraReady || !qualityOk) {
       setCountdown(null);
       return;
     }
 
-    setCountdown(3);
+    setCountdown(1); // used only as a "capturing soon" signal for the pulse animation
 
-    const t1 = setTimeout(() => {
-      if (qualityOkRef.current) setCountdown(2);
-    }, 1000);
-
-    const t2 = setTimeout(() => {
-      if (qualityOkRef.current) setCountdown(1);
-    }, 2000);
-
-    const t3 = setTimeout(() => {
+    const t = setTimeout(() => {
       if (qualityOkRef.current) void doCapture();
-    }, 3000);
+    }, 1800);
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
+      clearTimeout(t);
       setCountdown(null);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qualityOk, phoneCameraActive, cameraReady]);
 
-  // ── Capture + upload for one angle ────────────────────────────────────────
+  // ── Capture one angle locally (no backend call yet) ───────────────────────
   const doCapture = async () => {
     if (capturingRef.current || !qualityOkRef.current || cancelledRef.current) return;
     capturingRef.current = true;
@@ -275,29 +288,17 @@ export default function FacialRegistrationScreen() {
       if (!photo || cancelledRef.current) return;
 
       setCaptureError("");
-      setFeedbackMsg("Uploading...");
-      setFeedbackType("info");
-      setQualityOk(false); // pause countdown while uploading
+      setQualityOk(false);
 
       const step = phoneStepRef.current;
       const angle = PHONE_ANGLES[step].key;
-      const formData = new FormData();
-      formData.append("name", nameRef.current.trim());
-      formData.append("file", {
-        uri: photo.uri,
-        type: "image/jpeg",
-        name: `${angle}.jpg`,
-      } as unknown as Blob);
 
-      await piPostForm<FaceProfile>("/api/faces/", formData, sessionRef.current?.username);
-
-      // Success for this angle
       const newCapture = { angle, uri: photo.uri };
       const updated = [...capturedRef.current, newCapture];
       capturedRef.current = updated;
       setPhoneCaptured(updated);
       setAngleAccepted(true);
-      setFeedbackMsg("Angle accepted!");
+      setFeedbackMsg("Angle captured!");
       setFeedbackType("ok");
 
       await sleep(900);
@@ -306,16 +307,14 @@ export default function FacialRegistrationScreen() {
         const next = step + 1;
         phoneStepRef.current = next;
         setPhoneStep(next);
-        // qualityOk reset + feedbackMsg reset happen in the phoneStep useEffect
       } else {
-        // All angles complete
+        // All angles captured — show confirmation before saving
         setPhoneCameraActive(false);
-        setSuccess(`Registration complete! ${PHONE_ANGLES.length} angles captured.`);
-        void loadFaces();
+        setConfirmPending(true);
       }
     } catch (e) {
-      const raw = e instanceof Error ? e.message : "Upload failed";
-      const displayMsg = raw.length < 120 ? raw : "Upload failed. Check your connection.";
+      const raw = e instanceof Error ? e.message : "Capture failed";
+      const displayMsg = raw.length < 120 ? raw : "Capture failed. Try again.";
       setCaptureError(displayMsg);
       setFeedbackMsg("Try again.");
       setFeedbackType("error");
@@ -324,6 +323,38 @@ export default function FacialRegistrationScreen() {
     } finally {
       capturingRef.current = false;
     }
+  };
+
+  // ── Confirm and upload all captured angles ────────────────────────────────
+  const handleConfirmSave = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      for (const capture of capturedRef.current) {
+        const formData = new FormData();
+        formData.append("name", nameRef.current.trim());
+        formData.append("file", {
+          uri: capture.uri,
+          type: "image/jpeg",
+          name: `${capture.angle}.jpg`,
+        } as unknown as Blob);
+        await piPostForm<FaceProfile>("/api/faces/", formData, sessionRef.current?.username);
+      }
+      setConfirmPending(false);
+      setSuccess(`Registration complete! ${PHONE_ANGLES.length} angles saved.`);
+      void loadFaces();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Retake all angles from scratch ────────────────────────────────────────
+  const handleRetakeAll = () => {
+    setConfirmPending(false);
+    startPhoneEnroll();
   };
 
   // ── Enrollment start / cancel ─────────────────────────────────────────────
@@ -339,7 +370,7 @@ export default function FacialRegistrationScreen() {
     probeInProgressRef.current = false;
     cancelledRef.current = false;
     setQualityOk(false);
-    setFeedbackMsg("Looking for your face...");
+    setFeedbackMsg("Center your face in the guide");
     setFeedbackType("info");
     setCaptureError("");
     setAngleAccepted(false);
@@ -367,37 +398,6 @@ export default function FacialRegistrationScreen() {
     capturedRef.current = [];
   };
 
-  // ── Upload mode ───────────────────────────────────────────────────────────
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) setImageUri(result.assets[0].uri);
-  };
-
-  const handleUpload = async () => {
-    if (!name.trim()) { setError("Name is required"); return; }
-    if (!imageUri) { setError("Select an image first"); return; }
-    setUploading(true);
-    setError("");
-    try {
-      const formData = new FormData();
-      formData.append("name", name.trim());
-      formData.append("file", { uri: imageUri, type: "image/jpeg", name: "face.jpg" } as unknown as Blob);
-      await piPostForm<FaceProfile>("/api/faces/", formData, session?.username);
-      setSuccess("Face registered successfully!");
-      setImageUri(null);
-      setName("");
-      void loadFaces();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   // ── Camera enrollment view ────────────────────────────────────────────────
   if (phoneCameraActive) {
     if (!permission?.granted) {
@@ -420,21 +420,31 @@ export default function FacialRegistrationScreen() {
     }
 
     const currentAngle = PHONE_ANGLES[phoneStep];
-    const progress = `${phoneStep + 1} / ${PHONE_ANGLES.length}`;
+    const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
+    // Oval border: green solid when ready, orange dashed if face needs adjustment,
+    // red dashed if no face, blue dashed while checking
     const ovalBorderColor =
-      feedbackType === "ok" ? "#4ade80"
-      : feedbackType === "warn" ? "#fb923c"
+      feedbackType === "ok"    ? "#4ade80"
+      : feedbackType === "warn"  ? "#fb923c"
       : feedbackType === "error" ? "#f87171"
       : referenceColors.primary;
-
     const ovalBorderStyle = feedbackType === "ok" ? "solid" : "dashed";
 
     const feedbackColor =
-      feedbackType === "ok" ? "#4ade80"
-      : feedbackType === "warn" ? "#fb923c"
+      feedbackType === "ok"    ? "#4ade80"
+      : feedbackType === "warn"  ? "#fb923c"
       : feedbackType === "error" ? "#f87171"
-      : "#cbd5e1";
+      : "#94a3b8";
+
+    // Progress ring dots — elliptically arranged around the oval
+    const dotPad = 32;
+    const dotContW = ovalWidth  + dotPad * 2;
+    const dotContH = ovalHeight + dotPad * 2;
+    const dotXR = dotContW / 2 - 8;
+    const dotYR = dotContH / 2 - 8;
+    const dotContLeft = (SCREEN_W - dotContW) / 2;
+    const dotContTop  = (SCREEN_H - dotContH) / 2;
 
     return (
       <View style={styles.cameraContainer}>
@@ -446,13 +456,14 @@ export default function FacialRegistrationScreen() {
           onCameraReady={() => setCameraReady(true)}
         />
 
-        {/* Dark overlay with oval cutout */}
+        {/* Dark vignette with oval cutout */}
         <View style={styles.overlayContainer} pointerEvents="box-none">
           <View style={styles.overlayTop} />
           <View style={[styles.overlayMiddle, { height: ovalHeight }]}>
             <View style={styles.overlaySide} />
             <View style={[styles.ovalCutout, { width: ovalWidth, height: ovalHeight }]}>
-              <View
+              {/* Animated oval border — pulses green when face is ready */}
+              <Animated.View
                 style={[
                   styles.ovalBorder,
                   {
@@ -461,6 +472,7 @@ export default function FacialRegistrationScreen() {
                     borderRadius: ovalWidth / 2,
                     borderColor: ovalBorderColor,
                     borderStyle: ovalBorderStyle,
+                    transform: [{ scale: pulseAnim }],
                   },
                 ]}
               />
@@ -470,62 +482,85 @@ export default function FacialRegistrationScreen() {
           <View style={styles.overlayBottom} />
         </View>
 
+        {/* Elliptical progress ring (dots outside the oval, Face ID style) */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            width: dotContW,
+            height: dotContH,
+            left: dotContLeft,
+            top: dotContTop,
+          }}
+        >
+          {PHONE_ANGLES.map((angle, i) => {
+            const deg = -90 + (360 / PHONE_ANGLES.length) * i;
+            const rad = (deg * Math.PI) / 180;
+            const cx = dotContW / 2;
+            const cy = dotContH / 2;
+            const x = cx + Math.cos(rad) * dotXR;
+            const y = cy + Math.sin(rad) * dotYR;
+            const captured = i < phoneCaptured.length;
+            const active   = i === phoneStep && !captured;
+            const dotSize  = captured ? 14 : active ? 12 : 8;
+            return (
+              <View
+                key={angle.key}
+                style={{
+                  position: "absolute",
+                  width: dotSize,
+                  height: dotSize,
+                  borderRadius: dotSize / 2,
+                  backgroundColor: captured
+                    ? "#4ade80"
+                    : active
+                      ? ovalBorderColor
+                      : "rgba(255,255,255,0.18)",
+                  left: x - dotSize / 2,
+                  top:  y - dotSize / 2,
+                  borderWidth: active ? 1.5 : 0,
+                  borderColor: "rgba(255,255,255,0.5)",
+                }}
+              />
+            );
+          })}
+        </View>
+
         {/* White capture flash */}
         {captureFlash ? <View style={styles.flashOverlay} /> : null}
 
-        {/* Green success flash when angle is accepted */}
+        {/* Green success overlay */}
         {angleAccepted && !captureFlash ? (
-          <View style={[styles.flashOverlay, { backgroundColor: "rgba(74,222,128,0.25)" }]}>
+          <View style={[styles.flashOverlay, { backgroundColor: "rgba(74,222,128,0.22)" }]}>
             <CheckCircle size={72} color="#4ade80" strokeWidth={2} />
-          </View>
-        ) : null}
-
-        {/* Top bar: back button + step counter */}
-        <View style={[styles.cameraTopBar, { top: layout.insets.top + 12 }]}>
-          <TouchableOpacity style={styles.cameraBackButton} onPress={cancelPhoneEnroll} hitSlop={12}>
-            <ArrowLeft size={18} color="#ffffff" strokeWidth={2.4} />
-            <Text style={styles.cameraBackText}>Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.cameraStepText}>{progress}</Text>
-          <View style={{ width: 72 }} />
-        </View>
-
-        {/* Progress dots */}
-        <View style={[styles.cameraProgressRow, { top: layout.insets.top + 52 }]}>
-          {PHONE_ANGLES.map((angle, index) => (
-            <View
-              key={angle.key}
-              style={[
-                styles.cameraDot,
-                index < phoneStep && styles.cameraDotDone,
-                index === phoneStep && styles.cameraDotActive,
-              ]}
-            />
-          ))}
-        </View>
-
-        {/* Countdown overlay */}
-        {countdown !== null ? (
-          <View style={styles.countdownOverlay} pointerEvents="none">
-            <Text style={styles.countdownText}>{countdown}</Text>
           </View>
         ) : null}
 
         {/* Camera init spinner */}
         {!cameraReady ? (
-          <View style={styles.countdownOverlay} pointerEvents="none">
-            <ActivityIndicator size="large" color={referenceColors.primary} />
+          <View style={styles.initOverlay} pointerEvents="none">
+            <ActivityIndicator size="large" color="#ffffff" />
             <Text style={styles.getReadyText}>Starting camera...</Text>
           </View>
         ) : null}
 
-        {/* Bottom instructions */}
-        <View style={[styles.cameraBottomBar, { bottom: Math.max(layout.insets.bottom, 20) + 24 }]}>
+        {/* Top bar — back button only, no step counter (dots do that job) */}
+        <View style={[styles.cameraTopBar, { top: layout.insets.top + 12 }]}>
+          <TouchableOpacity style={styles.cameraBackButton} onPress={cancelPhoneEnroll} hitSlop={12}>
+            <ArrowLeft size={18} color="#ffffff" strokeWidth={2.4} />
+            <Text style={styles.cameraBackText}>Cancel</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+        </View>
+
+        {/* Bottom — current angle instruction + live feedback chip */}
+        <View style={[styles.cameraBottomBar, { bottom: Math.max(layout.insets.bottom, 20) + 16 }]}>
+          {/* Big directive */}
           <Text style={styles.cameraAngleLabel}>{currentAngle.label}</Text>
           <Text style={styles.cameraInstruction}>{currentAngle.instruction}</Text>
 
-          {/* Dynamic quality feedback */}
-          <View style={styles.feedbackRow}>
+          {/* Live quality chip */}
+          <View style={[styles.feedbackChip, { borderColor: feedbackColor + "55" }]}>
             <View style={[styles.feedbackDot, { backgroundColor: feedbackColor }]} />
             <Text style={[styles.feedbackText, { color: feedbackColor }]}>{feedbackMsg}</Text>
           </View>
@@ -535,6 +570,69 @@ export default function FacialRegistrationScreen() {
           ) : null}
         </View>
       </View>
+    );
+  }
+
+  // ── Confirmation screen (review captures before saving) ───────────────────
+  if (confirmPending) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+      >
+        <View style={styles.container}>
+          <ReferenceBackdrop />
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={[styles.content, layout.contentStyle]}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.header}>
+              <Text style={styles.title}>Confirm Registration</Text>
+              <Text style={styles.subtitle}>Review all captured angles before saving to the Pi</Text>
+            </View>
+
+            <View style={styles.completionCard}>
+              <Text style={styles.confirmHint}>
+                These {PHONE_ANGLES.length} photos will be saved for facial recognition. If any angle looks wrong, tap <Text style={{ fontWeight: "800" }}>Retake All</Text> to start over.
+              </Text>
+
+              <Text style={styles.completionSubtitle}>Captured Angles</Text>
+              <View style={styles.completionGrid}>
+                {phoneCaptured.map((photo, i) => (
+                  <View key={photo.angle} style={styles.completionItem}>
+                    <Image
+                      source={{ uri: photo.uri }}
+                      style={[styles.completionThumbnail, { width: completionThumbnailSize, height: completionThumbnailSize }]}
+                    />
+                    <Text style={styles.completionAngle}>{PHONE_ANGLES[i]?.label ?? photo.angle.replace("_", " ")}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+
+              <TouchableOpacity
+                style={[styles.primaryButtonWrap, submitting && styles.buttonDisabled]}
+                onPress={() => void handleConfirmSave()}
+                disabled={submitting}
+              >
+                <View style={styles.primaryButton}>
+                  {submitting ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Confirm &amp; Save</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleRetakeAll} disabled={submitting}>
+                <Text style={styles.secondaryButtonText}>Retake All</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -571,23 +669,22 @@ export default function FacialRegistrationScreen() {
               </View>
               <Text style={styles.completionTitle}>Enrollment Complete</Text>
               <Text style={styles.success}>{success}</Text>
-              {error ? <Text style={styles.error}>{error}</Text> : null}
 
-              <Text style={styles.completionSubtitle}>Captured Angles</Text>
+              <Text style={styles.completionSubtitle}>Saved Angles</Text>
               <View style={styles.completionGrid}>
-                {phoneCaptured.map((photo) => (
+                {phoneCaptured.map((photo, i) => (
                   <View key={photo.angle} style={styles.completionItem}>
                     <Image
                       source={{ uri: photo.uri }}
                       style={[styles.completionThumbnail, { width: completionThumbnailSize, height: completionThumbnailSize }]}
                     />
-                    <Text style={styles.completionAngle}>{photo.angle.replace("_", " ")}</Text>
+                    <Text style={styles.completionAngle}>{PHONE_ANGLES[i]?.label ?? photo.angle.replace("_", " ")}</Text>
                   </View>
                 ))}
               </View>
 
               <Text style={styles.completionHint}>
-                These images have been sent to the Pi. The system will use all angles for more accurate recognition.
+                All angles have been saved to the Pi. The system will now use them for accurate recognition.
               </Text>
 
               <TouchableOpacity style={styles.primaryButtonWrap} onPress={() => navigation.goBack()}>
@@ -608,7 +705,7 @@ export default function FacialRegistrationScreen() {
                 <View style={styles.summaryCopy}>
                   <Text style={styles.summaryTitle}>Add New Face</Text>
                   <Text style={styles.summaryText}>
-                    Capture 5 guided angles or upload a portrait image. Only high-quality samples are stored.
+                    Capture 5 guided angles via the live camera. The system checks position, lighting, and sharpness in real time before each shot.
                   </Text>
                 </View>
               </View>
@@ -623,80 +720,34 @@ export default function FacialRegistrationScreen() {
                   onChangeText={setName}
                 />
 
-                <View style={styles.modeRow}>
-                  {([
-                    { key: "phone" as Mode, label: "Phone Camera", icon: Camera },
-                    { key: "upload" as Mode, label: "Upload Photo", icon: Upload },
-                  ]).map((item) => {
-                    const Icon = item.icon;
-                    const active = mode === item.key;
-                    return (
-                      <TouchableOpacity
-                        key={item.key}
-                        style={[styles.modeTab, active && styles.modeTabActive]}
-                        onPress={() => { setMode(item.key); setError(""); setSuccess(""); }}
-                      >
-                        <Icon size={16} color={active ? "#ffffff" : referenceColors.textSoft} strokeWidth={2.2} />
-                        <Text style={[styles.modeText, active && styles.modeTextActive]}>{item.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                {error ? <Text style={[styles.error, { marginTop: 14 }]}>{error}</Text> : null}
+                {success ? <Text style={[styles.success, { marginTop: 14 }]}>{success}</Text> : null}
+
+                {/* Step preview */}
+                <View style={[styles.stepPreviewRow, { marginTop: 18 }]}>
+                  {PHONE_ANGLES.map((a, i) => (
+                    <View key={a.key} style={styles.stepPreviewItem}>
+                      <View style={styles.stepPreviewDot}>
+                        <Text style={styles.stepPreviewNum}>{i + 1}</Text>
+                      </View>
+                      <Text style={styles.stepPreviewLabel}>{a.label}</Text>
+                    </View>
+                  ))}
                 </View>
 
-                {error ? <Text style={styles.error}>{error}</Text> : null}
-                {success ? <Text style={styles.success}>{success}</Text> : null}
+                <View style={styles.captureCard}>
+                  <Camera size={20} color={referenceColors.primary} strokeWidth={2.2} style={{ marginBottom: 8 }} />
+                  <Text style={styles.captureTitle}>Live Camera Only</Text>
+                  <Text style={styles.captureInstruction}>
+                    The camera will guide you in real time — follow the on-screen instructions for each angle. Nothing is saved until you confirm at the end.
+                  </Text>
+                </View>
 
-                {mode === "phone" ? (
-                  <>
-                    {/* Step preview cards */}
-                    <View style={styles.stepPreviewRow}>
-                      {PHONE_ANGLES.map((a, i) => (
-                        <View key={a.key} style={styles.stepPreviewItem}>
-                          <View style={styles.stepPreviewDot}>
-                            <Text style={styles.stepPreviewNum}>{i + 1}</Text>
-                          </View>
-                          <Text style={styles.stepPreviewLabel}>{a.label}</Text>
-                        </View>
-                      ))}
-                    </View>
-
-                    <View style={styles.captureCard}>
-                      <Text style={styles.captureTitle}>Quality-Guided Enrollment</Text>
-                      <Text style={styles.captureInstruction}>
-                        The camera will validate your face position, lighting, and sharpness before capturing each angle.
-                        Bad samples are automatically rejected.
-                      </Text>
-                    </View>
-
-                    <TouchableOpacity style={styles.primaryButtonWrap} onPress={startPhoneEnroll}>
-                      <View style={styles.primaryButton}>
-                        <Text style={styles.primaryButtonText}>Start Face Enrollment</Text>
-                      </View>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    {imageUri ? (
-                      <Image source={{ uri: imageUri }} style={[styles.previewImage, { height: previewHeight }]} resizeMode="cover" />
-                    ) : null}
-                    <TouchableOpacity style={styles.secondaryButton} onPress={pickImage}>
-                      <Text style={styles.secondaryButtonText}>{imageUri ? "Change Image" : "Select Image"}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.primaryButtonWrap, uploading && styles.buttonDisabled]}
-                      onPress={() => void handleUpload()}
-                      disabled={uploading}
-                    >
-                      <View style={styles.primaryButton}>
-                        {uploading ? (
-                          <ActivityIndicator color="#ffffff" />
-                        ) : (
-                          <Text style={styles.primaryButtonText}>Upload & Register</Text>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  </>
-                )}
+                <TouchableOpacity style={styles.primaryButtonWrap} onPress={startPhoneEnroll}>
+                  <View style={styles.primaryButton}>
+                    <Text style={styles.primaryButtonText}>Start Face Enrollment</Text>
+                  </View>
+                </TouchableOpacity>
               </View>
             </>
           )}
@@ -880,36 +931,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 15,
   },
-  modeRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 18,
-    marginBottom: 14,
-  },
-  modeTab: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.82)",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-  },
-  modeTabActive: {
-    backgroundColor: referenceColors.primary,
-    borderColor: referenceColors.primary,
-  },
-  modeText: {
-    color: referenceColors.textSoft,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  modeTextActive: {
-    color: "#ffffff",
-  },
   error: {
     color: referenceColors.danger,
     fontSize: 13,
@@ -930,11 +951,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 20,
-  },
-  previewImage: {
-    width: "100%",
-    borderRadius: 20,
-    marginBottom: 12,
   },
   secondaryButton: {
     minHeight: 54,
@@ -1079,6 +1095,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 8,
   },
+  confirmHint: {
+    color: referenceColors.textSoft,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
   // ── Camera overlay styles ─────────────────────────────────────────────────
   cameraContainer: {
     flex: 1,
@@ -1146,73 +1170,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
-  cameraStepText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  cameraProgressRow: {
+  initOverlay: {
     position: "absolute",
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
-  },
-  cameraDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#cbd5e1",
-  },
-  cameraDotDone: {
-    backgroundColor: referenceColors.success,
-  },
-  cameraDotActive: {
-    backgroundColor: referenceColors.primary,
-  },
-  countdownOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-  },
-  countdownText: {
-    fontSize: 80,
-    fontWeight: "900",
-    color: "rgba(255,255,255,0.85)",
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
   getReadyText: {
     color: "#ffffff",
     fontSize: 14,
     marginTop: 12,
+    fontWeight: "600",
   },
   cameraBottomBar: {
     position: "absolute",
     left: 0,
     right: 0,
     alignItems: "center",
-    paddingHorizontal: 20,
-    gap: 6,
+    paddingHorizontal: 24,
+    gap: 10,
   },
   cameraAngleLabel: {
-    color: "#60a5fa",
-    fontSize: 22,
+    color: "#ffffff",
+    fontSize: 26,
     fontWeight: "800",
+    textAlign: "center",
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   cameraInstruction: {
-    color: "#ffffff",
-    fontSize: 15,
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 14,
     textAlign: "center",
   },
-  feedbackRow: {
+  feedbackChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginTop: 2,
+    gap: 7,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    marginTop: 4,
   },
   feedbackDot: {
     width: 8,
@@ -1228,7 +1230,7 @@ const styles = StyleSheet.create({
     color: "#f87171",
     fontSize: 12,
     textAlign: "center",
-    marginTop: 4,
+    marginTop: 2,
   },
   // ── Registered faces ──────────────────────────────────────────────────────
   registeredSection: {
