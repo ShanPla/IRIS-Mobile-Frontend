@@ -29,11 +29,11 @@ import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 // yaw  < 0: subject turned LEFT  (their left); yaw  > 0: turned RIGHT
 // pitch< 0: tilted UP;                          pitch> 0: tilted DOWN
 const ANGLE_POSE: Record<string, { yaw: [number, number]; pitch: [number, number] }> = {
-  front:        { yaw: [-0.15,  0.15], pitch: [-0.20,  0.20] },
-  slight_left:  { yaw: [-0.60, -0.15], pitch: [-0.28,  0.28] },
-  slight_right: { yaw: [ 0.15,  0.60], pitch: [-0.28,  0.28] },
-  up:           { yaw: [-0.20,  0.20], pitch: [-0.35, -0.08] },
-  down:         { yaw: [-0.20,  0.20], pitch: [ 0.08,  0.35] },
+  front:        { yaw: [-0.35,  0.35], pitch: [-0.35,  0.35] },
+  slight_left:  { yaw: [-0.70, -0.08], pitch: [-0.40,  0.40] },
+  slight_right: { yaw: [ 0.08,  0.70], pitch: [-0.40,  0.40] },
+  up:           { yaw: [-0.35,  0.35], pitch: [-0.55, -0.05] },
+  down:         { yaw: [-0.35,  0.35], pitch: [ 0.05,  0.55] },
 };
 
 function getPoseGuidance(angleKey: string, yaw: number, pitch: number): string | null {
@@ -217,7 +217,7 @@ export default function FacialRegistrationScreen() {
 
   // ── Probe loop ────────────────────────────────────────────────────────────
   // Runs while camera is active and ready. Takes a low-quality probe photo every
-  // ~1.8 s, sends to /api/faces/validate, updates quality feedback.
+  // ~600 ms, sends to /api/faces/validate, updates quality feedback.
   useEffect(() => {
     if (!phoneCameraActive || !cameraReady) return;
 
@@ -225,11 +225,11 @@ export default function FacialRegistrationScreen() {
     probeInProgressRef.current = false;
 
     const run = async () => {
-      await sleep(1000); // let camera warm up before first probe
+      await sleep(200); // let camera warm up before first probe
 
       while (active) {
         if (capturingRef.current) {
-          await sleep(400);
+          await sleep(100);
           continue;
         }
 
@@ -283,7 +283,7 @@ export default function FacialRegistrationScreen() {
           }
         }
 
-        await sleep(1800);
+        await sleep(80);
       }
     };
 
@@ -292,8 +292,7 @@ export default function FacialRegistrationScreen() {
   }, [phoneCameraActive, cameraReady, phoneStep]);
 
   // ── Capture trigger ───────────────────────────────────────────────────────
-  // Waits 1.8 s of continuous quality-ok before auto-capturing (Face ID style —
-  // no visible countdown, just the ring pulsing until the shot fires).
+  // Waits 800 ms of continuous quality-ok before auto-capturing.
   useEffect(() => {
     if (!phoneCameraActive || !cameraReady || !qualityOk) {
       setCountdown(null);
@@ -304,7 +303,7 @@ export default function FacialRegistrationScreen() {
 
     const t = setTimeout(() => {
       if (qualityOkRef.current) void doCapture();
-    }, 1800);
+    }, 400);
 
     return () => {
       clearTimeout(t);

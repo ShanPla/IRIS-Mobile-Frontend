@@ -17,14 +17,13 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   Bell,
   Camera,
   CheckCircle2,
   ChevronRight,
   Cpu,
   HardDrive,
-  Plus,
+  Layers,
   ScanFace,
   Shield,
   ShieldAlert,
@@ -52,7 +51,6 @@ import type {
   SystemStatus,
 } from "../../types/iris";
 import {
-  buttonShadow,
   cardShadow,
   referenceColors,
   referenceLiveImage,
@@ -426,26 +424,11 @@ export default function HomeScreen() {
           <View style={styles.headerButtons}>
             <TouchableOpacity
               style={styles.switchDeviceBtn}
-              onPress={() => navigation.navigate("DeviceList")}
+              onPress={() => navigation.reset({ index: 0, routes: [{ name: "DeviceList" }] })}
             >
-              <ArrowLeft size={15} color={referenceColors.textSoft} strokeWidth={2.2} />
-              <Text style={styles.switchDeviceText}>Switch</Text>
+              <Layers size={14} color={referenceColors.primary} strokeWidth={2.2} />
+              <Text style={styles.switchDeviceText}>Devices</Text>
             </TouchableOpacity>
-            {access.canAddDevice ? (
-              <TouchableOpacity
-                style={styles.addButtonWrap}
-                onPress={() => navigation.navigate("AddCamera")}
-                activeOpacity={0.9}
-              >
-                <View style={styles.addButton}>
-                  <Plus
-                    size={18}
-                    color={referenceColors.primary}
-                    strokeWidth={2.6}
-                  />
-                </View>
-              </TouchableOpacity>
-            ) : null}
           </View>
         </View>
 
@@ -830,33 +813,19 @@ const styles = StyleSheet.create({
   switchDeviceBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(255,255,255,0.72)",
+    gap: 5,
+    backgroundColor: "rgba(219,234,254,0.82)",
     borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.8)",
+    borderColor: "#bfdbfe",
     borderRadius: 14,
     paddingHorizontal: 10,
     paddingVertical: 8,
     minHeight: 36,
   },
   switchDeviceText: {
-    color: referenceColors.textSoft,
+    color: referenceColors.primary,
     fontSize: 12,
     fontWeight: "700",
-  },
-  addButtonWrap: {
-    borderRadius: 18,
-    ...buttonShadow,
-  },
-  addButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.74)",
-    alignItems: "center",
-    justifyContent: "center",
   },
   error: {
     color: referenceColors.danger,

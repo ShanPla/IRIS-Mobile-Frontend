@@ -19,8 +19,8 @@ export function getHorizontalPadding(width: number): number {
 export function getFloatingTabBarMetrics(insets: EdgeInsets, width: number) {
   const compact = width < 380;
   const bottom = Math.max(insets.bottom, 10);
-  const side = compact ? 8 : 16;
-  const height = (compact ? 62 : 70) + Math.max(insets.bottom, 6);
+  const side = compact ? 18 : 30;
+  const height = (compact ? 52 : 58) + Math.max(insets.bottom, 6);
 
   return { bottom, compact, height, side };
 }

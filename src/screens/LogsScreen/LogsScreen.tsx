@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { AlertTriangle, ArrowLeft, CheckCircle2, Search } from "lucide-react-native";
+import { AlertTriangle, CheckCircle2, Search } from "lucide-react-native";
 import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
@@ -155,11 +155,6 @@ export default function LogsScreen() {
   const renderHeader = () => (
     <>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Event History</Text>
           <Text style={styles.subtitle}>Review all security events</Text>
@@ -300,24 +295,6 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 20,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    minHeight: 42,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.82)",
-    borderWidth: 1,
-    borderColor: referenceColors.border,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 18,
-  },
-  backText: {
-    color: referenceColors.textSoft,
-    fontSize: 13,
-    fontWeight: "700",
   },
   headerCopy: {
     gap: 4,

@@ -271,9 +271,26 @@ export default function SetupScreen() {
     setError("");
     try {
       const normalizedDeviceCode = normalizeDeviceCode(deviceCode);
+
+      const currentDevices = await getDevices(session.username);
+      const alreadySecondary = currentDevices.find(
+        (d) => d.deviceId.toUpperCase() === normalizedDeviceCode && d.accessRole === "secondary",
+      );
+      if (alreadySecondary) {
+        throw new Error(
+          "You already have secondary access to this device. Remove the secondary pairing before claiming it as primary.",
+        );
+      }
+
       const resolvedDevice = directDeviceUrl
         ? await resolveDirectDevice(normalizedDeviceCode, directDeviceUrl)
         : await resolveCentralDevice(normalizedDeviceCode, session.token);
+
+      const devicePrimaryGmail = resolvedDevice.primary_gmail?.trim().toLowerCase();
+      if (devicePrimaryGmail && devicePrimaryGmail !== accountGmail) {
+        throw new Error("This device is already registered to a different account.");
+      }
+
       const deviceWithGmail = { ...resolvedDevice, primary_gmail: accountGmail };
       const newDevice = await upsertRegistryDevice(deviceWithGmail, accountGmail, session.username, { verify: true });
 
@@ -332,7 +349,7 @@ export default function SetupScreen() {
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.navigate("DeviceList")}>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
               <Text style={styles.backButtonText}>Back to Devices</Text>
             </TouchableOpacity>

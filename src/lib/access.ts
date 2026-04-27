@@ -59,7 +59,7 @@ export function getSessionAccess(
   const canOpenSettings =
     isAdmin || isPrimary || canChangeMode || canSilenceAlarm;
   const canOpenSharedUsers = isAdmin || isPrimary;
-  const canAddDevice = isAdmin || isPrimary;
+  const canAddDevice = isAdmin || isPrimary || isInvited;
   // Home is accessible whenever the user has at least one usable feature
   const hasAnyFeatureAccess =
     canViewEvents || canManageProfiles || canChangeMode || canSilenceAlarm;

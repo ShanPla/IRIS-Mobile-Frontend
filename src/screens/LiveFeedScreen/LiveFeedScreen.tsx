@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import {
-  ArrowLeft,
   Camera,
   RefreshCw,
   ScanLine,
@@ -248,10 +247,6 @@ export default function LiveFeedScreen() {
         contentContainerStyle={[styles.content, layout.contentStyle]}
       >
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Live Monitor</Text>
             <Text style={styles.subtitle}>Real-time camera feed</Text>
@@ -441,24 +436,6 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 20,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    minHeight: 42,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.82)",
-    borderWidth: 1,
-    borderColor: referenceColors.border,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 18,
-  },
-  backText: {
-    color: referenceColors.textSoft,
-    fontSize: 13,
-    fontWeight: "700",
   },
   headerCopy: {
     gap: 4,
