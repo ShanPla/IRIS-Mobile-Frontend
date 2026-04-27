@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -269,7 +270,7 @@ export default function SettingsScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? layout.insets.top : 0}
     >
       <View style={styles.container}>
         <ReferenceBackdrop />
@@ -394,6 +395,9 @@ export default function SettingsScreen() {
                     <TextInput
                       style={styles.numInput}
                       keyboardType="numeric"
+                      returnKeyType="done"
+                      blurOnSubmit
+                      onSubmitEditing={() => Keyboard.dismiss()}
                       value={String(config!.motion_area_threshold)}
                       onChangeText={(value) =>
                         updateField("motion_area_threshold", Number(value) || 0)
@@ -420,6 +424,9 @@ export default function SettingsScreen() {
                     <TextInput
                       style={styles.numInput}
                       keyboardType="numeric"
+                      returnKeyType="done"
+                      blurOnSubmit
+                      onSubmitEditing={() => Keyboard.dismiss()}
                       value={String(config!.detection_cooldown_seconds)}
                       onChangeText={(value) =>
                         updateField(
@@ -447,6 +454,9 @@ export default function SettingsScreen() {
                     <TextInput
                       style={styles.numInput}
                       keyboardType="decimal-pad"
+                      returnKeyType="done"
+                      blurOnSubmit
+                      onSubmitEditing={() => Keyboard.dismiss()}
                       value={String(config!.face_recognition_tolerance)}
                       onChangeText={(value) =>
                         updateField(
@@ -476,6 +486,9 @@ export default function SettingsScreen() {
                     <TextInput
                       style={styles.numInput}
                       keyboardType="numeric"
+                      returnKeyType="done"
+                      blurOnSubmit
+                      onSubmitEditing={() => Keyboard.dismiss()}
                       value={String(config!.alarm_escalation_delay)}
                       onChangeText={(value) =>
                         updateField(

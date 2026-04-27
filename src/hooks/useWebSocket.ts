@@ -23,7 +23,7 @@ export function useWebSocket(options: UseWebSocketOptions, accountId?: string) {
 
   const connect = useCallback(async () => {
     const device = await getActiveDevice(accountId);
-    if (!device) return;
+    if (!device || !device.url) return;
 
     const wsUrl = device.url.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
     const fullUrl = `${wsUrl}/ws/live?token=${device.token}`;

@@ -31,9 +31,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+// Kept outside React state so it never appears in React DevTools or triggers
+// unnecessary re-renders. It only changes on login/logout which both change
+// `session` state anyway.
+let _piPassword: string | null = null;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
-  const [sessionPassword, setSessionPassword] = useState<string | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [hasPi, setHasPi] = useState(false);
   const [activeDevice, setActiveDevice] = useState<PiDevice | null>(null);
@@ -53,12 +57,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await purgeStoredAuthData();
       setSession(null);
-      setSessionPassword(null);
+      _piPassword = null;
       await refreshDeviceState();
     } catch {
       // Keep authentication independent from Pi availability.
       setSession(null);
-      setSessionPassword(null);
+      _piPassword = null;
     } finally {
       setBootstrapping(false);
     }
@@ -67,14 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (username: string, password: string): Promise<void> => {
     const nextSession = await authenticateAccount(username, password);
     setSession(nextSession);
-    setSessionPassword(password);
+    _piPassword = password;
     await refreshDeviceState(nextSession.username);
   };
 
   const register = async (username: string, email: string, password: string) => {
     const nextSession = await registerAccount(username, email, password);
     setSession(nextSession);
-    setSessionPassword(password);
+    _piPassword = password;
     await refreshDeviceState(nextSession.username);
   };
 
@@ -84,12 +88,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     await changeAccountPassword(session.username, currentPassword, newPassword);
-    setSessionPassword(newPassword);
+    _piPassword = newPassword;
   };
 
   const logout = async () => {
     setSession(null);
-    setSessionPassword(null);
+    _piPassword = null;
     setActiveDevice(null);
     setHasPi(false);
   };
@@ -126,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, sessionPassword, bootstrapping, hasPi, activeDevice, login, register, changePassword, logout, refreshSession, refreshDevices, selectDevice }}>
+    <AuthContext.Provider value={{ session, sessionPassword: _piPassword, bootstrapping, hasPi, activeDevice, login, register, changePassword, logout, refreshSession, refreshDevices, selectDevice }}>
       {children}
     </AuthContext.Provider>
   );

@@ -28,7 +28,11 @@ type InputRowProps = {
   secureTextEntry?: boolean;
   toggleSecure?: () => void;
   keyboardType?: "default" | "email-address";
+  returnKeyType?: "done" | "next";
   onSubmitEditing?: () => void;
+  textContentType?: "username" | "emailAddress" | "password" | "newPassword";
+  inputRef?: React.RefObject<TextInput>;
+  blurOnSubmit?: boolean;
 };
 
 function InputRow({
@@ -40,7 +44,11 @@ function InputRow({
   secureTextEntry,
   toggleSecure,
   keyboardType = "default",
+  returnKeyType,
   onSubmitEditing,
+  textContentType,
+  inputRef,
+  blurOnSubmit,
 }: InputRowProps) {
   const Icon = icon === "mail" ? Mail : icon === "lock" ? Lock : User;
 
@@ -50,6 +58,7 @@ function InputRow({
       <View style={styles.inputShell}>
         <Icon size={18} color="#94a3b8" strokeWidth={2.2} />
         <TextInput
+          ref={inputRef}
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor="#94a3b8"
@@ -59,8 +68,10 @@ function InputRow({
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType={keyboardType}
-          returnKeyType={onSubmitEditing ? "done" : "next"}
+          returnKeyType={returnKeyType ?? (onSubmitEditing ? "done" : "next")}
           onSubmitEditing={onSubmitEditing}
+          textContentType={textContentType}
+          blurOnSubmit={blurOnSubmit ?? true}
         />
         {toggleSecure ? (
           <TouchableOpacity style={styles.iconButton} onPress={toggleSecure}>
@@ -91,6 +102,8 @@ export default function LoginScreen() {
   const [regSuccess, setRegSuccess] = useState("");
   const [regLoading, setRegLoading] = useState(false);
 
+  const regEmailRef = useRef<TextInput>(null);
+  const regPasswordRef = useRef<TextInput>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -131,6 +144,14 @@ export default function LoginScreen() {
       setRegError("Username, Gmail, and password are required");
       return;
     }
+    if (regUsername.trim().length < 3) {
+      setRegError("Username must be at least 3 characters");
+      return;
+    }
+    if (!/^[a-zA-Z0-9_.-]+$/.test(regUsername.trim())) {
+      setRegError("Username may only contain letters, numbers, underscores, hyphens, and dots");
+      return;
+    }
     if (!regEmail.trim().toLowerCase().endsWith("@gmail.com")) {
       setRegError("Please use a Gmail address");
       return;
@@ -159,7 +180,7 @@ export default function LoginScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? layout.insets.top : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
@@ -192,6 +213,8 @@ export default function LoginScreen() {
                     onChangeText={setUsername}
                     placeholder="your username"
                     icon="user"
+                    textContentType="username"
+                    returnKeyType="next"
                   />
                   <InputRow
                     label="Password"
@@ -201,6 +224,8 @@ export default function LoginScreen() {
                     icon="lock"
                     secureTextEntry={!showPassword}
                     toggleSecure={() => setShowPassword((value) => !value)}
+                    textContentType="password"
+                    returnKeyType="done"
                     onSubmitEditing={() => void handleLogin()}
                   />
                   <Text style={styles.passwordNote}>
@@ -227,6 +252,10 @@ export default function LoginScreen() {
                     onChangeText={setRegUsername}
                     placeholder="Username (min 3 chars)"
                     icon="user"
+                    textContentType="username"
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => regEmailRef.current?.focus()}
                   />
                   <InputRow
                     label="Gmail"
@@ -235,6 +264,11 @@ export default function LoginScreen() {
                     placeholder="your@gmail.com"
                     icon="mail"
                     keyboardType="email-address"
+                    textContentType="emailAddress"
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    inputRef={regEmailRef}
+                    onSubmitEditing={() => regPasswordRef.current?.focus()}
                   />
                   <InputRow
                     label="Password"
@@ -244,6 +278,9 @@ export default function LoginScreen() {
                     icon="lock"
                     secureTextEntry={!showRegPassword}
                     toggleSecure={() => setShowRegPassword((value) => !value)}
+                    textContentType="newPassword"
+                    returnKeyType="done"
+                    inputRef={regPasswordRef}
                     onSubmitEditing={() => void handleRegister()}
                   />
                   {regError ? <Text style={styles.error}>{regError}</Text> : null}

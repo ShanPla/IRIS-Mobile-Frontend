@@ -51,6 +51,7 @@ export default function ProfileScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const newPasswordRef = useRef<TextInput>(null);
 
   useEffect(() => {
     Animated.parallel([
@@ -126,7 +127,7 @@ export default function ProfileScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 18 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? layout.insets.top : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
@@ -196,14 +197,26 @@ export default function ProfileScreen() {
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
                 secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
+                returnKeyType="next"
+                onSubmitEditing={() => newPasswordRef.current?.focus()}
+                blurOnSubmit={false}
               />
               <TextInput
+                ref={newPasswordRef}
                 style={styles.input}
                 placeholder="New password (min 6 chars)"
                 placeholderTextColor="#94a3b8"
                 value={newPassword}
                 onChangeText={setNewPassword}
                 secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="newPassword"
+                returnKeyType="done"
+                onSubmitEditing={() => void handlePasswordChange()}
               />
 
               {passwordSuccess ? <Text style={styles.success}>{passwordSuccess}</Text> : null}

@@ -145,7 +145,9 @@ export default function FacialRegistrationScreen() {
             setDeletingId(face.id);
             try {
               await piDelete(`/api/faces/${face.id}`, session?.username);
-              setFaces((prev) => prev.filter((f) => f.id !== face.id));
+              // Backend deletes the entire face directory so wipe all local
+              // records sharing this name, not just the one ID.
+              setFaces((prev) => prev.filter((f) => f.name !== face.name));
             } catch (e) {
               Alert.alert("Delete Failed", e instanceof Error ? e.message : "Could not delete face profile");
             } finally {
@@ -327,7 +329,7 @@ export default function FacialRegistrationScreen() {
       setCaptureFlash(true);
       const photo = await cameraRef.current?.takePictureAsync({
         quality: 0.92,
-        skipProcessing: false,
+        skipProcessing: true,
       });
       await sleep(250);
       setCaptureFlash(false);
@@ -469,34 +471,26 @@ export default function FacialRegistrationScreen() {
     const currentAngle = PHONE_ANGLES[phoneStep];
     const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
-    // Oval border: green solid when ready, orange dashed if face needs adjustment,
-    // red dashed if no face, blue dashed while checking
+    const fidOvalW = Math.round(SCREEN_W * 0.70);
+    const fidOvalH = Math.round(SCREEN_H * 0.56);
+
     const ovalBorderColor =
       feedbackType === "ok"    ? "#4ade80"
       : feedbackType === "warn"  ? "#fb923c"
       : feedbackType === "error" ? "#f87171"
       : referenceColors.primary;
-    const ovalBorderStyle = feedbackType === "ok" ? "solid" : "dashed";
 
-    const feedbackColor =
+    const instructionText = angleAccepted
+      ? "Angle captured!"
+      : feedbackType === "ok"
+      ? "Hold still..."
+      : feedbackMsg;
+
+    const instructionColor =
       feedbackType === "ok"    ? "#4ade80"
       : feedbackType === "warn"  ? "#fb923c"
       : feedbackType === "error" ? "#f87171"
-      : "#94a3b8";
-
-    // Smooth arc ring (Face ID style) — circles the oval guide
-    const ringStroke = 6;
-    const ringDiam   = ovalHeight + 56;        // well outside the oval so the arc never overlaps it
-    const ringR      = ringDiam / 2;
-    const ringLeft   = (SCREEN_W - ringDiam) / 2;
-    const ringTop    = (SCREEN_H - ringDiam) / 2;
-    const progressDeg = (phoneCaptured.length / PHONE_ANGLES.length) * 360;
-
-    // Tip dot — small white circle at the leading edge of the arc
-    const tipRad = ((progressDeg) * Math.PI) / 180;   // local angle (container is rotated -90°)
-    const tipR   = ringR - ringStroke / 2;
-    const tipX   = ringR + tipR * Math.cos(tipRad);
-    const tipY   = ringR + tipR * Math.sin(tipRad);
+      : "rgba(255,255,255,0.75)";
 
     return (
       <View style={styles.cameraContainer}>
@@ -512,19 +506,18 @@ export default function FacialRegistrationScreen() {
         {/* Dark vignette with oval cutout */}
         <View style={styles.overlayContainer} pointerEvents="box-none">
           <View style={styles.overlayTop} />
-          <View style={[styles.overlayMiddle, { height: ovalHeight }]}>
+          <View style={[styles.overlayMiddle, { height: fidOvalH }]}>
             <View style={styles.overlaySide} />
-            <View style={[styles.ovalCutout, { width: ovalWidth, height: ovalHeight }]}>
-              {/* Animated oval border — pulses green when face is ready */}
+            <View style={[styles.ovalCutout, { width: fidOvalW, height: fidOvalH }]}>
               <Animated.View
                 style={[
                   styles.ovalBorder,
                   {
-                    width: ovalWidth,
-                    height: ovalHeight,
-                    borderRadius: ovalWidth / 2,
+                    width: fidOvalW,
+                    height: fidOvalH,
+                    borderRadius: fidOvalW / 2,
                     borderColor: ovalBorderColor,
-                    borderStyle: ovalBorderStyle,
+                    borderStyle: "solid",
                     transform: [{ scale: pulseAnim }],
                   },
                 ]}
@@ -533,89 +526,6 @@ export default function FacialRegistrationScreen() {
             <View style={styles.overlaySide} />
           </View>
           <View style={styles.overlayBottom} />
-        </View>
-
-        {/* ── Smooth circular progress arc (Face ID style) ─────────────────
-             Outer container is rotated -90° so the arc starts at 12 o'clock.
-             Two clipped half-discs reveal the arc clockwise as angles complete.
-        ────────────────────────────────────────────────────────────────────── */}
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            width: ringDiam,
-            height: ringDiam,
-            left: ringLeft,
-            top: ringTop,
-            transform: [{ rotate: "-90deg" }],
-          }}
-        >
-          {/* Right-half clip — fills the first 0–180° of the arc */}
-          {progressDeg > 0 && (
-            <View
-              style={{
-                position: "absolute",
-                width: ringDiam / 2,
-                height: ringDiam,
-                right: 0,
-                overflow: "hidden",
-              }}
-            >
-              <View
-                style={{
-                  position: "absolute",
-                  left: -(ringDiam / 2),
-                  width: ringDiam,
-                  height: ringDiam,
-                  borderRadius: ringR,
-                  borderWidth: ringStroke,
-                  borderColor: "#4ade80",
-                  transform: [{ rotate: `${Math.min(progressDeg, 180) - 180}deg` }],
-                }}
-              />
-            </View>
-          )}
-
-          {/* Left-half clip — fills 180–360° once right half is complete */}
-          {progressDeg > 180 && (
-            <View
-              style={{
-                position: "absolute",
-                width: ringDiam / 2,
-                height: ringDiam,
-                left: 0,
-                overflow: "hidden",
-              }}
-            >
-              <View
-                style={{
-                  position: "absolute",
-                  right: -(ringDiam / 2),
-                  width: ringDiam,
-                  height: ringDiam,
-                  borderRadius: ringR,
-                  borderWidth: ringStroke,
-                  borderColor: "#4ade80",
-                  transform: [{ rotate: `${progressDeg - 360}deg` }],
-                }}
-              />
-            </View>
-          )}
-
-          {/* Tip dot — white circle at the leading edge of the arc */}
-          {progressDeg > 0 && progressDeg < 360 && (
-            <View
-              style={{
-                position: "absolute",
-                width: ringStroke + 4,
-                height: ringStroke + 4,
-                borderRadius: (ringStroke + 4) / 2,
-                backgroundColor: "#ffffff",
-                left: tipX - (ringStroke + 4) / 2,
-                top:  tipY - (ringStroke + 4) / 2,
-              }}
-            />
-          )}
         </View>
 
         {/* White capture flash */}
@@ -636,27 +546,32 @@ export default function FacialRegistrationScreen() {
           </View>
         ) : null}
 
-        {/* Top bar — back button only, no step counter (dots do that job) */}
-        <View style={[styles.cameraTopBar, { top: layout.insets.top + 12 }]}>
-          <TouchableOpacity style={styles.cameraBackButton} onPress={cancelPhoneEnroll} hitSlop={12}>
+        {/* Top bar: cancel + step counter */}
+        <View style={[styles.fidTopBar, { top: layout.insets.top + 12 }]}>
+          <TouchableOpacity style={styles.fidCancelBtn} onPress={cancelPhoneEnroll} hitSlop={12}>
             <ArrowLeft size={18} color="#ffffff" strokeWidth={2.4} />
-            <Text style={styles.cameraBackText}>Cancel</Text>
+            <Text style={styles.fidCancelText}>Cancel</Text>
           </TouchableOpacity>
-          <View style={{ flex: 1 }} />
+          <Text style={styles.fidStepCount}>{phoneStep + 1} / {PHONE_ANGLES.length}</Text>
         </View>
 
-        {/* Bottom — current angle instruction + live feedback chip */}
-        <View style={[styles.cameraBottomBar, { bottom: Math.max(layout.insets.bottom, 20) + 16 }]}>
-          {/* Big directive */}
-          <Text style={styles.cameraAngleLabel}>{currentAngle.label}</Text>
-          <Text style={styles.cameraInstruction}>{currentAngle.instruction}</Text>
-
-          {/* Live quality chip */}
-          <View style={[styles.feedbackChip, { borderColor: feedbackColor + "55" }]}>
-            <View style={[styles.feedbackDot, { backgroundColor: feedbackColor }]} />
-            <Text style={[styles.feedbackText, { color: feedbackColor }]}>{feedbackMsg}</Text>
+        {/* Bottom bar: step dots + angle label + live instruction */}
+        <View style={[styles.fidBottomBar, { bottom: Math.max(layout.insets.bottom, 20) + 16 }]}>
+          <View style={styles.fidDots}>
+            {PHONE_ANGLES.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.fidDot,
+                  i < phoneCaptured.length ? styles.fidDotDone
+                  : i === phoneStep ? styles.fidDotActive
+                  : styles.fidDotPending,
+                ]}
+              />
+            ))}
           </View>
-
+          <Text style={styles.fidAngleLabel}>{currentAngle.label}</Text>
+          <Text style={[styles.fidInstruction, { color: instructionColor }]}>{instructionText}</Text>
           {captureError ? (
             <Text style={styles.captureErrorText}>{captureError}</Text>
           ) : null}
@@ -743,11 +658,6 @@ export default function FacialRegistrationScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <ArrowLeft size={16} color={referenceColors.textSoft} strokeWidth={2.2} />
-            <Text style={styles.backText}>Back</Text>
-          </TouchableOpacity>
-
           <View style={styles.header}>
             <Text style={styles.title}>Facial Recognition</Text>
             <Text style={styles.subtitle}>Register trusted faces for secure access</Text>
@@ -930,24 +840,6 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: "center",
     ...cardShadow,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    minHeight: 42,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.82)",
-    borderWidth: 1,
-    borderColor: referenceColors.border,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 18,
-  },
-  backText: {
-    color: referenceColors.textSoft,
-    fontSize: 13,
-    fontWeight: "700",
   },
   header: {
     marginBottom: 18,
@@ -1239,29 +1131,6 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: "rgba(0,0,0,0.55)",
   },
-  cameraTopBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  cameraBackButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  cameraBackText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
   initOverlay: {
     position: "absolute",
     top: 0, left: 0, right: 0, bottom: 0,
@@ -1275,54 +1144,87 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontWeight: "600",
   },
-  cameraBottomBar: {
+  captureErrorText: {
+    color: "#f87171",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  fidTopBar: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  fidCancelBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  fidCancelText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  fidStepCount: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 15,
+    fontWeight: "700",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  fidBottomBar: {
     position: "absolute",
     left: 0,
     right: 0,
     alignItems: "center",
     paddingHorizontal: 24,
-    gap: 10,
+    gap: 12,
   },
-  cameraAngleLabel: {
+  fidDots: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 4,
+  },
+  fidDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  fidDotDone: {
+    backgroundColor: "#4ade80",
+  },
+  fidDotActive: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#ffffff",
+  },
+  fidDotPending: {
+    backgroundColor: "rgba(255,255,255,0.3)",
+  },
+  fidAngleLabel: {
     color: "#ffffff",
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: "800",
     textAlign: "center",
     textShadowColor: "rgba(0,0,0,0.6)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
-  cameraInstruction: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 14,
+  fidInstruction: {
+    fontSize: 15,
     textAlign: "center",
-  },
-  feedbackChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    marginTop: 4,
-  },
-  feedbackDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  feedbackText: {
-    fontSize: 13,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  captureErrorText: {
-    color: "#f87171",
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 2,
+    fontWeight: "500",
   },
   // ── Registered faces ──────────────────────────────────────────────────────
   registeredSection: {
