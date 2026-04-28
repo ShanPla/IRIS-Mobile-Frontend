@@ -21,7 +21,7 @@ import type { RootStackParamList } from "../../../App";
 import ReferenceBackdrop from "../../components/ReferenceBackdrop";
 import { useAuth } from "../../context/AuthContext";
 import { DEVICE_OFFLINE_MESSAGE, DEVICE_TUNNEL_MESSAGE, pairCentralDevice, resolveCentralDevice, type CentralDevice } from "../../lib/backend";
-import { loginDeviceAccount, registerDeviceAccount, removeDevice, upsertRegistryDevice } from "../../lib/pi";
+import { getDevices, loginDeviceAccount, registerDeviceAccount, removeDevice, upsertRegistryDevice } from "../../lib/pi";
 import { buttonShadow, cardShadow, referenceColors } from "../../theme/reference";
 import { getResponsiveMediaHeight, useScreenLayout } from "../../theme/layout";
 
